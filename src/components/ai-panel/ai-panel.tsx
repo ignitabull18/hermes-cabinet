@@ -129,6 +129,28 @@ export function AIPanel() {
     rtl: boolean;
   } | null>(null);
 
+  // Push/release: keep the panel mounted through the close so its width
+  // can animate back to 0 (the flex sibling = main content reflows with
+  // it). `present` gates mount; `expanded` drives the 0 <-> width tween.
+  const [present, setPresent] = useState(isOpen);
+  const [expanded, setExpanded] = useState(false);
+  const [resizing, setResizing] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) setPresent(true);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!present) return;
+    if (isOpen) {
+      // Expand on the next frame so the 0 -> width transition runs
+      // instead of the element mounting already at full width.
+      const raf = requestAnimationFrame(() => setExpanded(true));
+      return () => cancelAnimationFrame(raf);
+    }
+    setExpanded(false);
+  }, [present, isOpen]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     window.localStorage.setItem("cabinet-ai-panel-width", String(panelWidth));
@@ -147,6 +169,7 @@ export function AIPanel() {
     function handlePointerUp() {
       if (!resizeStateRef.current) return;
       resizeStateRef.current = null;
+      setResizing(false);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     }
@@ -161,6 +184,7 @@ export function AIPanel() {
   const startResize = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       event.preventDefault();
+      setResizing(true);
       resizeStateRef.current = {
         startX: event.clientX,
         startWidth: panelWidth,
@@ -548,7 +572,10 @@ export function AIPanel() {
     return d.toLocaleDateString([], { month: "short", day: "numeric" });
   };
 
-  if (!isOpen) return null;
+  // Mobile is a fixed overlay (no layout to push) so it unmounts at once.
+  // Desktop stays mounted while the release animation plays out.
+  const showPanel = isMobile ? isOpen : present;
+  if (!showPanel) return null;
 
   const hasAnySessions =
     liveSessions.length > 0 ||
@@ -563,39 +590,21 @@ export function AIPanel() {
     removeSession(session.sessionId);
   };
 
-  return (
+  const panelInner = (
     <>
-      {/* Mobile scrim — full-screen overlay backdrop */}
-      <div
-        className="ai-scrim-anim md:hidden fixed inset-0 z-40 bg-black/40"
-        onClick={close}
-        aria-hidden="true"
-      />
-      <div
-        className={cn(
-          "relative bg-background flex flex-col",
-          // Desktop: resizable side panel docked to the inline-end
-          "md:border-l md:border-border md:relative md:inset-auto",
-          isMobile ? "ai-drawer-anim-up" : "ai-drawer-anim-side",
-          // Mobile: full-screen overlay
-          "max-md:fixed max-md:inset-0 max-md:z-50",
-          "max-md:pb-[max(env(safe-area-inset-bottom),0px)]"
-        )}
-        style={!isMobile ? { width: panelWidth } : undefined}
-      >
-        {/* Resize handle — a flush 1px hairline at the inline-start edge.
-            Drag to resize, double-click to reset. No padding/offset. */}
-        {!isMobile && (
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label={t("sidebar:resizeHandle")}
-            title={t("sidebar:resetWidth")}
-            onPointerDown={startResize}
-            onDoubleClick={() => setPanelWidth(AI_PANEL_DEFAULT_WIDTH)}
-            className="absolute inset-y-0 start-0 z-30 w-px cursor-col-resize bg-border transition-colors hover:bg-primary/50"
-          />
-        )}
+      {/* Resize handle — a flush 1px hairline at the inline-start edge.
+          Drag to resize, double-click to reset. No padding/offset. */}
+      {!isMobile && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={t("sidebar:resizeHandle")}
+          title={t("sidebar:resetWidth")}
+          onPointerDown={startResize}
+          onDoubleClick={() => setPanelWidth(AI_PANEL_DEFAULT_WIDTH)}
+          className="absolute inset-y-0 start-0 z-30 w-px cursor-col-resize bg-border transition-colors hover:bg-primary/50"
+        />
+      )}
       {/* No navbar — the open page rides in the composer as a pinned @chip.
           Only the close affordance remains. */}
       <div className="flex items-center justify-end px-2 py-2 shrink-0">
@@ -905,7 +914,53 @@ export function AIPanel() {
           }
         />
       </div>
-      </div>
     </>
+  );
+
+  // Mobile: full-screen overlay that slides up; nothing to push.
+  if (isMobile) {
+    return (
+      <>
+        <div
+          className="ai-scrim-anim fixed inset-0 z-40 bg-black/40"
+          onClick={close}
+          aria-hidden="true"
+        />
+        <div className="ai-drawer-anim-up fixed inset-0 z-50 flex flex-col bg-background pb-[max(env(safe-area-inset-bottom),0px)]">
+          {panelInner}
+        </div>
+      </>
+    );
+  }
+
+  // Desktop: animate the wrapper width 0 <-> panelWidth. The panel is a
+  // flex sibling of the main content, so the tween pushes/releases the UI.
+  // The inner stays a fixed width (no reflow-jank) pinned to the inline-end
+  // and is revealed/clipped as the wrapper grows/shrinks.
+  return (
+    <div
+      className={cn(
+        "relative shrink-0 self-stretch overflow-hidden",
+        !resizing &&
+          "transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+      )}
+      style={{ width: expanded ? panelWidth : 0 }}
+      onTransitionEnd={(event) => {
+        if (
+          event.target === event.currentTarget &&
+          event.propertyName === "width" &&
+          !isOpen
+        ) {
+          setPresent(false);
+        }
+      }}
+    >
+      <div
+        className="absolute inset-y-0 end-0 flex flex-col bg-background border-l border-border"
+        style={{ width: panelWidth }}
+      >
+        {panelInner}
+      </div>
+    </div>
   );
 }
