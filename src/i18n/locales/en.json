@@ -1332,7 +1332,14 @@
       "savedAgoSeconds": "{{n}}s ago",
       "savedAgoMinutes": "{{n}}m ago",
       "savedAgoHours": "{{n}}h ago",
-      "savedAgoDays": "{{n}}d ago"
+      "savedAgoDays": "{{n}}d ago",
+      "saveFailedRetry": "Save failed — retry",
+      "savingText": "Saving…",
+      "savedText": "Saved",
+      "editingText": "Editing…",
+      "savedAgo": "Saved · {{ago}}",
+      "word": "word",
+      "words": "words"
     },
     "git": {
       "statusModified": "Modified",
@@ -1382,7 +1389,11 @@
       "syncAriaLabelWithLast": "Pull latest changes from GitHub and refresh. Last synced {{when}}.",
       "terminal": "Terminal",
       "openTerminal": "Open terminal",
-      "newTerminalTab": "New terminal tab"
+      "newTerminalTab": "New terminal tab",
+      "pulling": "Pulling…",
+      "pulled": "Updated from remote",
+      "upToDate": "Up to date",
+      "pullFailed": "Pull failed"
     },
     "update2": {
       "updateAvailable": "Update {{version}} available",
@@ -1392,6 +1403,9 @@
       "dismiss": "Dismiss",
       "close": "Close",
       "openSettings": "Open Settings to review the installed update"
+    },
+    "misc": {
+      "restartToFinishUpdate": "Restart to finish update"
     }
   },
   "tasks": {
@@ -1442,5 +1456,47 @@
     "itemArchived": "{{title}} · archived",
     "itemDefault": "{{title}} · {{when}}",
     "toggleRunning": "{{count}} running — show tasks rail"
+  },
+  "chrome": {
+    "nav": {
+      "home": "Home",
+      "agents": "Agents",
+      "tasks": "Tasks",
+      "ai": "AI",
+      "menu": "Menu",
+      "primaryAriaLabel": "Primary"
+    },
+    "returnTo": {
+      "task": "Task",
+      "tasks": "Tasks",
+      "agent": "Agent",
+      "agents": "Agents",
+      "cabinet": "Cabinet",
+      "home": "Home",
+      "settings": "Settings",
+      "registry": "Registry",
+      "back": "Back",
+      "backTo": "Back to {{label}}"
+    },
+    "theme": {
+      "defaultHeader": "Default",
+      "dark": "Dark",
+      "darkThemes": "Dark Themes",
+      "lightThemes": "Light Themes"
+    },
+    "update": {
+      "restartTitle": "Restart Cabinet to finish updating",
+      "availableTitle": "Cabinet {{version}} is available",
+      "updatesTitle": "Cabinet updates",
+      "description": "Cabinet checks for releases automatically. While the product is still experimental, keep a copy of your data before installing updates.",
+      "later": "Later",
+      "releaseNotes": "Release notes"
+    },
+    "daemon": {
+      "fixHintElectron": "Quit and relaunch Cabinet to restart the agent daemon.",
+      "fixHintDev": "Run `npm run dev:daemon` (or restart `npm run dev:all`) to bring the agent daemon back up.",
+      "notResponding": "The agent daemon isn't responding.",
+      "willFail": "Agents, jobs, and AI requests will fail until it's back. {{fixHint}}"
+    }
   }
 }

@@ -1332,7 +1332,14 @@
       "savedAgoSeconds": "לפני {{n}} שניות",
       "savedAgoMinutes": "לפני {{n}} דקות",
       "savedAgoHours": "לפני {{n}} שעות",
-      "savedAgoDays": "לפני {{n}} ימים"
+      "savedAgoDays": "לפני {{n}} ימים",
+      "saveFailedRetry": "השמירה נכשלה — ניסיון חוזר",
+      "savingText": "שומר…",
+      "savedText": "נשמר",
+      "editingText": "עריכה…",
+      "savedAgo": "נשמר · {{ago}}",
+      "word": "מילה",
+      "words": "מילים"
     },
     "git": {
       "statusModified": "שונה",
@@ -1382,7 +1389,11 @@
       "syncAriaLabelWithLast": "משוך שינויים אחרונים מ-GitHub ורענן. סונכרן לאחרונה {{when}}.",
       "terminal": "טרמינל",
       "openTerminal": "פתח טרמינל",
-      "newTerminalTab": "טאב טרמינל חדש"
+      "newTerminalTab": "טאב טרמינל חדש",
+      "pulling": "מושך…",
+      "pulled": "עודכן מהמרוחק",
+      "upToDate": "מעודכן",
+      "pullFailed": "המשיכה נכשלה"
     },
     "update2": {
       "updateAvailable": "עדכון {{version}} זמין",
@@ -1392,6 +1403,9 @@
       "dismiss": "סגירה",
       "close": "סגירה",
       "openSettings": "פתיחת ההגדרות לסקירת העדכון המותקן"
+    },
+    "misc": {
+      "restartToFinishUpdate": "הפעילו מחדש לסיום העדכון"
     }
   },
   "tasks": {
@@ -1442,5 +1456,47 @@
     "itemArchived": "{{title}} · בארכיון",
     "itemDefault": "{{title}} · {{when}}",
     "toggleRunning": "{{count}} פעילות — הצגת סרגל המשימות"
+  },
+  "chrome": {
+    "nav": {
+      "home": "בית",
+      "agents": "סוכנים",
+      "tasks": "משימות",
+      "ai": "AI",
+      "menu": "תפריט",
+      "primaryAriaLabel": "ניווט ראשי"
+    },
+    "returnTo": {
+      "task": "משימה",
+      "tasks": "משימות",
+      "agent": "סוכן",
+      "agents": "סוכנים",
+      "cabinet": "Cabinet",
+      "home": "בית",
+      "settings": "הגדרות",
+      "registry": "מאגר",
+      "back": "חזרה",
+      "backTo": "חזרה ל{{label}}"
+    },
+    "theme": {
+      "defaultHeader": "ברירת מחדל",
+      "dark": "כהה",
+      "darkThemes": "ערכות כהות",
+      "lightThemes": "ערכות בהירות"
+    },
+    "update": {
+      "restartTitle": "הפעילו מחדש את Cabinet כדי לסיים את העדכון",
+      "availableTitle": "גרסה {{version}} של Cabinet זמינה",
+      "updatesTitle": "עדכוני Cabinet",
+      "description": "Cabinet בודק גרסאות חדשות אוטומטית. כל עוד המוצר עדיין ניסיוני, שמרו עותק של הנתונים שלכם לפני התקנת עדכונים.",
+      "later": "מאוחר יותר",
+      "releaseNotes": "הערות גרסה"
+    },
+    "daemon": {
+      "fixHintElectron": "צאו והפעילו מחדש את Cabinet כדי להפעיל מחדש את דמון הסוכנים.",
+      "fixHintDev": "הריצו `npm run dev:daemon` (או הפעילו מחדש `npm run dev:all`) כדי להחזיר את דמון הסוכנים.",
+      "notResponding": "דמון הסוכנים אינו מגיב.",
+      "willFail": "סוכנים, משימות ובקשות AI ייכשלו עד שיחזור. {{fixHint}}"
+    }
   }
 }
