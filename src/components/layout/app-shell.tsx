@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from "react";
 import { Sidebar } from "@/components/sidebar/sidebar";
 import { Header } from "@/components/layout/header";
 import { KBEditor } from "@/components/editor/editor";
@@ -54,6 +54,7 @@ import { StartWorkDialog, type StartWorkMode } from "@/components/composer/start
 import { ROOT_CABINET_PATH } from "@/lib/cabinets/paths";
 import { fetchCabinetOverviewClient } from "@/lib/cabinets/overview-client";
 import type { CabinetAgentSummary } from "@/types/cabinets";
+import { useUserProfile } from "@/hooks/use-user-profile";
 import { UpdateDialog } from "@/components/layout/update-dialog";
 import { NotificationToasts } from "@/components/layout/notification-toasts";
 import { SystemToasts } from "@/components/layout/system-toasts";
@@ -62,19 +63,13 @@ import { useIsMobile } from "@/hooks/use-is-mobile";
 
 // Section components are only rendered when the user navigates to them —
 // load them on demand to keep the first-paint bundle small. Previously all of
-// these (together ~15k lines of code including AgentsWorkspace and
-// OnboardingWizard) shipped in the home-page chunk.
+// these (together ~15k lines of code including OnboardingWizard) shipped in
+// the home-page chunk.
 const AgentsWorkspaceV2 = dynamic(
   () =>
     import("@/components/agents/v2/agents-workspace-v2").then(
       (m) => m.AgentsWorkspaceV2
     ),
-  { ssr: false }
-);
-// Legacy V1 — used for the "agent settings" sub-screen (which still lives in
-// the V1 workspace component). Phased out once that path lands in V2.
-const AgentsWorkspace = dynamic(
-  () => import("@/components/agents/agents-workspace").then((m) => m.AgentsWorkspace),
   { ssr: false }
 );
 const AgentDetailV2 = dynamic(
@@ -515,6 +510,41 @@ export function AppShell() {
     return () => window.removeEventListener("cabinet:global-run-task", handler);
   }, [openGlobalTask]);
 
+  // ── Chat-editor handoff ────────────────────────────────────────────────
+  // After a file is created from the sidebar, open the right-side chat panel
+  // (compose mode, `editor` agent) greeting the user with a file-aware prompt
+  // — same surface as the editor's "Ask AI" button, not the task-prompt modal.
+  const profileState = useUserProfile();
+  const userFirstName = useMemo(() => {
+    if (profileState.status !== "ready") return "";
+    const raw =
+      profileState.data.profile.displayName ||
+      profileState.data.profile.name ||
+      "";
+    if (!raw || raw.toLowerCase() === "you") return "";
+    return raw.trim().split(/\s+/)[0];
+  }, [profileState]);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as
+        | { pagePath?: string; fileName?: string }
+        | undefined;
+      const fileName = detail?.fileName || "this file";
+      const greeting = userFirstName
+        ? `Hi ${userFirstName} — what would you like to do in ${fileName}?`
+        : `What would you like to do in ${fileName}?`;
+      useAppStore.getState().openTaskPanelCompose({
+        source: "editor",
+        pinnedPagePath: detail?.pagePath ?? null,
+        defaultAgentSlug: "editor",
+        greeting,
+      });
+    };
+    window.addEventListener("cabinet:open-editor-chat", handler);
+    return () => window.removeEventListener("cabinet:open-editor-chat", handler);
+  }, [userFirstName]);
+
   const handleWizardComplete = useCallback(() => {
     setShowWizard(false);
     try {
@@ -673,11 +703,18 @@ export function AppShell() {
           />
         );
       }
+      // Slug-less "agent" section (not produced by routing today) falls back
+      // to the V2 agents list rather than the retired V1 workspace.
       return (
-        <AgentsWorkspace
-          selectedScope="agent"
-          selectedAgentSlug={section.slug || null}
+        <AgentsWorkspaceV2
           cabinetPath={section.cabinetPath}
+          onTabChange={(next) =>
+            setSection({
+              type: "agents",
+              cabinetPath: section.cabinetPath,
+              agentsTab: next,
+            })
+          }
         />
       );
     }
