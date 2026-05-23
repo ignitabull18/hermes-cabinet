@@ -314,14 +314,38 @@ function makeTitle(text: string): string {
   return firstLine.slice(0, 80);
 }
 
+// Mentioned files whose raw bytes must never be inlined into the prompt
+// (video/audio/images/PDF/office/archives). Inlining a 74MB .mov produced a
+// 134MB prompt.md that failed the run and choked the task page. These are
+// referenced by path instead so the agent opens them with its Read tool.
+const NON_INLINE_MENTION_EXT = new Set([
+  ".mov", ".mp4", ".webm", ".m4v", ".avi", ".mkv", ".mpg", ".mpeg",
+  ".mp3", ".wav", ".ogg", ".m4a", ".aac", ".flac",
+  ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".avif", ".ico", ".bmp", ".tiff",
+  ".pdf", ".docx", ".xlsx", ".xlsm", ".pptx", ".doc", ".xls", ".ppt",
+  ".zip", ".tar", ".gz", ".tgz", ".rar", ".7z", ".fig", ".sketch",
+]);
+// Cap inlined text so a single huge page can't blow up the prompt either.
+const MAX_INLINE_MENTION_BYTES = 200_000;
+
 async function buildMentionContext(mentionedPaths: string[]): Promise<string> {
   if (mentionedPaths.length === 0) return "";
 
   const chunks = await Promise.all(
     mentionedPaths.map(async (pagePath) => {
       try {
+        // Binary / large file: reference by path, never inline the bytes.
+        if (NON_INLINE_MENTION_EXT.has(path.extname(pagePath).toLowerCase())) {
+          return `--- ${pagePath} (file attachment — open it with the Read tool at this path) ---`;
+        }
         const page = await readPage(pagePath);
-        return `--- ${page.frontmatter.title} (${pagePath}) ---\n${page.content}`;
+        let content = page.content || "";
+        if (content.length > MAX_INLINE_MENTION_BYTES) {
+          content =
+            content.slice(0, MAX_INLINE_MENTION_BYTES) +
+            "\n\n…[content truncated — open the file with the Read tool for the full version]…";
+        }
+        return `--- ${page.frontmatter.title} (${pagePath}) ---\n${content}`;
       } catch {
         return null;
       }

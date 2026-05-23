@@ -41,6 +41,7 @@ import {
   recordWaitlistView,
   recordWaitlistStart,
   submitWaitlistEmail,
+  recordOnboardingEmail,
 } from "@/lib/telemetry/waitlist-client";
 import { acknowledgeDisclaimer } from "@/components/layout/breaking-changes-warning";
 import { useLocale } from "@/i18n/use-locale";
@@ -1670,6 +1671,19 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
       recordWaitlistView("cabinet-onboarding");
     }
   }, [step]);
+
+  // "Keep in touch" funnel (source: onboarding-welcome), so the backend's
+  // Visits/Drop-offs panels have the full view -> start -> submit picture, not
+  // just submits. These two are anonymous (visitId + source only); the email
+  // itself is only sent on launch and only with the consent checkbox.
+  const welcomeStartedRef = useRef(false);
+  const welcomeViewedRef = useRef(false);
+  useEffect(() => {
+    if (step === STEP_WELCOME_HOME && !welcomeViewedRef.current) {
+      welcomeViewedRef.current = true;
+      recordWaitlistView("onboarding-welcome");
+    }
+  }, [step]);
   const handleCloudInput = useCallback((value: string) => {
     setCloudEmail(value);
     if (cloudStatus === "error" || cloudStatus === "already") setCloudStatus("idle");
@@ -1711,6 +1725,16 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
     [answers.roomType]
   );
   const descriptionInputRef = useRef<HTMLInputElement>(null);
+
+  // Pre-fill the Cabinet Cloud waitlist field with the email entered on the
+  // welcome step (if any). Only seeds while the field is still empty, so the
+  // user can edit it freely afterwards.
+  useEffect(() => {
+    const welcome = answers.email.trim();
+    if (step === COMMUNITY_END_STEP && welcome && !cloudEmail) {
+      setCloudEmail(welcome);
+    }
+  }, [step, answers.email, cloudEmail]);
 
   // Welcome-home typewriter. Starts after the blueprint-draw delay so the
   // cursor begins typing inside the freshly-appeared popup.
@@ -1803,6 +1827,10 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
 
   const [launching, setLaunching] = useState(false);
   const [disclaimerAccepted, setDisclaimerAccepted] = useState(false);
+  // Optional consent (not required to launch): if checked, we register the
+  // welcome-step email with our backend on launch. Checked by default; the
+  // user can opt out before launching.
+  const [keepInTouch, setKeepInTouch] = useState(true);
   const [githubStars, setGithubStars] = useState(GITHUB_STARS_FALLBACK);
   const [providersLoading, setProvidersLoading] = useState(true);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
@@ -2042,6 +2070,18 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
         }),
       });
 
+      // Only when the user opted in on the launch consent checkbox: register the
+      // welcome-step email with our backend so we can keep in touch. Goes through
+      // the waitlist (PII) channel, never the anonymous telemetry pipeline below.
+      const welcomeEmail = answers.email.trim();
+      if (
+        keepInTouch &&
+        welcomeEmail &&
+        /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(welcomeEmail)
+      ) {
+        recordOnboardingEmail(welcomeEmail);
+      }
+
       sendTelemetry("onboarding.completed", {
         roomType: answers.roomType ?? null,
         provider: selectedProvider ?? null,
@@ -2057,7 +2097,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
       console.error("Setup failed:", e);
       setLaunching(false);
     }
-  }, [answers, firstAgent, heartbeatEnabled, heartbeatSchedule, selectedProvider, selectedModel, selectedEffort, locale, onComplete]);
+  }, [answers, firstAgent, heartbeatEnabled, heartbeatSchedule, selectedProvider, selectedModel, selectedEffort, locale, onComplete, keepInTouch]);
 
   const communitySteps: CommunityStepConfig[] = [
     {
@@ -2329,7 +2369,14 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                   <input
                     type="email"
                     value={answers.email}
-                    onChange={(e) => setAnswers({ ...answers, email: e.target.value })}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setAnswers({ ...answers, email: v });
+                      if (!welcomeStartedRef.current && v.length > 0) {
+                        welcomeStartedRef.current = true;
+                        recordWaitlistStart("onboarding-welcome");
+                      }
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && answers.name.trim()) {
                         e.preventDefault();
@@ -3413,6 +3460,22 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
                 </ul>
                 <label
                   className="flex cursor-pointer items-start gap-2 pt-1"
+                  style={{ color: WEB.text }}
+                >
+                  <input
+                    type="checkbox"
+                    name="keep-in-touch"
+                    checked={keepInTouch}
+                    onChange={(e) => setKeepInTouch(e.target.checked)}
+                    className="mt-0.5 size-4 shrink-0 rounded"
+                    style={{ borderColor: WEB.border, accentColor: WEB.accent }}
+                  />
+                  <span style={{ color: WEB.textSecondary }}>
+                    {t("onboarding:launch.keepInTouch")}
+                  </span>
+                </label>
+                <label
+                  className="flex cursor-pointer items-start gap-2"
                   style={{ color: WEB.text }}
                 >
                   <input

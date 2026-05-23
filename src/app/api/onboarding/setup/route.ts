@@ -49,6 +49,7 @@ interface OnboardingRequest {
   roomType?: RoomType;
   answers: {
     name?: string;
+    email?: string;
     // New field; falls back to legacy companyName if absent.
     workspaceName?: string;
     companyName?: string;
@@ -132,6 +133,29 @@ export async function POST(req: NextRequest) {
       path.join(CONFIG_DIR, "workspace.json"),
       JSON.stringify(workspaceConfig, null, 2)
     );
+
+    // Persist the user's profile name so the greeting and the starter-task
+    // placeholder use what they typed in onboarding. Without this, an early
+    // profile read during the wizard seeds user.json from the OS username
+    // (os.userInfo().username) and that stale value sticks afterwards.
+    const profileName = answers.name?.trim() || "";
+    const profileEmail = answers.email?.trim() || "";
+    if (profileName || profileEmail) {
+      await fs.writeFile(
+        path.join(CONFIG_DIR, "user.json"),
+        JSON.stringify(
+          {
+            name: profileName,
+            email: profileEmail,
+            displayName: "",
+            role: "",
+            avatar: "",
+          },
+          null,
+          2
+        )
+      );
+    }
 
     // Legacy company.json — keeps old code paths working (config route fallback, etc.)
     await fs.writeFile(
@@ -217,8 +241,13 @@ export async function POST(req: NextRequest) {
       JSON.stringify({ exists: true })
     ).catch(() => {});
 
-    // 4. Instantiate selected agents from library templates
-    for (const slug of selectedAgents) {
+    // 4. Instantiate selected agents from library templates. Always include
+    //    "editor": it's the canonical doer that the composer / task board
+    //    default to. Without it, a fresh room (which otherwise only gets the
+    //    user's first agent) dispatches tasks to a non-existent "editor" and
+    //    they fail. The first agent (step 4b) is created separately.
+    const agentsToInstall = Array.from(new Set([...selectedAgents, "editor"]));
+    for (const slug of agentsToInstall) {
       const templateDir = path.join(libraryDir, slug);
       const targetDir = path.join(ROOM_AGENTS_DIR, slug);
 
