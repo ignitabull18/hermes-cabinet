@@ -241,8 +241,13 @@ export async function POST(req: NextRequest) {
       JSON.stringify({ exists: true })
     ).catch(() => {});
 
-    // 4. Instantiate selected agents from library templates
-    for (const slug of selectedAgents) {
+    // 4. Instantiate selected agents from library templates. Always include
+    //    "editor": it's the canonical doer that the composer / task board
+    //    default to. Without it, a fresh room (which otherwise only gets the
+    //    user's first agent) dispatches tasks to a non-existent "editor" and
+    //    they fail. The first agent (step 4b) is created separately.
+    const agentsToInstall = Array.from(new Set([...selectedAgents, "editor"]));
+    for (const slug of agentsToInstall) {
       const templateDir = path.join(libraryDir, slug);
       const targetDir = path.join(ROOM_AGENTS_DIR, slug);
 

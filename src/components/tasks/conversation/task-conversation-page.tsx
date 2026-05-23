@@ -312,6 +312,12 @@ const COLLAPSE_EASE =
 
 export interface TaskConversationPageProps {
   taskId: string;
+  /**
+   * The room/cabinet the task lives in. Required to find the conversation after
+   * rooms v3 (conversations are scoped per cabinet); without it the initial
+   * fetch looks at the empty home and the task "fails to load".
+   */
+  cabinetPath?: string;
   variant?: "full" | "compact";
   readOnly?: boolean;
   /**
@@ -329,6 +335,7 @@ export interface TaskConversationPageProps {
 
 export function TaskConversationPage({
   taskId,
+  cabinetPath,
   variant = "full",
   readOnly = false,
   returnContext,
@@ -553,7 +560,7 @@ export function TaskConversationPage({
     const watchdog = setTimeout(() => {
       if (!cancelled) setConnectTimedOut(true);
     }, 8000);
-    fetchTask(taskId)
+    fetchTask(taskId, cabinetPath || undefined)
       .then((t) => {
         if (!cancelled) {
           setTask(t);
@@ -571,7 +578,7 @@ export function TaskConversationPage({
       cancelled = true;
       clearTimeout(watchdog);
     };
-  }, [isDemo, taskId, retryNonce]);
+  }, [isDemo, taskId, cabinetPath, retryNonce]);
 
   // Fetch the agent's identity (avatar/icon/color/displayName) so turn blocks
   // can render the real avatar instead of a generic sparkles glyph.

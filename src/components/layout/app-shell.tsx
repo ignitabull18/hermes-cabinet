@@ -761,7 +761,12 @@ export function AppShell() {
       );
     }
     if (section.type === "task" && section.taskId) {
-      return <TaskConversationPage taskId={section.taskId} />;
+      return (
+        <TaskConversationPage
+          taskId={section.taskId}
+          cabinetPath={section.cabinetPath}
+        />
+      );
     }
 
     // Page-based views (when a KB page is selected)
