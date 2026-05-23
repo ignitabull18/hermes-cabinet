@@ -261,6 +261,42 @@ export function AppShell() {
     loadTree();
   }, [loadTree]);
 
+  // Auto-refresh the sidebar tree when a conversation reports created/modified
+  // artifacts (files an agent wrote). The global conversation event stream
+  // emits a `task.updated` carrying `payload.artifactPaths`; when that's
+  // non-empty we reload the tree (debounced) so new files appear without a
+  // manual refresh. App-wide so it works from any section.
+  useEffect(() => {
+    const es = new EventSource("/api/agents/conversations/events");
+    let timer: number | null = null;
+    const scheduleRefresh = () => {
+      if (timer !== null) return;
+      timer = window.setTimeout(() => {
+        timer = null;
+        void loadTree();
+      }, 400);
+    };
+    es.onmessage = (msg) => {
+      try {
+        const ev = JSON.parse(msg.data) as {
+          type?: string;
+          payload?: { artifactPaths?: unknown };
+        };
+        if (ev.type !== "task.updated") return;
+        const artifacts = ev.payload?.artifactPaths;
+        if (Array.isArray(artifacts) && artifacts.length > 0) {
+          scheduleRefresh();
+        }
+      } catch {
+        // ignore malformed frames / pings
+      }
+    };
+    return () => {
+      es.close();
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [loadTree]);
+
   useEffect(() => {
     void loadProviders();
   }, [loadProviders]);
