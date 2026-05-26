@@ -19,6 +19,12 @@ import {
   removeSidecarEntry,
   setEntryOrder,
 } from "./order-store";
+import {
+  scanCabinet,
+  rewriteReferencesForRename,
+} from "./references";
+import { recordRenameUndo } from "./rename-undo";
+import { slugifyPageName } from "@/lib/markdown/wiki-links";
 
 function defaultFrontmatter(title: string): FrontMatter {
   const now = new Date().toISOString();
@@ -89,6 +95,20 @@ export async function readPage(virtualPath: string): Promise<PageData> {
   throw new Error(`Page not found: ${virtualPath}`);
 }
 
+/**
+ * Heuristic: if a doc's text is mostly Hebrew letters, return "rtl". Used to
+ * auto-set frontmatter.dir on agent-generated notes so they render RTL on
+ * load. Examines the first ~600 chars to avoid scanning huge files.
+ */
+function inferDirFromText(content: string): "rtl" | undefined {
+  const sample = content.slice(0, 600);
+  // Hebrew block: U+0590–U+05FF. Stop counting at 600 chars sampled.
+  const hebrewMatches = sample.match(/[֐-׿]/g);
+  const letterMatches = sample.match(/[A-Za-z֐-׿]/g);
+  if (!hebrewMatches || !letterMatches) return undefined;
+  return hebrewMatches.length / letterMatches.length > 0.5 ? "rtl" : undefined;
+}
+
 export async function writePage(
   virtualPath: string,
   content: string,
@@ -111,9 +131,17 @@ export async function writePage(
     filePath = indexPath;
   }
 
+  // Auto-detect RTL when the writer didn't set `dir` explicitly and the
+  // content reads as Hebrew. Saves Hebrew users from manually toggling the
+  // editor RTL button on every agent-generated note.
+  const effectiveFrontmatter: Partial<FrontMatter> =
+    frontmatter.dir === undefined
+      ? { ...frontmatter, dir: inferDirFromText(content) }
+      : frontmatter;
+
   // Strip undefined values — js-yaml cannot serialize them
   const fm = Object.fromEntries(
-    Object.entries({ ...frontmatter, modified: new Date().toISOString() })
+    Object.entries({ ...effectiveFrontmatter, modified: new Date().toISOString() })
       .filter(([, v]) => v !== undefined)
   );
   const output = matter.stringify(content, fm);
@@ -270,19 +298,63 @@ export async function movePage(
   return toParentPath ? `${toParentPath}/${name}` : name;
 }
 
+export interface RenameReferencesSummary {
+  linkCount: number;
+  pageCount: number;
+  undoToken: string | null;
+  oldName: string;
+  newName: string;
+  /** Virtual page paths whose markdown was rewritten (no contents) — lets the
+   * client refresh an open referrer without a blocking dialog. */
+  changedPages: string[];
+}
+
+export interface RenameResult {
+  newPath: string;
+  references: RenameReferencesSummary;
+}
+
 export async function renamePage(
   virtualPath: string,
   newName: string
-): Promise<string> {
+): Promise<RenameResult> {
   const fromResolved = resolveContentPath(virtualPath);
   const parentDir = path.dirname(fromResolved);
-  const slug = newName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
+  const slug = slugifyPageName(newName);
   const toResolved = path.join(parentDir, slug);
+  const parentVirtual = virtualPath.split("/").slice(0, -1).join("/");
+  const oldSlug = path.basename(fromResolved);
 
-  if (fromResolved === toResolved) return virtualPath;
+  // Resolve the previous display name for the toast: prefer the page's own
+  // frontmatter title, fall back to the directory slug.
+  const oldIndexMd = path.join(fromResolved, "index.md");
+  let oldIndexBytes: string | null = null;
+  let oldName = oldSlug;
+  if (await fileExists(oldIndexMd)) {
+    oldIndexBytes = await readFileContent(oldIndexMd);
+    const { data } = matter(oldIndexBytes);
+    if (typeof data.title === "string" && data.title.trim()) {
+      oldName = data.title;
+    }
+  }
+
+  if (fromResolved === toResolved) {
+    return {
+      newPath: virtualPath,
+      references: {
+        linkCount: 0,
+        pageCount: 0,
+        undoToken: null,
+        oldName,
+        newName,
+        changedPages: [],
+      },
+    };
+  }
+
+  // Snapshot the page list *before* the move so wiki-link resolution reflects
+  // the state the links were authored against.
+  const { pages: preRenamePages } = await scanCabinet();
 
   const fs = await import("fs/promises");
   await fs.rename(fromResolved, toResolved);
@@ -301,6 +373,50 @@ export async function renamePage(
     await writeFileContent(indexMd, output);
   }
 
-  const parentVirtual = virtualPath.split("/").slice(0, -1).join("/");
-  return parentVirtual ? `${parentVirtual}/${slug}` : slug;
+  const newPath = parentVirtual ? `${parentVirtual}/${slug}` : slug;
+
+  const rewrite = await rewriteReferencesForRename({
+    oldPagePath: virtualPath,
+    newPagePath: newPath,
+    oldResolvedDir: fromResolved,
+    newResolvedDir: toResolved,
+    oldSlug,
+    newName,
+    preRenamePages,
+  });
+
+  // Build the undo file set. The renamed page's own index.md is always
+  // included with its true pre-rename bytes (captured before the frontmatter
+  // edit) so Undo restores the original title even when no links changed —
+  // it also takes precedence over any rewrite entry for the same file.
+  const undoFiles = new Map<string, string>();
+  for (const c of rewrite.changed) {
+    undoFiles.set(c.undoFsPath, c.before);
+  }
+  if (oldIndexBytes !== null) {
+    undoFiles.set(oldIndexMd, oldIndexBytes);
+  }
+
+  const undoToken = recordRenameUndo({
+    dirFrom: toResolved,
+    dirTo: fromResolved,
+    files: Array.from(undoFiles, ([fsPath, before]) => ({ fsPath, before })),
+    createdAt: Date.now(),
+    oldName,
+    newName,
+  });
+
+  return {
+    newPath,
+    references: {
+      linkCount: rewrite.linkCount,
+      pageCount: rewrite.pageCount,
+      undoToken,
+      oldName,
+      newName,
+      changedPages: Array.from(
+        new Set(rewrite.changed.map((c) => c.virtualPagePath))
+      ),
+    },
+  };
 }

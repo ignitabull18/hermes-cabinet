@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Archive,
-  ArrowLeft,
   Check,
   CheckCircle2,
   Circle,
@@ -32,6 +31,7 @@ import { TerminalExitedView } from "@/components/terminal/terminal-exited-view";
 import { ClaudeTranscriptView } from "@/components/tasks/conversation/claude-transcript-view";
 import { ConversationResultView } from "@/components/agents/conversation-result-view";
 import { confirmDialog } from "@/lib/ui/confirm";
+import { useLocale } from "@/i18n/use-locale";
 import {
   closeConversation,
   deleteConversation,
@@ -67,6 +67,7 @@ import type { AgentListItem } from "@/types/agents";
 import type { CabinetAgentSummary } from "@/types/cabinets";
 import { compactTask, fetchTask, patchTask, postTurn } from "@/lib/agents/task-client";
 import { peekTaskIsTerminal } from "@/lib/agents/terminal-mode-cache";
+import { buildRuntimeLabel } from "@/lib/agents/runtime-format";
 
 const STATUS_META: Record<
   TaskStatus,
@@ -134,6 +135,7 @@ function StatusActionButton({
   onMarkDone: () => void;
   onRetry: () => void;
 }) {
+  const { t } = useLocale();
   if (status === "done") {
     return (
       <span className="inline-flex h-9 items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/15 px-3 text-[12px] font-semibold text-emerald-300">
@@ -150,7 +152,7 @@ function StatusActionButton({
         disabled={busy}
         onClick={onRetry}
         className="inline-flex h-9 items-center gap-1.5 rounded-md border border-rose-500/30 bg-rose-500/15 px-3 text-[12px] font-semibold text-rose-300 transition-colors hover:bg-rose-500/25 hover:text-rose-200 disabled:opacity-50"
-        title="Restart this task from the original prompt"
+        title={t("tasks:conversation.restartFromOriginal")}
       >
         <RotateCcw className="size-4" />
         Retry
@@ -191,7 +193,7 @@ function StatusActionButton({
       disabled={busy}
       onClick={onMarkDone}
       className="inline-flex h-9 items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 text-[12px] font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/20 hover:text-emerald-200 disabled:opacity-50"
-      title="Mark this task as done"
+      title={t("tasks:conversation.markAsDone")}
     >
       <Check className="size-4" />
       Mark done
@@ -268,17 +270,6 @@ function WrapUpCard({
   );
 }
 
-function buildRuntimeLabel(task: Task): string {
-  const config = task.meta.adapterConfig as
-    | { model?: string; effort?: string }
-    | undefined;
-  const model = config?.model;
-  const effort = config?.effort;
-  const provider = task.meta.providerId;
-  const parts = [model, provider, effort].filter(Boolean);
-  return parts.length ? parts.join(" · ") : "default runtime";
-}
-
 function readRuntimeModel(config?: Record<string, unknown>): string | undefined {
   if (!config) return undefined;
   const value = config.model;
@@ -315,8 +306,18 @@ function readRuntimeSkills(config?: Record<string, unknown>): string[] | null {
 
 const DEFAULT_CONTEXT_WINDOW = 200_000;
 
+// Shared easing for the header/summary collapse-on-scroll tween.
+const COLLAPSE_EASE =
+  "duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none";
+
 export interface TaskConversationPageProps {
   taskId: string;
+  /**
+   * The room/cabinet the task lives in. Required to find the conversation after
+   * rooms v3 (conversations are scoped per cabinet); without it the initial
+   * fetch looks at the empty home and the task "fails to load".
+   */
+  cabinetPath?: string;
   variant?: "full" | "compact";
   readOnly?: boolean;
   /**
@@ -334,10 +335,12 @@ export interface TaskConversationPageProps {
 
 export function TaskConversationPage({
   taskId,
+  cabinetPath,
   variant = "full",
   readOnly = false,
   returnContext,
 }: TaskConversationPageProps) {
+  const { t } = useLocale();
   const isDemo = taskId === "demo";
   const isCompact = variant === "compact";
   const [task, setTask] = useState<Task | null>(isDemo ? MOCK_TASK : null);
@@ -350,10 +353,40 @@ export function TaskConversationPage({
   const [retryNonce, setRetryNonce] = useState(0);
   const [editingSummary, setEditingSummary] = useState(false);
   const [summaryDraft, setSummaryDraft] = useState("");
+  // The summary block collapses to a single ellipsised row once the user
+  // scrolls into any tab's content, and auto-expands back at the top.
+  const [summaryCollapsed, setSummaryCollapsed] = useState(false);
   const [wrapUpDismissed, setWrapUpDismissed] = useState(false);
   const [busy, setBusy] = useState(false);
   const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
+
+  // Callback ref on the panel root: scroll doesn't bubble, so we listen in
+  // the capture phase to catch scrolling inside any tab's content. A
+  // callback ref (not useEffect) so the listener attaches exactly when the
+  // root mounts — the component early-returns null until the task loads,
+  // so an effect would bind before the node exists and never rebind.
+  const scrollCleanupRef = useRef<(() => void) | null>(null);
+  const setPanelRoot = useCallback((node: HTMLDivElement | null) => {
+    scrollCleanupRef.current?.();
+    scrollCleanupRef.current = null;
+    if (!node) return;
+    let raf = 0;
+    const onScroll = (e: Event) => {
+      const tgt = e.target as HTMLElement | null;
+      if (!tgt || typeof tgt.scrollTop !== "number") return;
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        setSummaryCollapsed(tgt.scrollTop > 24);
+      });
+    };
+    node.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    scrollCleanupRef.current = () => {
+      node.removeEventListener("scroll", onScroll, { capture: true });
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
 
   // Terminal-mode viewer tabs: Terminal (xterm stream) vs Details
   // (structured prompt/result/artifacts cards via ConversationResultView).
@@ -527,7 +560,7 @@ export function TaskConversationPage({
     const watchdog = setTimeout(() => {
       if (!cancelled) setConnectTimedOut(true);
     }, 8000);
-    fetchTask(taskId)
+    fetchTask(taskId, cabinetPath || undefined)
       .then((t) => {
         if (!cancelled) {
           setTask(t);
@@ -545,7 +578,7 @@ export function TaskConversationPage({
       cancelled = true;
       clearTimeout(watchdog);
     };
-  }, [isDemo, taskId, retryNonce]);
+  }, [isDemo, taskId, cabinetPath, retryNonce]);
 
   // Fetch the agent's identity (avatar/icon/color/displayName) so turn blocks
   // can render the real avatar instead of a generic sparkles glyph.
@@ -619,7 +652,10 @@ export function TaskConversationPage({
     }
   }, [task?.turns.length]);
 
-  const runtimeLabel = useMemo(() => (task ? buildRuntimeLabel(task) : ""), [task]);
+  const runtimeLabel = useMemo(
+    () => (task ? buildRuntimeLabel(task.meta) ?? "default runtime" : ""),
+    [task]
+  );
   const contextWindow = task?.meta.runtime?.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
   const tokenPct = task?.meta.tokens
     ? Math.min(100, (task.meta.tokens.total / contextWindow) * 100)
@@ -679,7 +715,7 @@ export function TaskConversationPage({
           turn: nextTurn + 1,
           role: "agent" as const,
           ts: new Date().toISOString(),
-          content: "Working on it…",
+          content: "",
           pending: true,
         };
         setTask((t) =>
@@ -939,7 +975,7 @@ export function TaskConversationPage({
         <div className="shrink-0 bg-zinc-950 px-2 pt-2">
           <div
             role="tablist"
-            aria-label="Task view"
+            aria-label={t("tasks:conversation.viewAriaLabel")}
             className={cn(
               "relative z-10 grid gap-1 -mb-px text-[12px] font-medium",
               isClaudeProvider ? "grid-cols-3" : "grid-cols-2"
@@ -958,7 +994,7 @@ export function TaskConversationPage({
               )}
             >
               <Terminal className="size-3.5" />
-              <span>Terminal</span>
+              <span>{t("tasks:conversation.terminal")}</span>
             </button>
             {isClaudeProvider ? (
               <button
@@ -972,10 +1008,10 @@ export function TaskConversationPage({
                     ? "border-zinc-800 bg-background text-foreground"
                     : "border-transparent bg-zinc-900/40 text-zinc-500 hover:bg-zinc-900/60 hover:text-zinc-200"
                 )}
-                title="Claude Code native session JSONL"
+                title={t("tasks:conversation.transcriptTitle")}
               >
                 <ScrollText className="size-3.5" />
-                <span>Transcript</span>
+                <span>{t("tasks:conversation.transcript")}</span>
               </button>
             ) : null}
             <button
@@ -991,7 +1027,7 @@ export function TaskConversationPage({
               )}
             >
               <Sparkles className="size-3.5" />
-              <span>Details</span>
+              <span>{t("tasks:conversation.details")}</span>
               {detail?.artifacts?.length ? (
                 <span className="rounded-full bg-emerald-500/20 px-1.5 py-px text-[9.5px] font-semibold text-emerald-300">
                   {detail.artifacts.length}
@@ -1004,19 +1040,12 @@ export function TaskConversationPage({
         {showTranscript ? (
           <div className="flex min-h-0 flex-1 flex-col bg-background text-foreground">
             <header className="flex h-10 shrink-0 items-center gap-2 border-b border-border/70 bg-muted/30 px-3">
-              <Link
-                href="/"
-                className="inline-flex size-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                title="Back"
-              >
-                <ArrowLeft className="size-3.5" />
-              </Link>
               <h1 className="min-w-0 flex-1 truncate text-[13px] font-medium">
                 {task?.meta.title ?? "Loading…"}
               </h1>
               <span
                 className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
-                title="Reads ~/.claude/projects/<slug>/<session>.jsonl"
+                title={t("tasks:conversation.transcriptHint")}
               >
                 claude-code
               </span>
@@ -1039,13 +1068,6 @@ export function TaskConversationPage({
         ) : showDetails ? (
           <div className="flex min-h-0 flex-1 flex-col bg-background text-foreground">
             <header className="flex h-10 shrink-0 items-center gap-2 border-b border-border/70 bg-muted/30 px-3">
-              <Link
-                href="/"
-                className="inline-flex size-7 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                title="Back"
-              >
-                <ArrowLeft className="size-3.5" />
-              </Link>
               <h1 className="min-w-0 flex-1 truncate text-[13px] font-medium">
                 {task?.meta.title ?? "Loading…"}
               </h1>
@@ -1066,7 +1088,7 @@ export function TaskConversationPage({
                 />
               )}
             </header>
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
               {!task || (detailLoading && !detail) ? (
                 <div className="flex h-full items-center justify-center text-muted-foreground">
                   <Loader2 className="mr-2 size-4 animate-spin" />
@@ -1106,13 +1128,6 @@ export function TaskConversationPage({
         <>
         {/* Thin top strip */}
         <header className="flex h-10 shrink-0 items-center gap-2 border-t border-zinc-800 border-b border-b-zinc-800 bg-zinc-900 px-3">
-          <Link
-            href="/"
-            className="inline-flex size-7 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
-            title="Back"
-          >
-            <ArrowLeft className="size-3.5" />
-          </Link>
           <Terminal className="size-3.5 shrink-0 text-emerald-400" />
           <h1 className="min-w-0 flex-1 truncate text-[13px] font-medium text-zinc-100">
             {task?.meta.title ??
@@ -1179,7 +1194,7 @@ export function TaskConversationPage({
             onClick={copyPrompt}
             disabled={!terminalPrompt}
             className="inline-flex size-7 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100 disabled:opacity-40"
-            title="Copy original prompt"
+            title={t("tasks:conversation.copyPrompt")}
           >
             <Copy className="size-3.5" />
           </button>
@@ -1202,7 +1217,7 @@ export function TaskConversationPage({
                   setBusy(false);
                 }
               }}
-              title="Gracefully close the CLI (writes /exit to the PTY)"
+              title={t("tasks:conversation.gracefulExit")}
             >
               <CheckCircle2 className="size-3.5" />
               Done
@@ -1225,7 +1240,7 @@ export function TaskConversationPage({
                   setBusy(false);
                 }
               }}
-              title="Send SIGTERM to the running PTY process"
+              title={t("tasks:conversation.sendSigterm")}
             >
               <Square className="size-3 fill-current" />
               Stop
@@ -1242,8 +1257,8 @@ export function TaskConversationPage({
           <DropdownMenu>
             <DropdownMenuTrigger
               className="inline-flex size-9 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
-              title="More actions"
-              aria-label="More actions"
+              title={t("tasks:conversation.moreActions")}
+              aria-label={t("tasks:conversation.moreActions")}
             >
               <MoreHorizontal className="size-4" />
             </DropdownMenuTrigger>
@@ -1318,184 +1333,342 @@ export function TaskConversationPage({
   // for TypeScript.
   if (!task) return null;
 
-  return (
-    <div className="flex h-full flex-col bg-background text-foreground">
-      {/* Top bar (hidden in compact variant) */}
-      {!isCompact ? (
-      <header className="flex items-center gap-3 border-b border-border/70 px-6 py-3">
-        <Link
-          href="/"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+  // The model is "alive" while running or paused for input; Stop (SIGTERM)
+  // and the manual graceful-exit Done both apply in either state. Built once
+  // here so the full-page bar and the compact drawer render an identical
+  // action cluster.
+  const taskAlive =
+    task.meta.status === "running" || task.meta.status === "awaiting-input";
+  const aliveActions = taskAlive ? (
+    <>
+      {task.meta.trigger === "manual" ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 px-2 text-[11px] text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300"
+          disabled={busy || isDemo}
+          onClick={async () => {
+            try {
+              setBusy(true);
+              await closeConversation(task.meta.id, task.meta.cabinetPath);
+            } catch (e) {
+              console.error(e);
+            } finally {
+              setBusy(false);
+            }
+          }}
+          title={t("tasks:conversation.gracefulExit")}
         >
-          <ArrowLeft className="size-4" />
-        </Link>
-        <div className="min-w-0 flex-1">
+          <CheckCircle2 className="size-3.5" />
+          Done
+        </Button>
+      ) : null}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 gap-1 px-2 text-[11px] text-rose-400 hover:bg-rose-500/10 hover:text-rose-300"
+        disabled={busy || isDemo}
+        onClick={async () => {
+          try {
+            setBusy(true);
+            await stopConversation(task.meta.id, task.meta.cabinetPath);
+          } catch (e) {
+            console.error(e);
+          } finally {
+            setBusy(false);
+          }
+        }}
+        title={t("tasks:conversation.sendSigterm")}
+      >
+        <Square className="size-3 fill-current" />
+        Stop
+      </Button>
+    </>
+  ) : null;
+
+  const moreMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        className="inline-flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        title={t("tasks:conversation.moreActions")}
+        aria-label={t("tasks:conversation.moreActions")}
+      >
+        <MoreHorizontal className="size-4" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[200px]">
+        {/* Compact has no room for a standalone Compact button, so it lives
+            in the menu there; the full bar keeps the visible button. */}
+        {isCompact && !isDemo && task.turns.length >= 2 ? (
+          <DropdownMenuItem disabled={busy} onClick={() => void handleCompact()}>
+            <RefreshCw className="mr-2 size-3.5" />
+            Compact context
+          </DropdownMenuItem>
+        ) : null}
+        <DropdownMenuItem onClick={() => void handleCopyLink()}>
+          <Link2 className="mr-2 size-3.5" />
+          Copy link
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={handleOpenTranscriptExternal}>
+          <ExternalLink className="mr-2 size-3.5" />
+          Open transcript
+        </DropdownMenuItem>
+        {task.meta.status !== "running" && !isDemo ? (
+          <DropdownMenuItem onClick={() => void handleRestart()}>
+            <RotateCcw className="mr-2 size-3.5" />
+            Restart
+          </DropdownMenuItem>
+        ) : null}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => void handleDelete()}
+          disabled={isDemo || busy}
+          className="text-rose-500 focus:bg-rose-500/10 focus:text-rose-500"
+        >
+          <Trash2 className="mr-2 size-3.5" />
+          Delete
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
+  // Canonical header action cluster, shared by both layouts. Frame controls
+  // (Close/Enlarge/Mute) are owned by the drawer host, not here, so they stay
+  // reachable even in the terminal/loading early-return states.
+  const headerActions = (
+    <div className="flex shrink-0 items-center gap-1">
+      {aliveActions}
+      {!isCompact ? (
+        <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-[11px]">
+          <GitBranch className="size-3.5" />
+          main
+        </Button>
+      ) : null}
+      {!isCompact ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 gap-1.5 text-[11px]"
+          disabled={busy || isDemo || task.turns.length < 2}
+          onClick={handleCompact}
+          title={t("tasks:conversation.compactContext")}
+        >
+          <RefreshCw className="size-3.5" />
+          Compact
+        </Button>
+      ) : null}
+      <StatusActionButton
+        status={task.meta.status}
+        busy={busy}
+        onMarkDone={handleMarkDone}
+        onRetry={handleRestart}
+      />
+      {moreMenu}
+    </div>
+  );
+
+  return (
+    <div
+      ref={setPanelRoot}
+      className="flex h-full flex-col bg-background text-foreground"
+    >
+      {/* Header — owned here and rendered in every variant so Stop / Done /
+          Status / Compact / menu stay identical everywhere. Compact embeds
+          (the drawer) get a denser, collapse-on-scroll layout; the full page
+          keeps the roomy bar. The drawer host owns its own frame controls
+          (close/enlarge/mute) in a separate strip. */}
+      {isCompact ? (
+        <header
+          className={cn(
+            "flex shrink-0 flex-col gap-1 border-b border-border/70 px-4 transition-[padding]",
+            COLLAPSE_EASE,
+            summaryCollapsed ? "py-2" : "py-3"
+          )}
+        >
           <div className="flex items-center gap-2">
-            {isTerminalMode && (
-              <span
-                title="Running in terminal (PTY) mode"
-                className="inline-flex items-center gap-1 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400"
-              >
-                <Terminal className="size-3" />
-                PTY
-              </span>
-            )}
-            {attachedSkills && attachedSkills.length > 0 && (
-              <span
-                className="inline-flex items-center gap-1 rounded bg-violet-500/15 px-1.5 py-0.5 text-[9px] font-medium text-violet-700 dark:text-violet-400"
-                title={`Skills attached: ${attachedSkills.join(", ")}`}
-              >
-                <Sparkles className="size-3" />
-                {attachedSkills.length === 1
-                  ? attachedSkills[0]
-                  : `${attachedSkills.length} skills`}
-              </span>
-            )}
-            <h1 className="truncate text-[14px] font-semibold tracking-tight">
-              {task.meta.title}
-            </h1>
-            <StatusBadge status={task.meta.status} />
-            {busy ? <Loader2 className="size-3.5 animate-spin text-muted-foreground" /> : null}
+            <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
+              {runtimeLabel}
+            </span>
+            {busy ? (
+              <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
+            ) : null}
+            {headerActions}
           </div>
-          <div className="mt-0.5 flex items-center gap-3 text-[11px] text-muted-foreground">
-            <span>{runtimeLabel}</span>
-            <span>·</span>
-            <TokenBar used={task.meta.tokens?.total ?? 0} window={contextWindow} />
-            {task.meta.errorKind ? (
-              <>
-                <span>·</span>
+          <p
+            dir="auto"
+            className={cn(
+              "overflow-hidden text-[14px] font-semibold leading-snug text-foreground transition-[max-height]",
+              COLLAPSE_EASE,
+              summaryCollapsed
+                ? "max-h-[1.5rem] truncate"
+                : "max-h-[12rem] whitespace-normal"
+            )}
+          >
+            {task.meta.title}
+          </p>
+          {task.meta.errorKind ? (
+            <span
+              className="inline-flex w-fit items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive"
+              title={task.meta.errorHint || undefined}
+            >
+              <CircleAlert className="size-3" />
+              {task.meta.errorKind.replace(/_/g, " ")}
+            </span>
+          ) : null}
+        </header>
+      ) : (
+        <header
+          className="flex items-center gap-3 border-b border-border/70 px-6 py-3 transition-[padding] duration-200"
+          style={{ paddingInlineStart: `calc(1.5rem + var(--sidebar-toggle-offset, 0px))` }}
+        >
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              {isTerminalMode && (
                 <span
-                  className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive"
-                  title={task.meta.errorHint || undefined}
+                  title={t("tasks:conversation.ptyMode")}
+                  className="inline-flex items-center gap-1 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400"
                 >
-                  <CircleAlert className="size-3" />
-                  {task.meta.errorKind.replace(/_/g, " ")}
+                  <Terminal className="size-3" />
+                  PTY
                 </span>
-              </>
+              )}
+              {attachedSkills && attachedSkills.length > 0 && (
+                <span
+                  className="inline-flex items-center gap-1 rounded bg-violet-500/15 px-1.5 py-0.5 text-[9px] font-medium text-violet-700 dark:text-violet-400"
+                  title={`Skills attached: ${attachedSkills.join(", ")}`}
+                >
+                  <Sparkles className="size-3" />
+                  {attachedSkills.length === 1
+                    ? attachedSkills[0]
+                    : `${attachedSkills.length} skills`}
+                </span>
+              )}
+              <h1 className="truncate text-[14px] font-semibold tracking-tight">
+                {task.meta.title}
+              </h1>
+              <StatusBadge status={task.meta.status} />
+              {busy ? (
+                <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+              ) : null}
+            </div>
+            <div className="mt-0.5 flex items-center gap-3 text-[11px] text-muted-foreground">
+              <span>{runtimeLabel}</span>
+              <span>·</span>
+              <TokenBar used={task.meta.tokens?.total ?? 0} window={contextWindow} />
+              {task.meta.errorKind ? (
+                <>
+                  <span>·</span>
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive"
+                    title={task.meta.errorHint || undefined}
+                  >
+                    <CircleAlert className="size-3" />
+                    {task.meta.errorKind.replace(/_/g, " ")}
+                  </span>
+                </>
+              ) : null}
+            </div>
+            {task.meta.errorKind && task.meta.errorHint ? (
+              <div className="mt-1 text-[11px] leading-4 text-destructive/90">
+                {task.meta.errorHint}
+              </div>
             ) : null}
           </div>
-          {task.meta.errorKind && task.meta.errorHint ? (
-            <div className="mt-1 text-[11px] leading-4 text-destructive/90">
-              {task.meta.errorHint}
-            </div>
-          ) : null}
-        </div>
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-[11px]">
-            <GitBranch className="size-3.5" />
-            main
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 gap-1.5 text-[11px]"
-            disabled={busy || isDemo || task.turns.length < 2}
-            onClick={handleCompact}
-            title="Collapse prior turns into a digest to free context window"
-          >
-            <RefreshCw className="size-3.5" />
-            Compact
-          </Button>
-          <StatusActionButton
-            status={task.meta.status}
-            busy={busy}
-            onMarkDone={handleMarkDone}
-            onRetry={handleRestart}
-          />
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              className="inline-flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              title="More actions"
-              aria-label="More actions"
-            >
-              <MoreHorizontal className="size-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-[200px]">
-              <DropdownMenuItem onClick={() => void handleCopyLink()}>
-                <Link2 className="mr-2 size-3.5" />
-                Copy link
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleOpenTranscriptExternal}>
-                <ExternalLink className="mr-2 size-3.5" />
-                Open transcript
-              </DropdownMenuItem>
-              {task.meta.status !== "running" && !isDemo ? (
-                <DropdownMenuItem onClick={() => void handleRestart()}>
-                  <RotateCcw className="mr-2 size-3.5" />
-                  Restart
-                </DropdownMenuItem>
-              ) : null}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => void handleDelete()}
-                disabled={isDemo || busy}
-                className="text-rose-500 focus:bg-rose-500/10 focus:text-rose-500"
-              >
-                <Trash2 className="mr-2 size-3.5" />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </header>
-      ) : null}
+          {headerActions}
+        </header>
+      )}
 
-      {/* Summary */}
-      <div className="border-b border-border/70 bg-muted/20 px-6 py-3">
-        <div className="flex items-start gap-2">
-          <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            Summary
-          </span>
-          {editingSummary ? (
-            <div className="flex-1 space-y-2">
-              <textarea
-                className="w-full resize-none rounded-md border border-border bg-background px-2 py-1 text-[13px] outline-none"
-                rows={2}
-                value={summaryDraft}
-                onChange={(e) => setSummaryDraft(e.target.value)}
-                autoFocus
-              />
-              <div className="flex justify-end gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-2 text-[11px]"
-                  onClick={() => {
-                    setSummaryDraft(task.meta.summary ?? "");
-                    setEditingSummary(false);
-                  }}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  className="h-6 px-2 text-[11px]"
-                  onClick={handleSummarySave}
-                  disabled={busy}
-                >
-                  Save
-                </Button>
-              </div>
+      {/* Summary — eases down to a single ellipsised row on scroll. */}
+      {(() => {
+        const collapsed = summaryCollapsed && !editingSummary;
+        const ease = COLLAPSE_EASE;
+        return (
+          <div
+            className={cn(
+              "border-b border-border/70 bg-muted/20 px-6 transition-[padding]",
+              ease,
+              collapsed ? "py-1.5" : "py-3"
+            )}
+          >
+            <div className="flex items-start gap-2">
+              <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Summary
+              </span>
+              {editingSummary ? (
+                <div className="flex-1 space-y-2">
+                  <textarea
+                    className="w-full resize-none rounded-md border border-border bg-background px-2 py-1 text-[13px] outline-none"
+                    rows={2}
+                    value={summaryDraft}
+                    onChange={(e) => setSummaryDraft(e.target.value)}
+                    autoFocus
+                  />
+                  <div className="flex justify-end gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-[11px]"
+                      onClick={() => {
+                        setSummaryDraft(task.meta.summary ?? "");
+                        setEditingSummary(false);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="h-6 px-2 text-[11px]"
+                      onClick={handleSummarySave}
+                      disabled={busy}
+                    >
+                      Save
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <p
+                    dir="auto"
+                    className={cn(
+                      "min-w-0 flex-1 overflow-hidden text-[13px] text-foreground/80 transition-[max-height]",
+                      ease,
+                      collapsed
+                        ? "max-h-[1.25rem] truncate"
+                        : "max-h-[24rem] whitespace-normal leading-relaxed"
+                    )}
+                  >
+                    {task.meta.summary || (
+                      <span className="text-muted-foreground/70">
+                        {t("tasks:conversation.noSummary")}
+                      </span>
+                    )}
+                  </p>
+                  {/* Pencil eases its width/opacity away when collapsed
+                      instead of vanishing. */}
+                  <div
+                    className={cn(
+                      "shrink-0 overflow-hidden transition-[max-width,opacity]",
+                      ease,
+                      collapsed
+                        ? "pointer-events-none max-w-0 opacity-0"
+                        : "max-w-8 opacity-100"
+                    )}
+                  >
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 shrink-0 p-0 text-muted-foreground"
+                      onClick={startEditingSummary}
+                      tabIndex={collapsed ? -1 : 0}
+                    >
+                      <Pencil className="size-3" />
+                    </Button>
+                  </div>
+                </>
+              )}
             </div>
-          ) : (
-            <>
-              <p className="flex-1 text-[13px] leading-relaxed text-foreground/80">
-                {task.meta.summary || (
-                  <span className="text-muted-foreground/70">No summary yet.</span>
-                )}
-              </p>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 w-6 shrink-0 p-0 text-muted-foreground"
-                onClick={startEditingSummary}
-              >
-                <Pencil className="size-3" />
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
+          </div>
+        );
+      })()}
 
       {/* Tabs + content */}
       <Tabs defaultValue="chat" className="flex flex-1 min-h-0 flex-col gap-0">
@@ -1541,17 +1714,18 @@ export function TaskConversationPage({
                     {task.meta.status === "idle" ? (
                       <div className="flex items-center gap-2 border-b border-zinc-800 px-4 py-2 text-[11px] text-zinc-400">
                         <CheckCircle2 className="size-3 text-emerald-500" />
-                        <span>Session ended — type to continue in the same terminal.</span>
+                        <span>{t("tasks:conversation.sessionEnded")}</span>
                       </div>
                     ) : task.meta.status === "running" ? (
                       <div className="flex items-center gap-2 border-b border-zinc-800 px-4 py-2 text-[11px] text-zinc-400">
                         <Loader2 className="size-3 animate-spin text-emerald-500" />
-                        <span>Terminal live. Your next prompt queues after this turn finishes.</span>
+                        <span>{t("tasks:conversation.terminalLive")}</span>
                       </div>
                     ) : null}
                     <div className="[&_textarea]:bg-zinc-900 [&_textarea]:text-zinc-100 [&_textarea]:placeholder:text-zinc-500 [&_textarea]:border-zinc-800 [&_*]:!text-zinc-100">
                       <TaskComposerPanel
                         awaitingInput={task.meta.status === "awaiting-input"}
+                        compact={isCompact}
                         cabinetPath={task.meta.cabinetPath}
                         conversationId={task.meta.id}
                         onSend={handleSend}
@@ -1578,7 +1752,7 @@ export function TaskConversationPage({
             </div>
           ) : (
           <>
-          <div ref={chatScrollRef} className="flex-1 min-h-0 overflow-y-auto">
+          <div ref={chatScrollRef} className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
             {tokenPct >= 80 && task.meta.status !== "done" && !readOnly ? (
               <div className="mx-auto mx-6 my-4 max-w-3xl">
                 <div
@@ -1650,6 +1824,7 @@ export function TaskConversationPage({
               <div className="mx-auto w-full max-w-3xl">
                 <TaskComposerPanel
                   awaitingInput={task.meta.status === "awaiting-input"}
+                  compact={isCompact}
                   cabinetPath={task.meta.cabinetPath}
                   conversationId={task.meta.id}
                   onSend={handleSend}
@@ -1679,7 +1854,7 @@ export function TaskConversationPage({
           value="artifacts"
           className="flex min-h-0 flex-1 flex-col overflow-hidden"
         >
-          <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
             <div className="mx-auto max-w-3xl">
               <ArtifactsList turns={task.turns} returnContext={returnContext} />
             </div>
@@ -1690,7 +1865,7 @@ export function TaskConversationPage({
           value="diff"
           className="flex min-h-0 flex-1 flex-col overflow-hidden"
         >
-          <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
             <div className="mx-auto max-w-3xl">
               {isDemo ? (
                 <p className="px-6 py-12 text-center text-sm text-muted-foreground">
@@ -1707,7 +1882,7 @@ export function TaskConversationPage({
           value="logs"
           className="flex min-h-0 flex-1 flex-col overflow-hidden"
         >
-          <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
             <div className="mx-auto max-w-3xl">
               {isDemo ? (
                 <p className="px-6 py-12 text-center text-sm text-muted-foreground">

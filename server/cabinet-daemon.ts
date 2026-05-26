@@ -446,7 +446,12 @@ function emitSessionOutput(
   if (!chunk) return;
 
   session.output.push(chunk);
-  void syncConversationChunk(session.id, chunk).catch(() => {});
+  void syncConversationChunk(session.id, chunk).catch((err) => {
+    console.warn(
+      `[cabinet-daemon] failed to sync transcript chunk for session ${session.id}:`,
+      err
+    );
+  });
   if (session.ws && session.ws.readyState === WebSocket.OPEN) {
     session.ws.send(chunk);
   }
@@ -459,7 +464,12 @@ function emitSessionOutput(
 
 async function finalizeSessionConversation(session: ActiveSession): Promise<void> {
   const meta = await readConversationMeta(session.id);
-  if (!meta) return;
+  if (!meta) {
+    console.warn(
+      `[cabinet-daemon] cannot finalize session ${session.id}: meta.json missing/unreadable — run result not persisted`
+    );
+    return;
+  }
 
   const plain = stripAnsi(session.output.join(""));
   if (meta.status !== "running") {
@@ -833,11 +843,18 @@ function createStructuredSession(input: {
         sessionParams: input.adapterSessionParams ?? null,
         onLog: async (stream, chunk) => {
           if (stream === "stderr") {
+            // Diagnostic only: buffer for classifyError, but never fold
+            // stderr into the user-visible turn. Structured adapters curate
+            // their display via stdout; codex/claude/etc. emit startup
+            // tracing (e.g. skill-load errors) on stderr that would otherwise
+            // land at the TOP of the assistant message. Mirrors the
+            // stderr handling in conversation-runner's executeWithPrompt.
             session.stderrBuffer = (session.stderrBuffer ?? "") + chunk;
             // Cap stderr buffer at 64 KB so a chatty adapter doesn't OOM us.
             if (session.stderrBuffer.length > 65_536) {
               session.stderrBuffer = session.stderrBuffer.slice(-65_536);
             }
+            return;
           }
           emitSessionOutput(session, chunk, input.onData);
         },
@@ -1212,6 +1229,10 @@ async function reloadSchedules(): Promise<void> {
     const agentsDir = path.join(cabinet.absDir, ".agents");
 
     // --- Heartbeats from .agents/*/persona.md ---
+    // Also collect active-agent slugs per cabinet so jobs owned by an
+    // inactive (Stopped) agent don't get scheduled. Master switch =
+    // `agent.active`; per-heartbeat enable = `agent.heartbeatEnabled`.
+    const activeAgents = new Set<string>();
     if (fs.existsSync(agentsDir)) {
       let agentEntries: fs.Dirent[];
       try {
@@ -1229,8 +1250,10 @@ async function reloadSchedules(): Promise<void> {
             const rawPersona = fs.readFileSync(personaPath, "utf-8");
             const { data } = matter(rawPersona);
             const active = data.active !== false;
+            const heartbeatEnabled = data.heartbeatEnabled !== false;
             const heartbeat = typeof data.heartbeat === "string" ? data.heartbeat : "";
-            if (active && heartbeat) {
+            if (active) activeAgents.add(entry.name);
+            if (active && heartbeatEnabled && heartbeat) {
               scheduleHeartbeat(entry.name, heartbeat, cabinet.relPath);
               heartbeatCount++;
             }
@@ -1265,7 +1288,13 @@ async function reloadSchedules(): Promise<void> {
             agentSlug: ownerAgent,
             cabinetPath: cabinet.relPath,
           };
-          if (config.id && config.enabled && config.schedule && ownerAgent) {
+          if (
+            config.id &&
+            config.enabled &&
+            config.schedule &&
+            ownerAgent &&
+            activeAgents.has(ownerAgent)
+          ) {
             scheduleJob(config);
             jobCount++;
           }
@@ -1640,24 +1669,37 @@ const server = http.createServer(async (req, res) => {
   const stopMatch = url.pathname.match(/^\/session\/([^/]+)\/stop$/);
   if (stopMatch && req.method === "POST") {
     const sessionId = stopMatch[1];
-    const session = sessions.get(sessionId);
-    if (!session || session.exited) {
+    // A conversation's live run may be keyed under the bare conversation id
+    // (turn 1 via startConversationRun; terminal-mode continues) OR under a
+    // per-turn run id of the shape `${conversationId}::t{n}::{uuid}` (native
+    // structured continues in executeViaDaemon). Stop must reach either, so
+    // match the exact id plus any `${id}::`-prefixed sessions. Without the
+    // prefix match, Stop silently 404'd on every native follow-up turn.
+    const prefix = `${sessionId}::`;
+    const targets: ActiveSession[] = [];
+    for (const [sid, s] of sessions) {
+      if (s.exited) continue;
+      if (sid === sessionId || sid.startsWith(prefix)) targets.push(s);
+    }
+    if (targets.length === 0) {
       res.writeHead(404, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Session not found or already exited" }));
       return;
     }
     try {
-      // SIGTERM first, then SIGKILL after 2s if still alive
-      session.stop("SIGTERM");
-      session.stopFallbackTimer = setTimeout(() => {
-        if (!session.exited) {
-          try {
-            session.stop("SIGKILL");
-          } catch {}
-        }
-      }, 2000);
+      // SIGTERM first, then SIGKILL after 2s if still alive.
+      for (const session of targets) {
+        session.stop("SIGTERM");
+        session.stopFallbackTimer = setTimeout(() => {
+          if (!session.exited) {
+            try {
+              session.stop("SIGKILL");
+            } catch {}
+          }
+        }, 2000);
+      }
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ ok: true, sessionId }));
+      res.end(JSON.stringify({ ok: true, sessionId, stopped: targets.length }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       res.writeHead(500, { "Content-Type": "application/json" });
@@ -1760,6 +1802,7 @@ const server = http.createServer(async (req, res) => {
         : "all";
       const limitParam = Number.parseInt(url.searchParams.get("limit") ?? "", 10);
       const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, 100) : 50;
+      const cabinet = url.searchParams.get("cabinet") || undefined;
 
       const needsAgents = scope === "all" || scope === "agents";
       const needsTasks = scope === "all" || scope === "tasks";
@@ -1778,7 +1821,8 @@ const server = http.createServer(async (req, res) => {
         },
         q,
         scope,
-        limit
+        limit,
+        cabinet
       );
 
       res.writeHead(200, { "Content-Type": "application/json" });

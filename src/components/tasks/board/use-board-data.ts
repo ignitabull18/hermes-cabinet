@@ -79,26 +79,42 @@ export function useBoardData({ cabinetPath, visibilityMode = "own" }: Options): 
   const [now, setNow] = useState(() => Date.now());
   const mountedRef = useRef(true);
 
+  // Background refreshers must DEGRADE, not reject. They're invoked from
+  // `void refresh()` (window focus), `void refreshConversations()` (SSE
+  // debounce), a focus listener, and StrictMode's double-invoked mount —
+  // none of which catch. A transient `fetch` failure (offline, dev HMR
+  // dropping an in-flight request, daemon restart) must not bubble to the
+  // Next error overlay; keep the last-known data and recover next tick.
   const refreshOverview = useCallback(async () => {
-    const data = await fetchCabinetOverviewClient(cabinetPath, visibilityMode, {
-      force: true,
-    });
-    if (mountedRef.current) setOverview(data);
+    try {
+      const data = await fetchCabinetOverviewClient(
+        cabinetPath,
+        visibilityMode,
+        { force: true }
+      );
+      if (mountedRef.current) setOverview(data);
+    } catch (err) {
+      console.warn("[board] overview refresh failed", err);
+    }
   }, [cabinetPath, visibilityMode]);
 
   const refreshConversations = useCallback(async () => {
-    const params = new URLSearchParams({ cabinetPath, limit: "400" });
-    if (visibilityMode !== "own") params.set("visibilityMode", visibilityMode);
-    // Audit #104: dedupFetch coalesces same-URL races (sidebar Recent
-    // Tasks + this board both fetch on the same tick on cold paint).
-    const res = await dedupFetch(
-      `/api/agents/conversations?${params.toString()}`,
-      { cache: "no-store" },
-      { ttlMs: 1500 }
-    );
-    if (!res.ok) throw new Error("conversations fetch failed");
-    const data = (await res.json()) as { conversations: ConversationMeta[] };
-    if (mountedRef.current) setConversations(data.conversations ?? []);
+    try {
+      const params = new URLSearchParams({ cabinetPath, limit: "400" });
+      if (visibilityMode !== "own") params.set("visibilityMode", visibilityMode);
+      // Audit #104: dedupFetch coalesces same-URL races (sidebar Recent
+      // Tasks + this board both fetch on the same tick on cold paint).
+      const res = await dedupFetch(
+        `/api/agents/conversations?${params.toString()}`,
+        { cache: "no-store" },
+        { ttlMs: 1500 }
+      );
+      if (!res.ok) throw new Error("conversations fetch failed");
+      const data = (await res.json()) as { conversations: ConversationMeta[] };
+      if (mountedRef.current) setConversations(data.conversations ?? []);
+    } catch (err) {
+      console.warn("[board] conversations refresh failed", err);
+    }
   }, [cabinetPath, visibilityMode]);
 
   const refresh = useCallback(async () => {
@@ -151,7 +167,20 @@ export function useBoardData({ cabinetPath, visibilityMode = "own" }: Options): 
     };
   }, [refresh, refreshOverview, refreshConversations]);
 
-  const tasks = useMemo(() => conversations.map(conversationMetaToTaskMeta), [conversations]);
+  // Safety net: a duplicate conversation id becomes a duplicate React key
+  // in the kanban, which crashes the whole board. The API dedupes at the
+  // source; this guarantees the board still renders if anything slips
+  // through (keep first — the list is already sorted).
+  const tasks = useMemo(() => {
+    const seen = new Set<string>();
+    const out: TaskMeta[] = [];
+    for (const conversation of conversations) {
+      if (seen.has(conversation.id)) continue;
+      seen.add(conversation.id);
+      out.push(conversationMetaToTaskMeta(conversation));
+    }
+    return out;
+  }, [conversations]);
 
   // Bucket `now` to the minute so byLane memo is stable between ticks.
   const nowBucket = Math.floor(now / NOW_TICK_MS);

@@ -179,8 +179,15 @@ async function discoverNestedCabinets(
 async function listDescendantCabinets(
   cabinetVirtualPath: string
 ): Promise<CabinetDiscoveryEntry[]> {
+  const baseDir = resolveCabinetDir(cabinetVirtualPath);
+  // Rooms v3: rooms are hard isolation boundaries. The data-dir root is the
+  // neutral "home" container whose children are sibling rooms, so it never
+  // rolls them up. That keeps Personal and Work from ever mixing even if a
+  // visibility level is changed. A real room still rolls up its own nested
+  // (child) cabinets, which live under it.
+  if (baseDir === DATA_DIR) return [];
   const results: CabinetDiscoveryEntry[] = [];
-  await discoverNestedCabinets(resolveCabinetDir(cabinetVirtualPath), 0, results);
+  await discoverNestedCabinets(baseDir, 0, results);
 
   return results.sort((left, right) => {
     if (left.cabinetDepth !== right.cabinetDepth) {
@@ -281,6 +288,7 @@ async function readAgentPersona(
       emoji: trimString(data.emoji) || "🤖",
       role,
       active: data.active !== false,
+      heartbeatEnabled: data.heartbeatEnabled !== false,
       department: trimString(data.department) || "general",
       type: trimString(data.type) || "specialist",
       heartbeat: trimString(data.heartbeat),

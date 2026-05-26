@@ -1,17 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRightLeft, Loader2, RotateCcw, Square, Trash2 } from "lucide-react";
+import { Loader2, Pencil, Play, RotateCcw, Square, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   deleteConversation,
-  reassignConversation,
   restartConversation,
   stopConversation,
 } from "./board-actions";
-import { ReassignMenu } from "./reassign-menu";
+import { IconHint } from "./icon-hint";
 import type { CabinetAgentSummary } from "@/types/cabinets";
 import type { TaskMeta, TaskStatus } from "@/types/tasks";
+import { useLocale } from "@/i18n/use-locale";
 
 /**
  * Hover-revealed action cluster for a task row/card. Shows Stop / Restart /
@@ -20,20 +20,31 @@ import type { TaskMeta, TaskStatus } from "@/types/tasks";
  */
 export function RowActions({
   task,
-  agents = [],
   onRefresh,
   className,
 }: {
   task: TaskMeta;
+  /** Kept in the type for caller API symmetry even though unused today —
+   *  the per-task reassign (hand-off) control was removed. */
   agents?: CabinetAgentSummary[];
   onRefresh?: () => Promise<void> | void;
   className?: string;
 }) {
+  const { t } = useLocale();
   const [busy, setBusy] = useState<
-    "stop" | "restart" | "delete" | "reassign" | null
+    "stop" | "restart" | "delete" | null
   >(null);
   const visibility = visibilityFor(task.status);
-  const canReassign = agents.length > 0 && task.status !== "archived";
+  // An inbox draft is an idle task with no activity yet — exactly
+  // lane-rules' Inbox derivation (TaskMeta.lastActivityAt already folds in
+  // completedAt). `startedAt` is set at creation so it is NOT part of this
+  // test. Only these can be edited in place — once a run has started the
+  // prompt is history. tasks-board listens for the event and reopens the
+  // Start Work dialog pre-filled.
+  const isInboxDraft = task.status === "idle" && !task.lastActivityAt;
+  // Inbox drafts haven't run yet, so "Restart" reads as the first run —
+  // show a Play glyph + "Run now" copy instead of the circular-arrow
+  // restart icon.
 
   async function run(kind: "stop" | "restart" | "delete") {
     if (busy) return;
@@ -54,24 +65,11 @@ export function RowActions({
     }
   }
 
-  async function handleReassign(toSlug: string) {
-    if (busy || toSlug === task.agentSlug) return;
-    setBusy("reassign");
-    try {
-      await reassignConversation(task.id, toSlug, task.cabinetPath);
-      if (onRefresh) await onRefresh();
-    } catch (err) {
-      console.error("[board] reassign failed", err);
-    } finally {
-      setBusy(null);
-    }
-  }
-
   if (
     !visibility.stop &&
     !visibility.restart &&
     !visibility.delete &&
-    !canReassign
+    !isInboxDraft
   ) {
     return null;
   }
@@ -85,9 +83,27 @@ export function RowActions({
       )}
       onClick={(e) => e.stopPropagation()}
     >
+      {isInboxDraft ? (
+        <ActionButton
+          title={t("rowActionsPlus:edit")}
+          hint={t("rowActionsPlus:editHint")}
+          tone="primary"
+          onClick={(e) => {
+            e.stopPropagation();
+            window.dispatchEvent(
+              new CustomEvent("cabinet:open-edit-draft", {
+                detail: { taskId: task.id, cabinetPath: task.cabinetPath },
+              })
+            );
+          }}
+          disabled={!!busy}
+          icon={<Pencil className="size-3.5" />}
+        />
+      ) : null}
       {visibility.stop ? (
         <ActionButton
-          title="Stop"
+          title={t("rowActions:stop")}
+          hint={t("rowActions:stopHint")}
           tone="destructive"
           onClick={(e) => {
             e.stopPropagation();
@@ -99,34 +115,29 @@ export function RowActions({
       ) : null}
       {visibility.restart ? (
         <ActionButton
-          title="Restart"
+          title={isInboxDraft ? t("tinyExtras:runTaskNow") : t("rowActions:restart")}
+          hint={isInboxDraft ? t("rowActions:runHint") : t("rowActions:restartHint")}
           tone="primary"
           onClick={(e) => {
             e.stopPropagation();
             void run("restart");
           }}
           disabled={!!busy}
-          icon={busy === "restart" ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}
+          icon={
+            busy === "restart" ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : isInboxDraft ? (
+              <Play className="size-3.5" />
+            ) : (
+              <RotateCcw className="size-3.5" />
+            )
+          }
         />
-      ) : null}
-      {canReassign ? (
-        <ReassignMenu
-          agents={agents}
-          currentSlug={task.agentSlug}
-          onSelect={handleReassign}
-          triggerClassName="inline-flex size-6 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors hover:bg-primary/20 hover:text-primary disabled:opacity-50"
-        >
-          {busy === "reassign" ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : (
-            <ArrowRightLeft className="size-3.5" />
-          )}
-          <span className="sr-only">Reassign</span>
-        </ReassignMenu>
       ) : null}
       {visibility.delete ? (
         <ActionButton
-          title="Delete"
+          title={t("rowActionsPlus:delete")}
+          hint={t("rowActionsPlus:deleteHint")}
           tone="destructive"
           onClick={(e) => {
             e.stopPropagation();
@@ -142,33 +153,38 @@ export function RowActions({
 
 function ActionButton({
   title,
+  hint,
   onClick,
   disabled,
   icon,
   tone,
 }: {
+  /** Short verb — used as the accessible name. */
   title: string;
+  /** Longer "what this does" line shown in the instant tooltip. */
+  hint?: string;
   onClick: (e: React.MouseEvent) => void;
   disabled?: boolean;
   icon: React.ReactNode;
   tone: "destructive" | "primary";
 }) {
   return (
-    <button
-      type="button"
-      title={title}
-      aria-label={title}
-      disabled={disabled}
-      onClick={onClick}
-      className={cn(
-        "inline-flex size-6 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors disabled:opacity-50",
-        tone === "destructive"
-          ? "hover:bg-destructive/20 hover:text-destructive"
-          : "hover:bg-primary/20 hover:text-primary"
-      )}
-    >
-      {icon}
-    </button>
+    <IconHint label={hint ?? title} side="bottom">
+      <button
+        type="button"
+        aria-label={title}
+        disabled={disabled}
+        onClick={onClick}
+        className={cn(
+          "inline-flex size-6 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors disabled:opacity-50",
+          tone === "destructive"
+            ? "hover:bg-destructive/20 hover:text-destructive"
+            : "hover:bg-primary/20 hover:text-primary"
+        )}
+      >
+        {icon}
+      </button>
+    </IconHint>
   );
 }
 

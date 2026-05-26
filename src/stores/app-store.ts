@@ -5,6 +5,12 @@ import type { ProviderInfo } from "@/types/agents";
 import { ROOT_CABINET_PATH } from "@/lib/cabinets/paths";
 import { dedupFetch } from "@/lib/api/dedup-fetch";
 
+// Module-level in-flight guard for per-provider model hydration so N picker
+// mounts / tab switches collapse to one request. Cleared on settle so a
+// failed fetch can be retried on the next interaction (server 60s-caches the
+// success path anyway).
+const inflightModelFetches = new Map<string, Promise<void>>();
+
 export type SectionType =
   | "home"
   | "cabinet"
@@ -64,6 +70,27 @@ export interface SelectedSection {
   agentScopedId?: string;
   conversationId?: string; // auto-select this conversation on mount
   taskId?: string; // task id when type === "task"
+  /** Sub-tab key when type === "agents" (e.g. "routines", "heartbeats"). */
+  agentsTab?: "agents" | "routines" | "heartbeats" | "schedule";
+}
+
+/**
+ * The task drawer is either showing a live conversation or composing a new
+ * one. Compose mode carries optional context so a "New Chat" launched from a
+ * page can default to the Editor agent with that page pinned.
+ */
+export type TaskPanelMode = "conversation" | "compose";
+
+export interface TaskPanelComposeContext {
+  /** Page to pin as an @context chip (Editor-scoped opens). */
+  pinnedPagePath?: string | null;
+  /** Agent the composer should default to (defaults to "editor"). */
+  defaultAgentSlug?: string;
+  /** Mirrors createConversation's discriminant. */
+  source?: "editor" | "agent";
+  /** Optional greeting shown above the composer (e.g. the post-create
+   *  "Hi {name} — what would you like to do in {file}?" handoff). */
+  greeting?: string;
 }
 
 interface TerminalTab {
@@ -102,7 +129,16 @@ interface AppState {
   aiPanelCollapsed: boolean;
   cabinetVisibilityModes: Record<string, CabinetVisibilityMode>;
   taskPanelConversation: ConversationMeta | null;
-  taskPanelFullscreen: boolean;
+  taskPanelOpen: boolean;
+  taskPanelMode: TaskPanelMode;
+  taskPanelComposeContext: TaskPanelComposeContext | null;
+  /** Right-edge recent-tasks rail. Closed by default; session memory only. */
+  taskRailOpen: boolean;
+  /**
+   * Conversation ids the user has opened in the task drawer this session,
+   * newest-first. Backs the "recent" group of the task rail. Session memory.
+   */
+  recentlyOpenedTaskIds: string[];
   providers: ProviderInfo[];
   defaultProviderId: string | null;
   defaultModel: string | null;
@@ -110,6 +146,16 @@ interface AppState {
   providersLoading: boolean;
   providersLoaded: boolean;
   loadProviders: () => Promise<void>;
+  /**
+   * Hydrate one provider's real, entitlement-gated model list from
+   * GET /api/agents/providers/:id/models and merge it into `providers`.
+   * Lazy + deduped — call it when a dynamic-discovery provider's tab opens.
+   * `refresh` busts the server's 60s cache (use after the user adds a key).
+   */
+  ensureProviderModels: (
+    providerId: string,
+    opts?: { refresh?: boolean }
+  ) => Promise<void>;
   setSection: (section: SelectedSection) => void;
   pushSection: (next: SelectedSection, from: SelectedSection) => void;
   popReturnTo: () => void;
@@ -129,12 +175,26 @@ interface AppState {
     mode: CabinetVisibilityMode
   ) => void;
   setTaskPanelConversation: (conversation: ConversationMeta | null) => void;
-  setTaskPanelFullscreen: (fullscreen: boolean) => void;
-  toggleTaskPanelFullscreen: () => void;
+  openTaskPanelCompose: (context?: TaskPanelComposeContext) => void;
+  closeTaskPanel: () => void;
+  toggleTaskPanelCompose: (context?: TaskPanelComposeContext) => void;
+  swapToConversation: (conversation: ConversationMeta) => void;
+  toggleTaskRail: () => void;
 }
 
 function normalizeVisibilityCabinetPath(cabinetPath?: string): string {
   return cabinetPath?.trim() || ROOT_CABINET_PATH;
+}
+
+/** Max entries kept in the task rail's "recently opened" session history. */
+const RECENT_TASKS_CAP = 25;
+
+/** Prepend `id` to the recents list, dedupe, and cap. Pure. */
+function rememberOpenedTask(current: string[], id: string): string[] {
+  const next = [id, ...current.filter((existing) => existing !== id)];
+  return next.length > RECENT_TASKS_CAP
+    ? next.slice(0, RECENT_TASKS_CAP)
+    : next;
 }
 
 function loadCabinetVisibilityModes(): Record<string, CabinetVisibilityMode> {
@@ -186,7 +246,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   aiPanelCollapsed: false,
   cabinetVisibilityModes: loadCabinetVisibilityModes(),
   taskPanelConversation: null,
-  taskPanelFullscreen: false,
+  taskPanelOpen: false,
+  taskPanelMode: "compose",
+  taskPanelComposeContext: null,
+  taskRailOpen: false,
+  recentlyOpenedTaskIds: [],
   providers: [],
   defaultProviderId: null,
   defaultModel: null,
@@ -221,6 +285,59 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  ensureProviderModels: async (providerId, opts) => {
+    const refresh = opts?.refresh === true;
+    const dedupeKey = refresh ? `${providerId}::refresh` : providerId;
+
+    const existing = get().providers.find((p) => p.id === providerId);
+    // Already hydrated and not a forced refresh → nothing to do.
+    if (existing?.modelsHydrated && !refresh) return;
+    const pending = inflightModelFetches.get(dedupeKey);
+    if (pending) return pending;
+
+    const run = (async () => {
+      try {
+        const url = `/api/agents/providers/${encodeURIComponent(providerId)}/models${
+          refresh ? "?refresh=1" : ""
+        }`;
+        const response = await dedupFetch(url);
+        if (!response.ok) return;
+        const data = (await response.json()) as {
+          models?: ProviderInfo["models"];
+          dynamic?: boolean;
+        };
+        const models = data.models;
+        if (!Array.isArray(models)) return;
+        // Only treat the list as authoritative when it's the provider's live
+        // list. An offline fallback (dynamic:false — CLI not runnable) still
+        // gets merged for display, but modelsHydrated stays false so
+        // resolveProviderModel keeps preserving a saved id instead of
+        // snapping it to the fallback's first entry just because we're
+        // transiently offline. A later interaction retries.
+        const isLive = data.dynamic === true;
+        set((state) => ({
+          providers: state.providers.map((p) =>
+            p.id === providerId
+              ? {
+                  ...p,
+                  models: models.length > 0 ? models : p.models,
+                  modelsHydrated: isLive ? true : p.modelsHydrated,
+                }
+              : p
+          ),
+        }));
+      } catch {
+        // Leave modelsHydrated unset so the resolver keeps preserving any
+        // saved model id and a later interaction retries.
+      } finally {
+        inflightModelFetches.delete(dedupeKey);
+      }
+    })();
+
+    inflightModelFetches.set(dedupeKey, run);
+    return run;
+  },
+
   setSection: (section) => {
     const prev = get().section;
     if (prev.cabinetPath !== section.cabinetPath) {
@@ -234,9 +351,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     // Audit #131: keep the task side panel visible across navigation so the
     // user can launch a task and keep working while it runs. The panel is
     // dismissed explicitly via its X button or replaced by another launch.
-    // Fullscreen mode is reset on navigation though — full-screen is bound
-    // to a specific surface, not a free-floating overlay.
-    set({ section, taskPanelFullscreen: false, returnTo: null });
+    set({ section, returnTo: null });
   },
 
   pushSection: (next, from) => {
@@ -249,13 +364,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         keepalive: true,
       }).catch(() => {});
     }
-    set({ section: next, taskPanelFullscreen: false, returnTo: from });
+    set({ section: next, returnTo: from });
   },
 
   popReturnTo: () => {
     const { returnTo } = get();
     if (!returnTo) return;
-    set({ section: returnTo, returnTo: null, taskPanelFullscreen: false });
+    set({ section: returnTo, returnTo: null });
   },
 
   recordNav: (hash) => {
@@ -403,13 +518,62 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ cabinetVisibilityModes: nextModes });
   },
 
+  // Backward-compatible entry point used by the post-create flows
+  // (start-work-dialog / new-task-button.onStarted). `meta` opens the
+  // animated drawer in conversation mode; `null` closes it (the
+  // conversation is kept so the desktop close tween can play out).
   setTaskPanelConversation: (conversation) =>
-    set({ taskPanelConversation: conversation, taskPanelFullscreen: false }),
+    set(
+      conversation
+        ? {
+            taskPanelConversation: conversation,
+            taskPanelMode: "conversation" as const,
+            taskPanelOpen: true,
+            recentlyOpenedTaskIds: rememberOpenedTask(
+              get().recentlyOpenedTaskIds,
+              conversation.id
+            ),
+          }
+        : { taskPanelOpen: false }
+    ),
 
-  setTaskPanelFullscreen: (fullscreen) => set({ taskPanelFullscreen: fullscreen }),
+  openTaskPanelCompose: (context) =>
+    set({
+      taskPanelOpen: true,
+      taskPanelMode: "compose",
+      taskPanelComposeContext: context ?? null,
+      taskPanelConversation: null,
+    }),
 
-  toggleTaskPanelFullscreen: () =>
-    set({ taskPanelFullscreen: !get().taskPanelFullscreen }),
+  closeTaskPanel: () => set({ taskPanelOpen: false }),
+
+  toggleTaskPanelCompose: (context) => {
+    if (get().taskPanelOpen) {
+      set({ taskPanelOpen: false });
+    } else {
+      set({
+        taskPanelOpen: true,
+        taskPanelMode: "compose",
+        taskPanelComposeContext: context ?? null,
+        taskPanelConversation: null,
+      });
+    }
+  },
+
+  // Compose -> live swap: keep the SAME drawer mounted (width unchanged),
+  // unlike the external setTaskPanelConversation.
+  swapToConversation: (conversation) =>
+    set({
+      taskPanelConversation: conversation,
+      taskPanelMode: "conversation",
+      taskPanelOpen: true,
+      recentlyOpenedTaskIds: rememberOpenedTask(
+        get().recentlyOpenedTaskIds,
+        conversation.id
+      ),
+    }),
+
+  toggleTaskRail: () => set({ taskRailOpen: !get().taskRailOpen }),
 
   openAgentTab: (taskTitle: string, prompt: string) => {
     const id = `agent-${Date.now()}`;

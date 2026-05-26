@@ -28,6 +28,7 @@ import { publishConversationEvent } from "./conversation-events";
 import { discoverCabinetPaths } from "../cabinets/discovery";
 import { buildConversationInstanceKey } from "./conversation-identity";
 import { fingerprint, parseAgentActions } from "./action-parser";
+import { stripToolOutput } from "./tool-output-markers";
 import {
   computeWarnings,
   personaCanDispatch,
@@ -47,6 +48,7 @@ import {
   fileExists,
   listDirectory,
   readFileContent,
+  writeFileAtomic,
   writeFileContent,
 } from "../storage/fs-operations";
 
@@ -306,15 +308,25 @@ function normalizeSingleArtifactCandidate(raw: string): string | null {
   // up as file names in the "Recent work" block (UX audit #73).
   //
   // A real artifact path either contains a directory separator or ends in a
-  // known file extension; and it must not contain whitespace in the segment
-  // before the extension / separator. Anything else is prose.
+  // known file extension.
   const hasSeparator = normalized.includes("/");
   const hasExtension = /\.[A-Za-z0-9]{1,8}$/.test(normalized);
   if (!hasSeparator && !hasExtension) return null;
   const pathHead = hasExtension
     ? normalized.replace(/\.[A-Za-z0-9]{1,8}$/, "")
     : normalized;
-  if (/\s/.test(pathHead)) return null;
+  // Whitespace in the path head usually means prose that accidentally ends
+  // in a file-like extension. But real KB pages legitimately have spaces in
+  // their name (e.g. "Thailand Trip.md"), so only reject when it actually
+  // reads like a sentence rather than a short filename.
+  if (/\s/.test(pathHead)) {
+    const looksLikeProse =
+      !hasExtension ||
+      normalized.length > 80 ||
+      pathHead.split(/\s+/).filter(Boolean).length > 6 ||
+      /[.;:!?]\s/.test(pathHead);
+    if (looksLikeProse) return null;
+  }
   // Paths we generate are short — 200 chars is already a runaway match.
   if (normalized.length > 200) return null;
   return normalized;
@@ -513,7 +525,7 @@ export async function createConversation(
       JSON.stringify(input.mentionedPaths || [], null, 2)
     ),
     writeFileContent(artifactsPathFs(id, cp), JSON.stringify([], null, 2)),
-    writeFileContent(metaPath(id, cp), JSON.stringify(meta, null, 2)),
+    writeFileAtomic(metaPath(id, cp), JSON.stringify(meta, null, 2)),
   ]);
 
   // Broadcast the freshly-created conversation so the task list/board can
@@ -571,9 +583,72 @@ export async function readConversationMeta(
       parsed.cabinetPath = undefined;
     }
     return parsed;
+  } catch (err) {
+    // A genuinely-absent file is normal (caller treats null as "not found").
+    // Anything else — empty/truncated file, invalid JSON — means a meta.json
+    // got corrupted (e.g. process killed mid-write). Surface it so the next
+    // occurrence is diagnosable instead of the task silently vanishing.
+    if ((err as { code?: string } | null)?.code !== "ENOENT") {
+      console.warn(
+        `[readConversationMeta] unreadable meta.json for conversation ${id}:`,
+        err
+      );
+    }
+    return null;
+  }
+}
+
+/**
+ * Best-effort reconstruction of a conversation whose meta.json is missing or
+ * corrupted (e.g. the process was killed mid-write after a provider credit
+ * error or a long context). Returns a minimal placeholder — marked failed —
+ * so the task still appears in the log instead of silently vanishing; the
+ * user can still open it to read whatever transcript was saved. Returns null
+ * only when the conversation directory itself is gone (nothing to recover).
+ */
+export async function recoverConversationMeta(
+  id: string,
+  cabinetPath?: string
+): Promise<ConversationMeta | null> {
+  const dir = conversationDir(id, cabinetPath);
+  let startedAt = new Date().toISOString();
+  try {
+    const st = await fs.stat(dir);
+    startedAt = st.mtime.toISOString();
   } catch {
     return null;
   }
+
+  let title = `Recovered task ${id.slice(0, 8)}`;
+  try {
+    if (await fileExists(promptPathFs(id, cabinetPath))) {
+      const prompt = await readFileContent(promptPathFs(id, cabinetPath));
+      const firstLine = prompt
+        .split("\n")
+        .map((line) => line.trim())
+        .find(Boolean);
+      if (firstLine) title = firstLine.slice(0, 120);
+    }
+  } catch {
+    // keep the default title
+  }
+
+  return {
+    id,
+    agentSlug: "unknown",
+    cabinetPath,
+    title,
+    trigger: "manual",
+    status: "failed",
+    startedAt,
+    promptPath: virtualPathFromFs(promptPathFs(id, cabinetPath)),
+    transcriptPath: virtualPathFromFs(transcriptPathFs(id, cabinetPath)),
+    mentionedPaths: [],
+    artifactPaths: [],
+    errorKind: "unknown",
+    errorHint:
+      "This task's metadata was unreadable — likely a crash mid-write. The transcript is whatever was saved before it failed.",
+  };
 }
 
 async function resolveConversationCabinetPath(
@@ -789,7 +864,11 @@ export function formatConversationTranscriptForDisplay(
   transcript: string,
   prompt?: string
 ): string {
-  const cleaned = cleanConversationOutputForParsing(transcript, prompt);
+  // Terminal/CLI surface has no collapse affordance — drop fenced tool
+  // output entirely rather than leak sentinel codepoints or raw `ls` dumps.
+  const cleaned = stripToolOutput(
+    cleanConversationOutputForParsing(transcript, prompt)
+  );
   const promptEchoMatchers = buildPromptEchoMatchers(prompt);
   const normalized = cleaned
     .replace(/[─-]{8,}/g, "\n")
@@ -951,7 +1030,10 @@ async function maybeResolveCompletedConversation(
 
 export async function writeConversationMeta(meta: ConversationMeta): Promise<void> {
   await ensureDirectory(conversationDir(meta.id, meta.cabinetPath));
-  await writeFileContent(metaPath(meta.id, meta.cabinetPath), JSON.stringify(meta, null, 2));
+  await writeFileAtomic(
+    metaPath(meta.id, meta.cabinetPath),
+    JSON.stringify(meta, null, 2)
+  );
 }
 
 // Throttle state for transcript-driven task.updated events. Streaming stdout
@@ -1292,11 +1374,14 @@ export async function listConversationMetas(
         await Promise.all(
           entries
             .filter((entry) => entry.isDirectory)
-            .map(async (entry) =>
-              maybeResolveCompletedConversation(
-                await readConversationMeta(entry.name, cabinetPath)
-              )
-            )
+            .map(async (entry) => {
+              const meta = await readConversationMeta(entry.name, cabinetPath);
+              if (meta) return maybeResolveCompletedConversation(meta);
+              // meta.json is missing/corrupted — don't let the task silently
+              // vanish from the log. Surface a recovered placeholder so the
+              // user can still find and open it.
+              return recoverConversationMeta(entry.name, cabinetPath);
+            })
         )
       ).filter(Boolean) as ConversationMeta[];
     })
@@ -1605,13 +1690,13 @@ async function readTurnOne(
   };
 
   // Turn 1 agent: while the conversation is still running and the daemon
-  // hasn't streamed any bytes yet, show a "Working on it…" placeholder so
-  // the UI isn't blank during the adapter cold-start + first-poll window.
-  // Continue turns already do this via `continueConversationRun` writing an
-  // explicit pending turn file; the first turn has no turn file, so we
-  // fabricate the placeholder here at read time. For any non-running status
-  // (failed/cancelled/completed-with-empty-output) keep returning null so
-  // error paths aren't masked behind a fake placeholder.
+  // hasn't streamed any bytes yet, fabricate an empty pending turn so the UI
+  // shows the typing indicator (not a blank gap) during the adapter cold-start
+  // + first-poll window. Continue turns already do this via
+  // `continueConversationRun` writing an explicit pending turn file; the first
+  // turn has no turn file, so we fabricate it here at read time. For any
+  // non-running status (failed/cancelled/completed-with-empty-output) keep
+  // returning null so error paths aren't masked behind a fake placeholder.
   if (!transcript.trim()) {
     if (meta.status === "running") {
       const placeholder: ConversationTurn = {
@@ -1619,7 +1704,7 @@ async function readTurnOne(
         turn: 1,
         role: "agent",
         ts: meta.startedAt,
-        content: "Working on it…",
+        content: "",
         pending: true,
       };
       return { user, agent: placeholder };

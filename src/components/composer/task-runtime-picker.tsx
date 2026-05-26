@@ -1,10 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAppStore } from "@/stores/app-store";
-import { BrainCircuit, Check, Sparkles, Terminal } from "lucide-react";
+import { dedupFetch } from "@/lib/api/dedup-fetch";
+import {
+  BrainCircuit,
+  Check,
+  RefreshCw,
+  Search,
+  Sparkles,
+  Terminal,
+} from "lucide-react";
 import { ProviderGlyph } from "@/components/agents/provider-glyph";
 import { cn } from "@/lib/utils";
+import { useLocale } from "@/i18n/use-locale";
 import {
   formatEffortName,
   getModelEffortLevels,
@@ -361,6 +370,7 @@ function ProviderRuntimeMatrix({
   selectedEffortId?: string;
   onSelect: (modelId: string, effortId?: string) => void;
 }) {
+  const { t } = useLocale();
   const matrixEffortColumns = getProviderEffortColumns(provider);
   const models = provider.models || [];
 
@@ -384,14 +394,14 @@ function ProviderRuntimeMatrix({
             <thead className="bg-muted/25">
               <tr>
                 <th className="min-w-[9.5rem] px-2.5 py-1.5 text-left font-medium text-foreground">
-                  Model
+                  {t("runtime:modelCol")}
                 </th>
-                {[{ id: AUTO_EFFORT_ID, name: "Auto" }, ...matrixEffortColumns].map(
+                {[{ id: AUTO_EFFORT_ID, name: t("runtime:auto") }, ...matrixEffortColumns].map(
                   (effort) => {
                     const tone = getEffortTone(effort.id);
                     const label =
                       effort.id === AUTO_EFFORT_ID
-                        ? "Auto"
+                        ? t("runtime:auto")
                         : formatEffortName(effort.name) || effort.name;
 
                     return (
@@ -449,7 +459,7 @@ function ProviderRuntimeMatrix({
                           {model.name}
                           {model.requires === "api_key" ? (
                             <span
-                              title="Requires an OpenAI API key. Not available on ChatGPT-plan Codex accounts — picking this model will fail with 'model not supported when using Codex with a ChatGPT account'."
+                              title={t("runtime:ptyWarningTitle")}
                               className="inline-flex items-center rounded-sm border border-amber-500/40 bg-amber-500/10 px-1 py-px text-[8.5px] font-medium uppercase tracking-wide text-amber-600 dark:text-amber-400"
                             >
                               API key
@@ -514,6 +524,284 @@ function ProviderRuntimeMatrix({
   );
 }
 
+function groupModelsBySubProvider(
+  models: ProviderModel[]
+): Array<{ group: string; items: ProviderModel[] }> {
+  const groups = new Map<string, ProviderModel[]>();
+  for (const model of models) {
+    const slash = model.id.indexOf("/");
+    const group = slash > 0 ? model.id.slice(0, slash) : "other";
+    const bucket = groups.get(group);
+    if (bucket) bucket.push(model);
+    else groups.set(group, [model]);
+  }
+  return [...groups.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([group, items]) => ({ group, items }));
+}
+
+// Cap rendered rows so a ~100+ entitlement-gated catalog can't jank the
+// dropdown; the search box narrows long lists well before the cap bites.
+const COMBOBOX_RENDER_CAP = 200;
+
+/**
+ * Searchable, sub-provider-grouped model list. Replaces the fixed matrix for
+ * providers that do per-machine dynamic discovery (OpenCode, Pi) where the
+ * real list is dozens-to-hundreds of `vendor/model` ids. Triggers lazy
+ * hydration of the real list on mount and exposes a refresh (bust the 60s
+ * server cache after the user adds an API key).
+ */
+function ProviderModelCombobox({
+  provider,
+  currentProviderId,
+  currentModelId,
+  selectedEffortId,
+  onSelect,
+}: {
+  provider: ProviderInfo;
+  currentProviderId?: string;
+  currentModelId?: string;
+  selectedEffortId?: string;
+  onSelect: (modelId: string, effortId?: string) => void;
+}) {
+  const ensureProviderModels = useAppStore((s) => s.ensureProviderModels);
+  const [query, setQuery] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+  // Own fetch for *display* so this works whether the parent feeds store
+  // providers (composer) or a local snapshot (Settings/onboarding). The
+  // store action is still called so the composer's resolveProviderModel
+  // guard flips (provider.modelsHydrated). dedupFetch + the 60s server
+  // cache collapse the two calls into one request.
+  const [fetchedModels, setFetchedModels] = useState<ProviderModel[] | null>(
+    null
+  );
+  // null = unknown/loading, "live" = real per-machine list, "offline" = the
+  // CLI couldn't be queried and we're showing static defaults.
+  const [discovery, setDiscovery] = useState<"live" | "offline" | null>(null);
+
+  const loadModels = useCallback(
+    async (refresh: boolean) => {
+      void ensureProviderModels(provider.id, refresh ? { refresh: true } : undefined);
+      try {
+        const response = await dedupFetch(
+          `/api/agents/providers/${encodeURIComponent(provider.id)}/models${
+            refresh ? "?refresh=1" : ""
+          }`
+        );
+        if (!response.ok) {
+          setDiscovery("offline");
+          return;
+        }
+        const data = (await response.json()) as {
+          models?: ProviderModel[];
+          dynamic?: boolean;
+        };
+        setDiscovery(data.dynamic === true ? "live" : "offline");
+        if (Array.isArray(data.models) && data.models.length > 0) {
+          setFetchedModels(data.models);
+        }
+      } catch {
+        // keep the offline fallback already on `provider.models`
+        setDiscovery("offline");
+      }
+    },
+    [ensureProviderModels, provider.id]
+  );
+
+  useEffect(() => {
+    setFetchedModels(null);
+    setDiscovery(null);
+    void loadModels(false);
+  }, [loadModels]);
+
+  const models = useMemo(
+    () => fetchedModels ?? provider.models ?? [],
+    [fetchedModels, provider.models]
+  );
+  const hydrating =
+    Boolean(provider.dynamicModels) &&
+    fetchedModels === null &&
+    !provider.modelsHydrated;
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return models;
+    return models.filter(
+      (model) =>
+        model.id.toLowerCase().includes(q) ||
+        model.name.toLowerCase().includes(q)
+    );
+  }, [models, query]);
+
+  const groups = useMemo(
+    () => groupModelsBySubProvider(filtered.slice(0, COMBOBOX_RENDER_CAP)),
+    [filtered]
+  );
+
+  const effortColumns = getProviderEffortColumns(provider);
+
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await loadModels(true);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  return (
+    <div className="bg-background">
+      <div className="flex items-center gap-1.5 border-b border-border/60 px-2.5 py-2">
+        <Search className="size-3 shrink-0 text-muted-foreground/60" />
+        <input
+          type="text"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search models — e.g. minimax, glm, gpt"
+          className="min-w-0 flex-1 bg-transparent text-[11px] outline-none placeholder:text-muted-foreground/50"
+          autoFocus
+        />
+        <span className="shrink-0 text-[9px] tabular-nums text-muted-foreground/50">
+          {filtered.length}/{models.length}
+        </span>
+        <button
+          type="button"
+          onClick={handleRefresh}
+          disabled={refreshing}
+          title="Refresh — re-read the CLI's model list (use after adding an API key)"
+          className="shrink-0 rounded p-0.5 text-muted-foreground/60 transition-colors hover:text-foreground disabled:opacity-50"
+        >
+          <RefreshCw className={cn("size-3", refreshing && "animate-spin")} />
+        </button>
+      </div>
+
+      {discovery === "offline" && (
+        <div className="border-b border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-[9.5px] leading-relaxed text-amber-700 dark:text-amber-400">
+          Showing offline defaults — {provider.name} couldn&apos;t be queried.
+          Install &amp; configure it (set a provider API key or run{" "}
+          <code className="rounded bg-amber-500/15 px-1 py-px font-mono">
+            {provider.id === "pi" ? "pi --list-models" : "opencode auth login"}
+          </code>
+          ), then hit{" "}
+          <RefreshCw className="inline size-2.5 -mt-px" /> Refresh to see your
+          own models.
+        </div>
+      )}
+
+      <div className="max-h-[15rem] overflow-y-auto">
+        {hydrating && models.length === 0 ? (
+          <div className="px-3 py-5 text-center text-[10px] text-muted-foreground">
+            Loading your models…
+          </div>
+        ) : groups.length === 0 ? (
+          <div className="px-3 py-5 text-center text-[10px] text-muted-foreground">
+            {query
+              ? `No models match “${query}”.`
+              : "No models are available for this provider yet."}
+          </div>
+        ) : (
+          groups.map(({ group, items }) => (
+            <div key={group}>
+              <div className="sticky top-0 z-10 bg-muted/60 px-2.5 py-1 text-[8.5px] font-semibold uppercase tracking-wide text-muted-foreground/70 backdrop-blur">
+                {group}
+              </div>
+              {items.map((model) => {
+                const checked =
+                  currentProviderId === provider.id &&
+                  currentModelId === model.id;
+                return (
+                  <button
+                    key={model.id}
+                    type="button"
+                    onClick={() => onSelect(model.id, selectedEffortId)}
+                    title={model.description || model.id}
+                    className={cn(
+                      "flex w-full items-center gap-2 px-2.5 py-1.5 text-left transition-colors",
+                      checked
+                        ? "bg-accent text-accent-foreground"
+                        : "hover:bg-muted/50"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "inline-flex size-3 shrink-0 items-center justify-center rounded-full border",
+                        checked
+                          ? "border-foreground/70 bg-foreground/80"
+                          : "border-border"
+                      )}
+                    >
+                      {checked && (
+                        <span className="size-1.5 rounded-full bg-background" />
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[11px] font-medium">
+                      {model.id}
+                    </span>
+                    {model.requires === "api_key" && (
+                      <span className="shrink-0 rounded-sm border border-amber-500/40 bg-amber-500/10 px-1 py-px text-[8px] font-medium uppercase tracking-wide text-amber-600 dark:text-amber-400">
+                        API key
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          ))
+        )}
+        {filtered.length > COMBOBOX_RENDER_CAP && (
+          <div className="px-2.5 py-1.5 text-center text-[8.5px] text-muted-foreground/60">
+            +{filtered.length - COMBOBOX_RENDER_CAP} more — keep typing to filter
+          </div>
+        )}
+      </div>
+
+      {effortColumns.length > 0 && (
+        <div className="flex items-center gap-1.5 overflow-x-auto border-t border-border/60 bg-muted/15 px-2.5 py-1.5 scrollbar-none">
+          <span className="shrink-0 text-[8.5px] font-semibold uppercase tracking-wide text-muted-foreground/60">
+            Effort
+          </span>
+          {[{ id: AUTO_EFFORT_ID, name: "Auto" }, ...effortColumns].map(
+            (effort) => {
+              const isAuto = effort.id === AUTO_EFFORT_ID;
+              const active = isAuto
+                ? !selectedEffortId
+                : selectedEffortId === effort.id;
+              const tone = getEffortTone(effort.id);
+              return (
+                <button
+                  key={effort.id}
+                  type="button"
+                  onClick={() => {
+                    if (!currentModelId) return;
+                    onSelect(currentModelId, isAuto ? undefined : effort.id);
+                  }}
+                  disabled={!currentModelId}
+                  title={
+                    currentModelId
+                      ? effort.name
+                      : "Pick a model first"
+                  }
+                  className={cn(
+                    "shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-medium transition-colors disabled:opacity-40",
+                    active
+                      ? tone.selected
+                      : cn("bg-background", tone.idle, tone.header)
+                  )}
+                >
+                  {isAuto
+                    ? "Auto"
+                    : formatEffortName(effort.name) || effort.name}
+                </button>
+              );
+            }
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export type RuntimeMode = "native" | "terminal";
 
 export interface RuntimeMatrixValue {
@@ -538,10 +826,12 @@ interface RuntimeSelectionBannerProps {
 export function RuntimeSelectionBanner({
   providers,
   value,
-  label = "Selected Model",
+  label,
   trailing,
   className,
 }: RuntimeSelectionBannerProps) {
+  const { t } = useLocale();
+  const effectiveLabel = label ?? t("runtime:selectedModelLabel");
   const currentProvider = useMemo(
     () =>
       resolveSelectedProvider(providers, value.providerId ?? undefined, undefined),
@@ -568,7 +858,7 @@ export function RuntimeSelectionBanner({
   const effortTone = getEffortTone(value.effort ?? AUTO_EFFORT_ID);
   const effortName =
     currentEffort?.name ||
-    (value.effort ? formatEffortName(value.effort) : "Auto");
+    (value.effort ? formatEffortName(value.effort) : t("runtime:auto"));
   const isTerminal = value.runtimeMode === "terminal";
 
   return (
@@ -585,7 +875,7 @@ export function RuntimeSelectionBanner({
           isTerminal ? "text-zinc-400" : "text-muted-foreground/60"
         )}
       >
-        {label}
+        {effectiveLabel}
       </span>
       <div className="flex min-w-0 flex-1 items-center gap-1.5">
         {currentProvider ? (
@@ -630,7 +920,7 @@ export function RuntimeSelectionBanner({
             )}
           </>
         ) : (
-          <span className="text-[10px] text-muted-foreground">No provider selected</span>
+          <span className="text-[10px] text-muted-foreground">{t("runtime:noProvider")}</span>
         )}
       </div>
       {trailing}
@@ -678,6 +968,7 @@ export function RuntimeMatrixPicker({
   className,
   emptyText = "No providers available.",
 }: RuntimeMatrixPickerProps) {
+  const { t } = useLocale();
   const runtimeMode: RuntimeMode = value.runtimeMode === "terminal" ? "terminal" : "native";
   const selectableProviders = useMemo(() => {
     const base = includeUnavailable
@@ -791,7 +1082,7 @@ export function RuntimeMatrixPicker({
       {showRuntimeModeToggle && (
         <div
           role="tablist"
-          aria-label="Runtime mode"
+          aria-label={t("runtime:modeAriaLabel")}
           className="relative z-10 grid grid-cols-2 gap-1 -mb-px px-2 pt-2 text-[12px] font-medium"
         >
           <button
@@ -805,10 +1096,10 @@ export function RuntimeMatrixPicker({
                 ? "border-border/70 bg-background text-foreground shadow-[0_-1px_0_0_var(--border)]"
                 : "border-transparent bg-muted/50 text-muted-foreground hover:bg-muted/70 hover:text-foreground"
             )}
-            title="Cabinet's native transcript — structured JSON stream, artifacts, summary, the full UX"
+            title={t("runtime:nativeTranscriptTitle")}
           >
             <Sparkles className="h-4 w-4" />
-            <span>Native</span>
+            <span>{t("runtime:native")}</span>
           </button>
           <button
             type="button"
@@ -821,10 +1112,10 @@ export function RuntimeMatrixPicker({
                 ? "border-emerald-500/50 bg-zinc-950 text-zinc-100 shadow-[0_-1px_0_0_rgba(16,185,129,0.5)] dark:border-emerald-400/50"
                 : "border-transparent bg-muted/50 text-muted-foreground hover:bg-muted/70 hover:text-foreground"
             )}
-            title="Run the CLI in a live PTY terminal session (experimental hacker mode)"
+            title={t("runtime:terminalTitle")}
           >
             <Terminal className="h-4 w-4" />
-            <span>Terminal</span>
+            <span>{t("runtime:terminal")}</span>
           </button>
         </div>
       )}
@@ -848,7 +1139,7 @@ export function RuntimeMatrixPicker({
             <div className="flex px-1.5 pt-1.5 overflow-x-auto scrollbar-none">
               <TabsList
                 variant="line"
-                aria-label="Providers"
+                aria-label={t("runtime:providers")}
                 className="h-auto w-max min-w-full justify-start gap-1.5 rounded-none bg-transparent p-0 !border-b-0"
               >
                 {selectableProviders.map((provider) => {
@@ -864,7 +1155,7 @@ export function RuntimeMatrixPicker({
                       title={
                         ready
                           ? provider.name
-                          : `${provider.name} — ${unreadyReason || "Not available"}`
+                          : `${provider.name} — ${unreadyReason || t("runtime:notAvailable")}`
                       }
                       className={cn(
                         "relative -mb-px flex h-7 flex-none items-center gap-1.5 rounded-t-md rounded-b-none border-0 !bg-muted/60 py-1 text-[9px] font-medium text-muted-foreground shadow-none after:hidden data-active:z-10 data-active:!bg-background data-active:text-foreground data-active:shadow-none",
@@ -896,20 +1187,37 @@ export function RuntimeMatrixPicker({
                 value={provider.id}
                 className="mt-0 bg-background"
               >
-                <ProviderRuntimeMatrix
-                  provider={provider}
-                  currentProviderId={currentProvider?.id}
-                  currentModelId={currentModel?.id}
-                  selectedEffortId={value.effort ?? undefined}
-                  onSelect={(modelId, effortId) =>
-                    onChange({
-                      providerId: provider.id,
-                      model: modelId,
-                      effort: effortId,
-                      runtimeMode: "native",
-                    })
-                  }
-                />
+                {provider.dynamicModels ? (
+                  <ProviderModelCombobox
+                    provider={provider}
+                    currentProviderId={currentProvider?.id}
+                    currentModelId={currentModel?.id}
+                    selectedEffortId={value.effort ?? undefined}
+                    onSelect={(modelId, effortId) =>
+                      onChange({
+                        providerId: provider.id,
+                        model: modelId,
+                        effort: effortId,
+                        runtimeMode: "native",
+                      })
+                    }
+                  />
+                ) : (
+                  <ProviderRuntimeMatrix
+                    provider={provider}
+                    currentProviderId={currentProvider?.id}
+                    currentModelId={currentModel?.id}
+                    selectedEffortId={value.effort ?? undefined}
+                    onSelect={(modelId, effortId) =>
+                      onChange({
+                        providerId: provider.id,
+                        model: modelId,
+                        effort: effortId,
+                        runtimeMode: "native",
+                      })
+                    }
+                  />
+                )}
               </TabsContent>
             ))}
           </div>
@@ -936,11 +1244,12 @@ function TerminalProviderPanel({
   selectedProviderId: string | null;
   onSelect: (providerId: string) => void;
 }) {
+  const { t } = useLocale();
   return (
     <div className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950">
       <div className="flex items-center gap-2 border-b border-zinc-800 bg-zinc-900/60 px-3 py-2 text-[10px] font-medium text-zinc-300">
         <Terminal className="size-3 text-emerald-400" />
-        <span>Pick a CLI to spawn in a PTY:</span>
+        <span>{t("composerExtras:pickCliPty")}</span>
       </div>
       <div className="grid grid-cols-2 gap-1.5 p-2 sm:grid-cols-3">
         {providers.map((provider) => {
@@ -948,10 +1257,10 @@ function TerminalProviderPanel({
           const unreadyReason = describeProviderUnreadyReason(provider);
           const selected = ready && selectedProviderId === provider.id;
           const statusLabel = ready
-            ? "Ready"
+            ? t("runtime:ready")
             : provider.available
-              ? "Log in"
-              : "Not installed";
+              ? t("runtime:loginRequired")
+              : t("runtime:notInstalled");
           return (
             <button
               key={provider.id}
@@ -963,8 +1272,8 @@ function TerminalProviderPanel({
               }}
               title={
                 ready
-                  ? `Click to launch ${provider.name} in a PTY terminal`
-                  : `${provider.name} — ${unreadyReason || "Not available"}`
+                  ? t("runtime:clickToLaunch", { name: provider.name })
+                  : `${provider.name} — ${unreadyReason || t("runtime:notAvailable")}`
               }
               className={cn(
                 "group relative flex flex-col items-start gap-1.5 rounded-md border px-2.5 py-2 text-left transition-all",
@@ -1058,12 +1367,17 @@ export function TaskRuntimePicker({
   onChange,
   align = "start",
   className,
+  compact = false,
 }: {
   value: TaskRuntimeSelection;
   onChange: (value: TaskRuntimeSelection) => void;
   align?: "start" | "center" | "end";
   className?: string;
+  /** Icon-only trigger (no model/effort labels) — used in tight surfaces
+   *  like the side-panel conversation composer. */
+  compact?: boolean;
 }) {
+  const { t } = useLocale();
   const providers = useAppStore((s) => s.providers);
   const defaultProviderId = useAppStore((s) => s.defaultProviderId);
   const defaultModel = useAppStore((s) => s.defaultModel);
@@ -1169,31 +1483,32 @@ export function TaskRuntimePicker({
         currentEffort?.name ||
           (normalizedValue.effort
             ? formatEffortName(normalizedValue.effort)
-            : "Default"),
+            : t("runtime:defaultLabel")),
         currentProvider.name,
       ]
         .filter(Boolean)
         .join(" · ")
     : loading
-      ? "Loading providers..."
-      : "No providers available";
+      ? t("runtime:loadingProviders")
+      : t("runtime:noProvidersAvailable");
 
   // Audit #052: the prior tooltip "Task model: Claude Opus 4.7 · Medium ·
   // Claude Code" read as a compound model identifier, sending users to
   // search Anthropic for a non-existent product. Split the three concepts
   // (model, effort tier, provider) explicitly so each is recognisable.
   const triggerTitle = currentProvider
-    ? `Model: ${currentModel?.name || currentProvider.name}` +
-      ` · Effort: ${
-        currentEffort?.name ||
-        (normalizedValue.effort
-          ? formatEffortName(normalizedValue.effort)
-          : "Default")
-      }` +
-      ` · via ${currentProvider.name}`
+    ? t("runtime:triggerSummary", {
+        model: currentModel?.name || currentProvider.name,
+        effort:
+          currentEffort?.name ||
+          (normalizedValue.effort
+            ? formatEffortName(normalizedValue.effort)
+            : t("runtime:defaultLabel")),
+        provider: currentProvider.name,
+      })
     : loading
-      ? "Loading available providers…"
-      : "Task model — using system default (click to pick)";
+      ? t("runtime:loadingAvailableProviders")
+      : t("runtime:triggerSystemDefault");
 
   function applySelection(
     providerId: string,
@@ -1236,7 +1551,8 @@ export function TaskRuntimePicker({
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger
         className={cn(
-          "inline-flex h-8 items-center gap-1 rounded-md border px-2 transition-colors disabled:pointer-events-none disabled:opacity-50",
+          "inline-flex h-8 items-center rounded-md border transition-colors disabled:pointer-events-none disabled:opacity-50",
+          compact ? "gap-0 px-1.5" : "gap-1 px-2",
           isTerminalTrigger
             ? "border-emerald-500/40 bg-zinc-950 text-zinc-100 hover:bg-zinc-900"
             : "border-border/70 bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground",
@@ -1252,26 +1568,34 @@ export function TaskRuntimePicker({
               <div className="flex size-4 shrink-0 items-center justify-center rounded border border-emerald-500/40 bg-zinc-900 text-emerald-400">
                 <Terminal className="h-2.5 w-2.5" />
               </div>
-              <span className="text-[11px] font-medium text-zinc-100">
-                {currentProvider.name}
-              </span>
-              <span className="text-[9px] text-zinc-500">·</span>
-              <span className="text-[9px] font-semibold uppercase tracking-wide text-emerald-400">
-                Terminal
-              </span>
+              {!compact && (
+                <>
+                  <span className="text-[11px] font-medium text-zinc-100">
+                    {currentProvider.name}
+                  </span>
+                  <span className="text-[9px] text-zinc-500">·</span>
+                  <span className="text-[9px] font-semibold uppercase tracking-wide text-emerald-400">
+                    Terminal
+                  </span>
+                </>
+              )}
             </>
           ) : (
             <>
               <div className="flex size-4 shrink-0 items-center justify-center rounded border border-border/60 bg-muted/30">
                 <ProviderGlyph icon={currentProvider.icon} className="h-2.5 w-2.5" />
               </div>
-              <span className={cn("text-[11px] font-medium", getEffortTone(normalizedValue.effort ?? AUTO_EFFORT_ID).header)}>
-                {currentModel?.name || currentProvider.name}
-              </span>
-              <span className="text-[9px] text-muted-foreground/40">·</span>
-              <span className={cn("text-[9px] font-medium", getEffortTone(normalizedValue.effort ?? AUTO_EFFORT_ID).header)}>
-                {currentEffort?.name || (normalizedValue.effort ? formatEffortName(normalizedValue.effort) : "Auto")}
-              </span>
+              {!compact && (
+                <>
+                  <span className={cn("text-[11px] font-medium", getEffortTone(normalizedValue.effort ?? AUTO_EFFORT_ID).header)}>
+                    {currentModel?.name || currentProvider.name}
+                  </span>
+                  <span className="text-[9px] text-muted-foreground/40">·</span>
+                  <span className={cn("text-[9px] font-medium", getEffortTone(normalizedValue.effort ?? AUTO_EFFORT_ID).header)}>
+                    {currentEffort?.name || (normalizedValue.effort ? formatEffortName(normalizedValue.effort) : t("runtime:auto"))}
+                  </span>
+                </>
+              )}
             </>
           )
         ) : loading ? (
@@ -1279,7 +1603,9 @@ export function TaskRuntimePicker({
         ) : (
           <>
             <BrainCircuit className="h-4 w-4" />
-            <span className="text-[11px] font-medium">Auto</span>
+            {!compact && (
+              <span className="text-[11px] font-medium">{t("runtime:auto")}</span>
+            )}
           </>
         )}
       </DropdownMenuTrigger>
@@ -1312,18 +1638,18 @@ export function TaskRuntimePicker({
                   resetToDefault();
                 }}
                 title={[
-                  appDefaultModelInfo?.name || "Default model",
+                  appDefaultModelInfo?.name || t("runtime:defaultModel"),
                   appDefaultSelection.effort
                     ? formatEffortName(appDefaultSelection.effort)
-                    : "Auto",
+                    : t("runtime:auto"),
                   appDefaultProvider?.name || null,
                 ]
                   .filter(Boolean)
                   .join(" · ")}
               >
                 {sameSelection(normalizedValue, appDefaultSelection)
-                  ? "App default"
-                  : "Select app default"}
+                  ? t("runtime:appDefault")
+                  : t("runtime:selectAppDefault")}
               </button>
             }
           />

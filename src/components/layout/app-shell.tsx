@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from "react";
 import { Sidebar } from "@/components/sidebar/sidebar";
 import { Header } from "@/components/layout/header";
 import { KBEditor } from "@/components/editor/editor";
@@ -31,8 +31,9 @@ const PptxViewer = dynamic(
 import { HomeScreen } from "@/components/home/home-screen";
 import type { ConversationMeta } from "@/types/conversations";
 import { TerminalTabs } from "@/components/terminal/terminal-tabs";
-import { AIPanel } from "@/components/ai-panel/ai-panel";
 import { TaskDetailPanel } from "@/components/tasks/task-detail-panel";
+import { TaskRail } from "@/components/tasks/rail/task-rail";
+import { TaskRailProvider } from "@/components/tasks/rail/task-rail-context";
 import { SearchPalette } from "@/components/search/search-palette";
 import { KeyboardShortcutsModal } from "@/components/help/keyboard-shortcuts-modal";
 import { WhatsNewCard } from "@/components/help/whats-new-card";
@@ -53,16 +54,22 @@ import { StartWorkDialog, type StartWorkMode } from "@/components/composer/start
 import { ROOT_CABINET_PATH } from "@/lib/cabinets/paths";
 import { fetchCabinetOverviewClient } from "@/lib/cabinets/overview-client";
 import type { CabinetAgentSummary } from "@/types/cabinets";
+import { useUserProfile } from "@/hooks/use-user-profile";
 import { UpdateDialog } from "@/components/layout/update-dialog";
 import { NotificationToasts } from "@/components/layout/notification-toasts";
 import { SystemToasts } from "@/components/layout/system-toasts";
+import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
+import { useIsMobile } from "@/hooks/use-is-mobile";
 
 // Section components are only rendered when the user navigates to them —
 // load them on demand to keep the first-paint bundle small. Previously all of
-// these (together ~15k lines of code including AgentsWorkspace and
-// OnboardingWizard) shipped in the home-page chunk.
-const AgentsWorkspace = dynamic(
-  () => import("@/components/agents/agents-workspace").then((m) => m.AgentsWorkspace),
+// these (together ~15k lines of code including OnboardingWizard) shipped in
+// the home-page chunk.
+const AgentsWorkspaceV2 = dynamic(
+  () =>
+    import("@/components/agents/v2/agents-workspace-v2").then(
+      (m) => m.AgentsWorkspaceV2
+    ),
   { ssr: false }
 );
 const AgentDetailV2 = dynamic(
@@ -110,6 +117,7 @@ import { useHashRoute } from "@/hooks/use-hash-route";
 import { useTreeStore } from "@/stores/tree-store";
 import { useAppStore } from "@/stores/app-store";
 import { useEditorStore } from "@/stores/editor-store";
+import { useRoomsStore } from "@/stores/rooms-store";
 
 const DISMISSED_UPDATE_STORAGE_KEY = "cabinet.dismissed-update-version";
 const WIZARD_DONE_STORAGE_KEY = "cabinet.wizard-done";
@@ -135,6 +143,7 @@ const useIsoLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : use
 
 export function AppShell() {
   useGlobalHotkeys();
+  const isMobile = useIsMobile();
   const loadTree = useTreeStore((s) => s.loadTree);
   const nodes = useTreeStore((s) => s.nodes);
   const selectedPath = useTreeStore((s) => s.selectedPath);
@@ -142,12 +151,11 @@ export function AppShell() {
   const setSection = useAppStore((s) => s.setSection);
   const terminalOpen = useAppStore((s) => s.terminalOpen);
   const terminalPosition = useAppStore((s) => s.terminalPosition);
+  const taskRailOpen = useAppStore((s) => s.taskRailOpen);
   const setTerminalCwd = useAppStore((s) => s.setTerminalCwd);
   const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useAppStore((s) => s.setSidebarCollapsed);
   const setAiPanelCollapsed = useAppStore((s) => s.setAiPanelCollapsed);
-  const aiPanelCollapsed = useAppStore((s) => s.aiPanelCollapsed);
-  const taskPanelConversation = useAppStore((s) => s.taskPanelConversation);
   const setTaskPanelConversation = useAppStore((s) => s.setTaskPanelConversation);
   const {
     update,
@@ -253,9 +261,69 @@ export function AppShell() {
     loadTree();
   }, [loadTree]);
 
+  // Auto-refresh the sidebar tree when a conversation reports created/modified
+  // artifacts (files an agent wrote). The global conversation event stream
+  // emits a `task.updated` carrying `payload.artifactPaths`; when that's
+  // non-empty we reload the tree (debounced) so new files appear without a
+  // manual refresh. App-wide so it works from any section.
+  useEffect(() => {
+    const es = new EventSource("/api/agents/conversations/events");
+    let timer: number | null = null;
+    const scheduleRefresh = () => {
+      if (timer !== null) return;
+      timer = window.setTimeout(() => {
+        timer = null;
+        void loadTree();
+      }, 400);
+    };
+    es.onmessage = (msg) => {
+      try {
+        const ev = JSON.parse(msg.data) as {
+          type?: string;
+          payload?: { artifactPaths?: unknown };
+        };
+        if (ev.type !== "task.updated") return;
+        const artifacts = ev.payload?.artifactPaths;
+        if (Array.isArray(artifacts) && artifacts.length > 0) {
+          scheduleRefresh();
+        }
+      } catch {
+        // ignore malformed frames / pings
+      }
+    };
+    return () => {
+      es.close();
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [loadTree]);
+
   useEffect(() => {
     void loadProviders();
   }, [loadProviders]);
+
+  // Rooms v3: you are always inside a room. The data-dir root is a neutral
+  // "home" container with no content, so when the app lands on the bare home
+  // section we redirect into the default room (its scope drives the tree,
+  // agents, tasks and view). Deep links into a specific room/page already
+  // carry a cabinetPath and are left untouched.
+  const loadRooms = useRoomsStore((s) => s.load);
+  const defaultRoom = useRoomsStore((s) => s.defaultRoom);
+  useEffect(() => {
+    void loadRooms();
+  }, [loadRooms]);
+  useEffect(() => {
+    if (!defaultRoom || defaultRoom === ROOT_CABINET_PATH) return;
+    const cp = section.cabinetPath;
+    // Snap into the default room whenever a section would otherwise show the
+    // neutral home container: the bare home screen, or any content view scoped
+    // to the data-dir root ("."). You're always inside a room, never the dir
+    // above it. (settings/help/registry carry no cabinetPath, so are untouched.)
+    const onHomeContainer =
+      (section.type === "home" && !cp) || cp === ROOT_CABINET_PATH;
+    if (onHomeContainer) {
+      setSection({ type: "cabinet", cabinetPath: defaultRoom });
+    }
+  }, [defaultRoom, section.type, section.cabinetPath, setSection]);
 
   // Dynamic document.title — reflects the current section and page.
   useEffect(() => {
@@ -459,11 +527,9 @@ export function AppShell() {
   // CTA. We mount the dialog at AppShell level so the user can land on the
   // composer popup wherever they were — no jarring section change to /tasks.
   const [tourTaskOpen, setTourTaskOpen] = useState(false);
-  const [tourTaskPrompt, setTourTaskPrompt] = useState<string | undefined>(undefined);
   const [tourTaskAgents, setTourTaskAgents] = useState<CabinetAgentSummary[]>([]);
 
-  const handleLaunchTourTask = useCallback((initialPrompt: string) => {
-    setTourTaskPrompt(initialPrompt);
+  const handleLaunchTourTask = useCallback(() => {
     setTourTaskOpen(true);
     // Refresh the agent roster on each open so the agent picker reflects
     // whatever the user has installed.
@@ -503,6 +569,51 @@ export function AppShell() {
     return () => window.removeEventListener("cabinet:global-run-task", handler);
   }, [openGlobalTask]);
 
+  // ── Chat-editor handoff ────────────────────────────────────────────────
+  // After a file is created from the sidebar, open the right-side chat panel
+  // (compose mode, `editor` agent) greeting the user with a file-aware prompt
+  // — same surface as the editor's "Ask AI" button, not the task-prompt modal.
+  const profileState = useUserProfile();
+  const userFirstName = useMemo(() => {
+    if (profileState.status !== "ready") return "";
+    const raw =
+      profileState.data.profile.displayName ||
+      profileState.data.profile.name ||
+      "";
+    if (!raw || raw.toLowerCase() === "you") return "";
+    return raw.trim().split(/\s+/)[0];
+  }, [profileState]);
+
+  // Post-tour first task: a warm, teammate-voiced opener shown as the composer
+  // placeholder (evocative empty-state text, not a pre-filled value). Name-free
+  // on purpose, so it never surfaces a stale or awkward profile name.
+  const tourStarterPlaceholder = useMemo(
+    () =>
+      "Hi, I'm your teammate. I've just joined your Cabinet and I'm ready to get to work. " +
+      "What would you like to accomplish? I can create useful pages, beautiful dashboards, and web apps for you.",
+    []
+  );
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as
+        | { pagePath?: string; fileName?: string }
+        | undefined;
+      const fileName = detail?.fileName || "this file";
+      const greeting = userFirstName
+        ? `Hi ${userFirstName} — what would you like to do in ${fileName}?`
+        : `What would you like to do in ${fileName}?`;
+      useAppStore.getState().openTaskPanelCompose({
+        source: "editor",
+        pinnedPagePath: detail?.pagePath ?? null,
+        defaultAgentSlug: "editor",
+        greeting,
+      });
+    };
+    window.addEventListener("cabinet:open-editor-chat", handler);
+    return () => window.removeEventListener("cabinet:open-editor-chat", handler);
+  }, [userFirstName]);
+
   const handleWizardComplete = useCallback(() => {
     setShowWizard(false);
     try {
@@ -521,7 +632,11 @@ export function AppShell() {
     }
     setSection({ type: "home" });
     loadTree();
-  }, [setSection, loadTree]);
+    // Onboarding just created the first room, but the rooms store was loaded
+    // earlier when none existed (defaultRoom: null). Force a refresh so the
+    // landing redirect picks up the new room and drops you inside it.
+    void loadRooms(true);
+  }, [setSection, loadTree, loadRooms]);
 
   function handleUpdateLater() {
     const latestVersion = update?.latest?.version;
@@ -616,10 +731,16 @@ export function AppShell() {
     }
     if (section.type === "agents") {
       return (
-        <AgentsWorkspace
-          selectedScope="all"
-          selectedAgentSlug={null}
+        <AgentsWorkspaceV2
           cabinetPath={section.cabinetPath}
+          tab={section.agentsTab}
+          onTabChange={(next) =>
+            setSection({
+              type: "agents",
+              cabinetPath: section.cabinetPath,
+              agentsTab: next,
+            })
+          }
         />
       );
     }
@@ -629,6 +750,7 @@ export function AppShell() {
         const agentScopedId = `${agentCabinetPath}::agent::${section.slug}`;
         return (
           <AgentDetailV2
+            key={agentScopedId}
             slug={section.slug}
             cabinetPath={agentCabinetPath}
             onBack={() =>
@@ -654,11 +776,18 @@ export function AppShell() {
           />
         );
       }
+      // Slug-less "agent" section (not produced by routing today) falls back
+      // to the V2 agents list rather than the retired V1 workspace.
       return (
-        <AgentsWorkspace
-          selectedScope="agent"
-          selectedAgentSlug={section.slug || null}
+        <AgentsWorkspaceV2
           cabinetPath={section.cabinetPath}
+          onTabChange={(next) =>
+            setSection({
+              type: "agents",
+              cabinetPath: section.cabinetPath,
+              agentsTab: next,
+            })
+          }
         />
       );
     }
@@ -675,7 +804,12 @@ export function AppShell() {
       );
     }
     if (section.type === "task" && section.taskId) {
-      return <TaskConversationPage taskId={section.taskId} />;
+      return (
+        <TaskConversationPage
+          taskId={section.taskId}
+          cabinetPath={section.cabinetPath}
+        />
+      );
     }
 
     // Page-based views (when a KB page is selected)
@@ -809,7 +943,15 @@ export function AppShell() {
   }
 
   return (
-    <div className="flex h-screen bg-background text-foreground">
+    <TaskRailProvider>
+    {/* When the rail is open we reserve a 30px gutter on the inline-end
+        edge: the whole app shrinks into the remaining width (the "iframe")
+        and the fixed, full-height rail lives in that gutter. */}
+    <div
+      className={`flex h-screen bg-background text-foreground transition-[padding] duration-200 ease-out${
+        taskRailOpen && !isMobile ? " pe-[30px]" : ""
+      }`}
+    >
       {/* Audit #031: SR-only live region announcing the active page title
           on every route change. role="status" + aria-live="polite" so it
           doesn't interrupt other speech; aria-atomic so the entire string
@@ -824,20 +966,21 @@ export function AppShell() {
       />
       <Sidebar />
       <div
-        className="flex-1 flex flex-col overflow-hidden"
+        className="flex-1 flex flex-col overflow-hidden max-md:pb-[calc(56px+env(safe-area-inset-bottom))]"
         style={{ '--sidebar-toggle-offset': sidebarCollapsed ? '2.25rem' : '0px' } as React.CSSProperties}
       >
         <DaemonHealthBanner />
-        <NarrowViewportHint />
+        {!isMobile && <NarrowViewportHint />}
         <main className="flex-1 flex flex-col overflow-hidden">
           {renderContent()}
         </main>
         {terminalOpen && terminalPosition === "bottom" && <TerminalTabs />}
-        <StatusBar />
+        {!isMobile && <StatusBar />}
       </div>
+      <MobileBottomNav />
       {terminalOpen && terminalPosition === "right" && <TerminalTabs />}
-      {taskPanelConversation && <TaskDetailPanel />}
-      {!aiPanelCollapsed && <AIPanel />}
+      {!isMobile && <TaskRail />}
+      <TaskDetailPanel />
       <SearchPalette />
       <KeyboardShortcutsModal />
       <WhatsNewCard />
@@ -881,7 +1024,7 @@ export function AppShell() {
         cabinetPath={ROOT_CABINET_PATH}
         agents={tourTaskAgents}
         initialMode="now"
-        initialPrompt={tourTaskPrompt}
+        placeholderOverride={tourStarterPlaceholder}
         onStarted={(conversationId) => {
           setTourTaskOpen(false);
           setSection({
@@ -917,6 +1060,7 @@ export function AppShell() {
         }}
       />
     </div>
+    </TaskRailProvider>
   );
 }
 

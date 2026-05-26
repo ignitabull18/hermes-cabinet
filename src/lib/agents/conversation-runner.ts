@@ -108,7 +108,29 @@ function buildCabinetRequirementHeader(): string {
   ].join("\n");
 }
 
-async function buildCabinetEpilogueInstructions(options: {
+const LOCALE_TO_LANGUAGE: Record<string, string> = {
+  en: "English",
+  he: "Hebrew",
+};
+
+/**
+ * Tells the agent the user's preferred language so chat replies and any
+ * generated note bodies land in the right script. For Hebrew, also instructs
+ * the agent to set frontmatter `dir: rtl` on saved markdown files so the
+ * editor renders the doc RTL on load.
+ */
+function buildLocaleInstructions(locale: string | undefined): string | null {
+  const lang = LOCALE_TO_LANGUAGE[locale ?? "en"];
+  if (!lang || lang === "English") return null;
+  return [
+    `The user's preferred language is ${lang}. Respond in ${lang} unless the`,
+    `user explicitly requests another language. When you create or update`,
+    `markdown notes in ${lang}, set frontmatter \`dir: rtl\` so the editor`,
+    `renders the document right-to-left on load.`,
+  ].join("\n");
+}
+
+export async function buildCabinetEpilogueInstructions(options: {
   canDispatch?: boolean;
   cabinetPath?: string;
   selfSlug?: string;
@@ -169,7 +191,9 @@ async function buildCabinetEpilogueInstructions(options: {
       "",
       "Optionally pin a sub-task's runtime by appending `| providerId=<p> |",
       "adapterType=<a> | model=<m> | effort=<e>` segments to the inline line, e.g.",
-      "  LAUNCH_TASK: editor | Draft launch copy | outline the hero | effort=high",
+      "  LAUNCH_TASK: <agent-slug> | <title> | <one-line prompt> | effort=high",
+      "(Lines above are format templates: placeholders in <angle brackets>. Never",
+      "dispatch a template verbatim — fill every <...> with a real value first.)",
       "",
       "For multi-line prompts or large fan-out (more than ~5 actions), emit a",
       "separate ```cabinet-actions code block containing a JSON array:",
@@ -290,14 +314,38 @@ function makeTitle(text: string): string {
   return firstLine.slice(0, 80);
 }
 
+// Mentioned files whose raw bytes must never be inlined into the prompt
+// (video/audio/images/PDF/office/archives). Inlining a 74MB .mov produced a
+// 134MB prompt.md that failed the run and choked the task page. These are
+// referenced by path instead so the agent opens them with its Read tool.
+const NON_INLINE_MENTION_EXT = new Set([
+  ".mov", ".mp4", ".webm", ".m4v", ".avi", ".mkv", ".mpg", ".mpeg",
+  ".mp3", ".wav", ".ogg", ".m4a", ".aac", ".flac",
+  ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".avif", ".ico", ".bmp", ".tiff",
+  ".pdf", ".docx", ".xlsx", ".xlsm", ".pptx", ".doc", ".xls", ".ppt",
+  ".zip", ".tar", ".gz", ".tgz", ".rar", ".7z", ".fig", ".sketch",
+]);
+// Cap inlined text so a single huge page can't blow up the prompt either.
+const MAX_INLINE_MENTION_BYTES = 200_000;
+
 async function buildMentionContext(mentionedPaths: string[]): Promise<string> {
   if (mentionedPaths.length === 0) return "";
 
   const chunks = await Promise.all(
     mentionedPaths.map(async (pagePath) => {
       try {
+        // Binary / large file: reference by path, never inline the bytes.
+        if (NON_INLINE_MENTION_EXT.has(path.extname(pagePath).toLowerCase())) {
+          return `--- ${pagePath} (file attachment — open it with the Read tool at this path) ---`;
+        }
         const page = await readPage(pagePath);
-        return `--- ${page.frontmatter.title} (${pagePath}) ---\n${page.content}`;
+        let content = page.content || "";
+        if (content.length > MAX_INLINE_MENTION_BYTES) {
+          content =
+            content.slice(0, MAX_INLINE_MENTION_BYTES) +
+            "\n\n…[content truncated — open the file with the Read tool for the full version]…";
+        }
+        return `--- ${page.frontmatter.title} (${pagePath}) ---\n${content}`;
       } catch {
         return null;
       }
@@ -347,6 +395,7 @@ export async function buildManualConversationPrompt(input: {
   mentionedPaths?: string[];
   mentionedSkills?: string[];
   cabinetPath?: string;
+  locale?: string;
 }): Promise<{
   prompt: string;
   title: string;
@@ -374,8 +423,11 @@ export async function buildManualConversationPrompt(input: {
   const skillBundles = await resolveDesiredSkills(mergedSkillKeys, input.cabinetPath);
   const skillIndex = buildSkillIndex(skillBundles);
 
+  const localeInstructions = buildLocaleInstructions(input.locale);
+
   const prompt = [
     buildCabinetRequirementHeader(),
+    ...(localeInstructions ? ["", localeInstructions] : []),
     "",
     buildAgentContextHeader(persona, input.agentSlug),
     ...(skillIndex ? ["", skillIndex] : []),
@@ -423,6 +475,7 @@ export async function buildEditorConversationPrompt(input: {
   mentionedPaths?: string[];
   mentionedSkills?: string[];
   cabinetPath?: string;
+  locale?: string;
 }): Promise<{
   prompt: string;
   title: string;
@@ -454,8 +507,11 @@ export async function buildEditorConversationPrompt(input: {
   const skillBundles = await resolveDesiredSkills(mergedSkillKeys, input.cabinetPath);
   const skillIndex = buildSkillIndex(skillBundles);
 
+  const localeInstructions = buildLocaleInstructions(input.locale);
+
   const prompt = [
     buildCabinetRequirementHeader(),
+    ...(localeInstructions ? ["", localeInstructions] : []),
     "",
     buildAgentContextHeader(persona, "editor"),
     ...(skillIndex ? ["", skillIndex] : []),
@@ -668,10 +724,10 @@ export async function waitForConversationCompletion(
   const deadline = Date.now() + 15 * 60 * 1000;
   const startedAt = Date.now();
   // Tight-poll the first 5 s after startConversationRun hands off — that's
-  // the cold-start window where the UI is showing the "Working on it…"
-  // placeholder and the user is most sensitive to latency between their
-  // prompt and the first streamed bytes. Back off to the steady-state 700 ms
-  // interval after the adapter is clearly producing.
+  // the cold-start window where the UI is showing the pending typing indicator
+  // and the user is most sensitive to latency between their prompt and the
+  // first streamed bytes. Back off to the steady-state 700 ms interval after
+  // the adapter is clearly producing.
   const FAST_POLL_WINDOW_MS = 5000;
   const FAST_POLL_INTERVAL_MS = 250;
   const STEADY_POLL_INTERVAL_MS = 700;
@@ -1626,10 +1682,11 @@ export async function continueConversationRun(
       })
     : replayPrompt;
 
-  // 6. Create the pending agent turn
+  // 6. Create the pending agent turn. Empty content so the UI shows only the
+  // typing indicator (no placeholder text) until bytes stream in.
   const pending = await appendAgentTurn(
     conversationId,
-    { content: "Working on it…", pending: true },
+    { content: "", pending: true },
     cp
   );
   if (!pending) return meta;

@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 import remarkRehype from "remark-rehype";
 import rehypeStringify from "rehype-stringify";
 import { detectEmbed } from "@/lib/embeds/detect";
+import { slugifyPageName } from "@/lib/markdown/wiki-links";
 
 /**
  * Pre-process markdown to convert [[Wiki Links]] to HTML anchors
@@ -11,10 +12,7 @@ import { detectEmbed } from "@/lib/embeds/detect";
  */
 function convertWikiLinks(markdown: string): string {
   return markdown.replace(/\[\[([^\]]+)\]\]/g, (_match, pageName: string) => {
-    const slug = pageName
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "");
+    const slug = slugifyPageName(pageName);
     return `<a data-wiki-link="true" data-page-name="${pageName}" href="#page:${slug}" class="wiki-link">${pageName}</a>`;
   });
 }
@@ -43,6 +41,24 @@ function fixTaskListHtml(html: string): string {
   );
 
   return html;
+}
+
+/**
+ * Add `dir="auto"` to each list *item* (never the `<ul>`/`<ol>`) so a Hebrew
+ * item infers RTL and, with `padding-inline-start` on the `<li>` (see
+ * `.rtl-aware li` in globals.css), renders its bullet/number on the right.
+ * `dir="auto"` ignores descendants that carry their own `dir`, so putting it
+ * on the container would make a list full of `dir`-bearing items resolve LTR
+ * and pin every marker left. Mirrors the editor's AutoDirection extension.
+ * Skips items that already carry an explicit dir (e.g. task-list markup from
+ * fixTaskListHtml).
+ */
+function addListAutoDir(html: string): string {
+  return html.replace(
+    /<li((?:\s[^>]*)?)>/gi,
+    (match, attrs: string) =>
+      /\bdir=/i.test(attrs) ? match : `<li${attrs} dir="auto">`
+  );
 }
 
 /**
@@ -130,6 +146,9 @@ export async function markdownToHtml(markdown: string, pagePath?: string): Promi
 
   // Post-process task lists for Tiptap compatibility
   html = fixTaskListHtml(html);
+
+  // Let Hebrew lists infer RTL so markers sit on the right
+  html = addListAutoDir(html);
 
   // Heal <video src="youtube-url"> into real iframe embeds
   html = upgradeProviderVideos(html);
