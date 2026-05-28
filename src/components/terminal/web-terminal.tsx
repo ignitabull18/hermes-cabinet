@@ -84,6 +84,7 @@ export function WebTerminal({
   }, [onClose]);
 
   useEffect(() => {
+    const effectiveSessionId = sessionId || `session-${Date.now()}`;
     let terminal: import("@xterm/xterm").Terminal | null = null;
     let ws: WebSocket | null = null;
     let resizeObserver: ResizeObserver | null = null;
@@ -126,6 +127,11 @@ export function WebTerminal({
     const finishSession = (closeSocket = false, reason = "unknown") => {
       if (disposed || sessionFinished) return;
       sessionFinished = true;
+      console.debug("[WebTerminal] session ended", {
+        sessionId: effectiveSessionId,
+        reason,
+        closeSocket,
+      });
       if (statusPollHandle) {
         clearInterval(statusPollHandle);
         statusPollHandle = null;
@@ -139,7 +145,7 @@ export function WebTerminal({
 
     // ----- Chain A: connection (auth + WebSocket). Fires immediately. -----
     const startConnection = async () => {
-      const id = sessionId || `session-${Date.now()}`;
+      const id = effectiveSessionId;
       try {
         const authResponse = await fetch("/api/daemon/auth");
         if (!authResponse.ok) {
