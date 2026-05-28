@@ -143,7 +143,6 @@ function applyTerminalPayloadToTask(
   if (typeof raw !== "string") return null;
   const taskStatus = conversationStatusToTaskStatus(raw);
   if (!taskStatus || taskStatus === "running") return null;
-  if (prev.meta.status === taskStatus) return null;
   const errorHint =
     typeof payload.errorHint === "string"
       ? payload.errorHint
@@ -152,6 +151,13 @@ function applyTerminalPayloadToTask(
     typeof payload.errorKind === "string"
       ? payload.errorKind
       : prev.meta.errorKind;
+  if (
+    prev.meta.status === taskStatus &&
+    prev.meta.errorHint === errorHint &&
+    prev.meta.errorKind === errorKind
+  ) {
+    return null;
+  }
   return fillEmptyAgentTurnContent(
     {
       ...prev,
