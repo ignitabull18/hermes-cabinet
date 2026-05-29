@@ -100,6 +100,12 @@ export function RoomSwitcher() {
       }
     }
     void loadTree();
+    // Refresh THIS window's rooms-store directly (force, in-flight-guarded) so
+    // the switcher trigger/label updates deterministically — the `cabinet-rooms`
+    // broadcast path is debounced for "outside" events and could otherwise
+    // swallow this same-window refresh. notifyRoomsChanged() still fans out to
+    // peer windows.
+    void load(true);
     notifyRoomsChanged();
   }
 
@@ -136,6 +142,10 @@ export function RoomSwitcher() {
       }
     }
     void loadTree();
+    // Same as the save path: refresh locally and deterministically, then
+    // broadcast to peers. Without the direct load(true) the dropdown list
+    // could keep the deleted room until the next focus/open.
+    void load(true);
     notifyRoomsChanged();
   }
 
