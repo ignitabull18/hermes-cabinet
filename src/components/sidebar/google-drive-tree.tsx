@@ -1,11 +1,18 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Cloud, ChevronRight, ChevronDown, RefreshCw, Settings, Folder, Loader2 } from "lucide-react";
+import { Cloud, ChevronRight, ChevronDown, RefreshCw, Settings, Folder, Loader2, FolderOpen, ClipboardCopy } from "lucide-react";
 import { useAppStore } from "@/stores/app-store";
 import { useTreeStore } from "@/stores/tree-store";
 import type { TreeNode, GoogleDriveSection } from "@/types";
 import { cn } from "@/lib/utils";
+import { decodeDrivePath } from "@/lib/google-drive/paths";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 
 const DRIVE_CACHE_KEY = "gdrive-tree-cache";
 const DRIVE_EXPANDED_KEY = "gdrive-expanded-paths";
@@ -62,9 +69,25 @@ function DriveNode({ node, depth, padFn, expandedPaths, onToggle }: DriveNodePro
   };
 
   const childrenId = isDir ? `gdrive-children-${node.path.replace(/[^a-z0-9]/gi, "-")}` : undefined;
+  const absPath = decodeDrivePath(node.path);
+
+  const doCopyFullPath = () => {
+    if (absPath) void navigator.clipboard.writeText(absPath);
+  };
+
+  const doReveal = () => {
+    if (!absPath) return;
+    void fetch("/api/google-drive/reveal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: node.path }),
+    });
+  };
 
   return (
     <div>
+      <ContextMenu>
+      <ContextMenuTrigger>
       <button
         type="button"
         onClick={handleClick}
@@ -112,6 +135,18 @@ function DriveNode({ node, depth, padFn, expandedPaths, onToggle }: DriveNodePro
           </span>
         )}
       </button>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onClick={doCopyFullPath}>
+          <ClipboardCopy className="h-4 w-4 me-2" />
+          Copy Full Path
+        </ContextMenuItem>
+        <ContextMenuItem onClick={doReveal}>
+          <FolderOpen className="h-4 w-4 me-2" />
+          {process.platform === "win32" ? "Show in Explorer" : process.platform === "linux" ? "Open Containing Folder" : "Open in Finder"}
+        </ContextMenuItem>
+      </ContextMenuContent>
+      </ContextMenu>
 
       {isDir && expanded && node.children && node.children.length > 0 && (
         <div id={childrenId}>

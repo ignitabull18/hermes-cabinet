@@ -837,7 +837,6 @@ export function TreeView() {
                   ))
                 )}
               </SidebarSearch>
-              <GoogleDriveTreeSection depth={1} padFn={pad} itemClass={itemClass} />
                   </div>
                 </ContextMenuTrigger>
                 <ContextMenuContent>
@@ -882,6 +881,9 @@ export function TreeView() {
                 </ContextMenuContent>
               </ContextMenu>
             )}
+            {/* Google Drive section lives OUTSIDE the cabinet ContextMenuTrigger
+                so right-clicking Drive nodes doesn't bubble up to the cabinet menu. */}
+            <GoogleDriveTreeSection depth={1} padFn={pad} itemClass={itemClass} />
           </div>
         )}
       </div>
