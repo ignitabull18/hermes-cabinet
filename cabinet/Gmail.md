@@ -134,20 +134,19 @@ POST   /api/gmail/index           → trigger manual re-index
 ### DB additions (Phase 1)
 
 ```sql
+-- IMAP/SMTP credentials (Phase 1 only — not OAuth tokens)
 CREATE TABLE IF NOT EXISTS gmail_credentials (
   id            TEXT PRIMARY KEY DEFAULT 'default',
   method        TEXT NOT NULL DEFAULT 'imap',  -- 'imap' | 'oauth'
   email         TEXT NOT NULL,
-  -- IMAP/SMTP fields
   imap_password TEXT,          -- encrypted App Password
   imap_host     TEXT DEFAULT 'imap.gmail.com',
-  smtp_host     TEXT DEFAULT 'smtp.gmail.com',
-  -- OAuth fields (Phase 2)
-  access_token  TEXT,
-  refresh_token TEXT,
-  token_expiry  TEXT,
-  scopes        TEXT
+  smtp_host     TEXT DEFAULT 'smtp.gmail.com'
 );
+
+-- Phase 2 note: OAuth tokens for Gmail are stored in the shared google_credentials
+-- table (see GoogleAuth.md) alongside Drive tokens. gmail_credentials is only used
+-- for IMAP/SMTP App Passwords which are not Google OAuth credentials.
 
 CREATE TABLE IF NOT EXISTS gmail_index (
   message_id    TEXT PRIMARY KEY,
@@ -270,6 +269,128 @@ src/
 | Service Account (Workspace) | ❌ | ✅ |
 | Autonomous send (no approval) | ❌ never | ❌ never |
 | Delete / modify emails | ❌ never | ❌ never |
+
+---
+
+## Agent recipes
+
+Copy-paste starting points for Gmail-connected agents. Each recipe is a persona prompt snippet or heartbeat job config.
+
+---
+
+### Daily inbox digest
+
+**What it does:** Every morning, fetches unread emails, groups them by topic, and writes a summary page to the KB.
+
+**Heartbeat schedule:** `0 8 * * *` (8am daily)
+
+**Persona prompt:**
+```
+You are an inbox assistant. Every morning:
+1. Use email_get_unread to fetch all unread emails from the last 24 hours.
+2. Group them by topic or sender.
+3. Write a concise summary to `gmail/daily-digest.md` with:
+   - A one-line summary per thread
+   - Any emails that require a response flagged with ⚠️
+   - Any deadlines or dates mentioned
+4. Mark the digest with today's date as the title.
+```
+
+---
+
+### Action items extractor
+
+**What it does:** Scans the last 7 days of email, finds anything requiring a response or action, and creates a KB task list.
+
+**Run:** manually or on a weekly schedule
+
+**Persona prompt:**
+```
+Search emails from the last 7 days using email_search.
+For each email that requires a response or contains an action item:
+- Note the sender, subject, and what's needed
+- Write the list to `gmail/action-items.md`
+- Flag items with a deadline as urgent
+
+Do not include newsletters, notifications, or automated emails.
+```
+
+---
+
+### Thread monitor
+
+**What it does:** Polls for a reply to a specific thread and notifies the user when it arrives by writing to the KB.
+
+**Heartbeat schedule:** `0 * * * *` (every hour)
+
+**Persona prompt:**
+```
+Use email_search to check if there are any new emails from alice@example.com
+with the subject containing "contract".
+
+If a new email is found that wasn't in yesterday's check:
+1. Read the full thread with email_read_thread.
+2. Summarize the reply in `gmail/contract-thread-update.md`.
+3. Prepend ⚡ NEW REPLY to the file title.
+
+If no new email, do nothing.
+```
+
+---
+
+### Draft reply assistant
+
+**What it does:** Reads a thread, drafts a reply based on context from the KB, and proposes it for human approval before sending.
+
+**Run:** manually, triggered by the user in a conversation
+
+**Example user prompt:**
+> "Read the latest email from Bob about the Q3 budget and draft a reply using my notes in `projects/budget-q3.md`"
+
+**What the agent does:**
+1. Calls `email_search(from:bob subject:Q3 budget)` to find the thread
+2. Calls `email_read_thread` to read the full context
+3. Reads `projects/budget-q3.md` from the KB
+4. Drafts a reply combining both sources
+5. Proposes a `SEND_EMAIL` action — user sees the draft and clicks Send / Edit / Reject
+
+---
+
+### Weekly sender summary
+
+**What it does:** Every Friday, summarizes who you've been emailing most, useful for relationship tracking.
+
+**Heartbeat schedule:** `0 17 * * 5` (Friday 5pm)
+
+**Persona prompt:**
+```
+Use email_search to fetch emails from the last 7 days.
+Count emails sent and received per contact.
+Write a summary to `gmail/weekly-connections.md`:
+- Top 5 people you exchanged emails with
+- Any thread that's gone quiet for more than 3 days that might need a follow-up
+```
+
+---
+
+### Smart follow-up reminder
+
+**What it does:** Finds emails you sent that haven't received a reply in 3+ days and surfaces them as follow-up candidates.
+
+**Heartbeat schedule:** `0 9 * * 1,3,5` (Mon/Wed/Fri mornings)
+
+**Persona prompt:**
+```
+Search for emails sent in the last 7 days that have no reply yet
+using email_search.
+
+For each unanswered sent email older than 3 days:
+- Note the recipient, subject, and date sent
+- Write the list to `gmail/follow-ups.md`
+- Sort by oldest first
+
+Skip automated receipts and mailing lists.
+```
 
 ---
 

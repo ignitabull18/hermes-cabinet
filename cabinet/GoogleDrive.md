@@ -152,7 +152,7 @@ Settings → Integrations → Google Drive → Set up API connection
 
 Both methods use `drive.file` scope and produce the same read + write experience in Cabinet. The difference is only in how credentials are obtained and stored.
 
-Service Account credentials are stored as a JSON blob in `.cabinet.db` under `google_drive_credentials` (same table, different columns from OAuth tokens).
+Service Account credentials are stored in the shared `google_credentials` table in `.cabinet.db` — see [GoogleAuth.md](GoogleAuth.md).
 
 ### Setup flow
 
@@ -217,14 +217,8 @@ Extend the `google_drive_mounts` table with OAuth-specific columns:
 ALTER TABLE google_drive_mounts ADD COLUMN folder_id TEXT;   -- Drive folder ID (OAuth)
 ALTER TABLE google_drive_mounts ADD COLUMN source TEXT DEFAULT 'desktop'; -- 'desktop' | 'oauth'
 
-CREATE TABLE IF NOT EXISTS google_drive_credentials (
-  id            TEXT PRIMARY KEY DEFAULT 'default',
-  access_token  TEXT NOT NULL,
-  refresh_token TEXT NOT NULL,
-  token_expiry  TEXT NOT NULL,  -- ISO8601
-  email         TEXT,
-  scopes        TEXT
-);
+-- OAuth tokens are stored in the shared google_credentials table (see GoogleAuth.md).
+-- No separate google_drive_credentials table — auth is shared across all Google integrations.
 
 CREATE TABLE IF NOT EXISTS google_drive_index (
   file_id       TEXT PRIMARY KEY,
