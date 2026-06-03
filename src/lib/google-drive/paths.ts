@@ -12,5 +12,6 @@ export function encodeDrivePath(absPath: string): string {
  */
 export function decodeDrivePath(nodePath: string): string | null {
   if (!nodePath.startsWith(GDRIVE_PREFIX)) return null;
-  return nodePath.slice(GDRIVE_PREFIX.length);
+  const suffix = nodePath.slice(GDRIVE_PREFIX.length);
+  return suffix || null;
 }

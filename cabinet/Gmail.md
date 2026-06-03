@@ -139,9 +139,12 @@ CREATE TABLE IF NOT EXISTS gmail_credentials (
   id            TEXT PRIMARY KEY DEFAULT 'default',
   method        TEXT NOT NULL DEFAULT 'imap',  -- 'imap' | 'oauth'
   email         TEXT NOT NULL,
-  imap_password TEXT,          -- encrypted App Password
-  imap_host     TEXT DEFAULT 'imap.gmail.com',
-  smtp_host     TEXT DEFAULT 'smtp.gmail.com'
+  imap_password TEXT          -- encrypted App Password
+  -- imap_host and smtp_host are intentionally omitted as writable columns.
+  -- The implementation must hardcode 'imap.gmail.com' and 'smtp.gmail.com'
+  -- in the connection layer and never accept these values from user input or
+  -- API payloads. Allowing arbitrary hosts would enable credential phishing
+  -- (an attacker-controlled server receiving the App Password in plaintext).
 );
 
 -- Phase 2 note: OAuth tokens for Gmail are stored in the shared google_credentials
