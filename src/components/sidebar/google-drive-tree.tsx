@@ -261,7 +261,7 @@ export function GoogleDriveTreeSection({ depth, padFn }: GoogleDriveTreeSectionP
         <button
           type="button"
           title="Manage Google Drive"
-          onClick={() => setSection({ type: "settings" })}
+          onClick={() => setSection({ type: "settings", slug: "integrations" })}
           className="text-muted-foreground/40 hover:text-muted-foreground transition-colors"
         >
           <Settings className="h-2.5 w-2.5" />
