@@ -9,6 +9,7 @@ import {
 } from "@/lib/integrations/preview-catalog";
 import { IntegrationDetailPage } from "@/components/integrations/hub/integration-detail-page";
 import { LayoutGallery } from "@/components/integrations/hub/layouts/layout-gallery";
+import { useAppStore } from "@/stores/app-store";
 
 /**
  * The full-page Integrations Hub: a premium "logo wall" gallery of connectors
@@ -18,7 +19,12 @@ import { LayoutGallery } from "@/components/integrations/hub/layouts/layout-gall
  */
 export function IntegrationsHubPage() {
   const [query, setQuery] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // The selected integration lives in the route (section.slug) so the address
+  // bar reflects it (#/integrations/discord) and it deep-links / back-buttons.
+  const selectedId = useAppStore((s) =>
+    s.section.type === "integrations" ? s.section.slug ?? null : null,
+  );
+  const setSection = useAppStore((s) => s.setSection);
 
   const filtered = useMemo(
     () => filterIntegrations(PREVIEW_INTEGRATIONS, query),
@@ -28,7 +34,10 @@ export function IntegrationsHubPage() {
   const selected = selectedId ? INTEGRATION_BY_ID[selectedId] : null;
   if (selected) {
     return (
-      <IntegrationDetailPage item={selected} onBack={() => setSelectedId(null)} />
+      <IntegrationDetailPage
+        item={selected}
+        onBack={() => setSection({ type: "integrations" })}
+      />
     );
   }
 
@@ -65,7 +74,10 @@ export function IntegrationsHubPage() {
 
       {/* Gallery (owns its own scroll) */}
       <div className="min-h-0 flex-1">
-        <LayoutGallery items={filtered} onOpen={(id) => setSelectedId(id)} />
+        <LayoutGallery
+          items={filtered}
+          onOpen={(id) => setSection({ type: "integrations", slug: id })}
+        />
       </div>
     </div>
   );

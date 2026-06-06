@@ -13,8 +13,9 @@
  * Trust tiers are honest: `official` is only claimed when the server is
  * vendor-published / present in the Official MCP Registry, and that claim is
  * *verified* at runtime by `mcp-registry-verify.ts` (never self-asserted in
- * the UI without verification). Discord has no first-party server, so it is
- * `community`.
+ * the UI without verification). `cabinet` = a first-party server we build and
+ * maintain (e.g. Discord) — first-party but NOT vendor-official, so it gets its
+ * own label rather than borrowing "official" or hiding under "community".
  *
  * Auth backends are deployment-aware (see `deployment-mode.ts`):
  *   - `cli-pkce`  — official remote HTTP server; the CLI performs PKCE
@@ -27,7 +28,7 @@
  *                   secret server-side). Not used by the local build.
  */
 
-export type TrustTier = "official" | "registry" | "community";
+export type TrustTier = "official" | "registry" | "cabinet" | "community";
 
 export type AuthBackend = "cli-pkce" | "user-app" | "token" | "cabinet-broker";
 
@@ -83,6 +84,13 @@ export interface CatalogEntry {
   /** stdio transport */
   command?: string;
   args?: string[];
+  /**
+   * Relative path (from the repo root) to a first-party server's local build.
+   * When it exists — i.e. Cabinet is running from source — the config writer
+   * runs `node <abs path>` instead of `command`/`args`, so a not-yet-published
+   * server still works in dev. Absent in packaged builds → falls back to npx.
+   */
+  localBuild?: string;
   /**
    * env block written into the CLI config for stdio servers. Values are
    * `${ENVKEY}` placeholders — the real secret stays only in `.cabinet.env`
@@ -201,18 +209,25 @@ const GOOGLE_WORKSPACE: CatalogEntry = {
 const DISCORD: CatalogEntry = {
   id: "discord",
   label: "Discord",
-  blurb: "Send messages and read channels in your Discord server.",
+  blurb: "Send messages, read channels, and manage threads in your Discord server.",
   iconSlug: "discord",
   bgImage: "/integrations/discord-bg.webp",
   logo: "/integrations/discord-logo.png",
-  sourceUrl: "https://github.com/barryyip0625/mcp-discord",
-  // No first-party Discord MCP server exists — honestly community-tier.
-  trustTier: "community",
+  // Cabinet maintains its own server (mcp-discord/ in this repo): Discord has no
+  // first-party MCP, and the community ones hand the model 60–139 tools incl.
+  // destructive admin by default. Ours is a curated read+post+threads surface
+  // with admin gated behind DISCORD_ALLOW_ADMIN. Tier `cabinet` = first-party,
+  // Cabinet-maintained (distinct from vendor-`official`). The server is released
+  // on its own cadence (NOT coupled to the app's CI) — bump this pin when a new
+  // cabinet-mcp-discord is published to npm.
+  sourceUrl: "https://github.com/hilash/cabinet/tree/main/mcp-discord",
+  trustTier: "cabinet",
   authBackend: "token",
   transport: "stdio",
   mcpServerName: "cabinet-discord",
   command: "npx",
-  args: ["-y", "mcp-discord"],
+  args: ["-y", "cabinet-mcp-discord@0.1.0"],
+  localBuild: "mcp-discord/dist/index.js",
   serverEnv: { DISCORD_TOKEN: "${DISCORD_TOKEN}" },
   credentials: [
     {
@@ -221,10 +236,23 @@ const DISCORD: CatalogEntry = {
       kind: "secret",
       required: true,
       placeholder: "your bot token",
-      hint: "Stored in .cabinet.env (0600). Never written into the CLI config.",
+      hint: "Saved securely on this device only — never uploaded.",
+    },
+    {
+      envKey: "DISCORD_GUILD_ID",
+      label: "Server ID (recommended)",
+      kind: "plain",
+      required: false,
+      placeholder: "123456789012345678",
+      hint: "Pins every action to this one server so the bot can't touch other servers it's in. Enable Developer Mode, then right-click your server → Copy Server ID.",
     },
   ],
-  actions: ["Send messages to channels", "Read channel history", "Manage server content"],
+  actions: [
+    "Read channel history & search recent messages",
+    "Send messages and reply in threads",
+    "Create threads and add reactions",
+    "Edit or delete the bot's own messages",
+  ],
   setupSteps: [
     {
       title: "Create a Discord application",
@@ -237,11 +265,16 @@ const DISCORD: CatalogEntry = {
     },
     {
       title: "Enable Message Content Intent",
-      body: "Under Bot → Privileged Gateway Intents, enable Message Content Intent so the bot can read messages.",
+      body: "Under Bot → Privileged Gateway Intents, enable Message Content Intent so the bot can read message text. Leave Server Members off — Cabinet's server never lists members.",
     },
     {
-      title: "Invite the bot",
-      body: "In OAuth2 → URL Generator pick the `bot` scope and the channel permissions you want, then open the generated URL to add it to your server.",
+      title: "Invite the bot to your server",
+      body: "Open OAuth2 → URL Generator. Tick the `bot` scope, then under Bot Permissions tick what it needs (View Channels, Read Message History, Send Messages, Create Public Threads, Add Reactions). Copy the URL it builds at the bottom, open it in a browser, choose your server, and click Authorize. (This step is easy to miss — the panel will warn you if the bot isn't in the server yet.)",
+      href: "https://discord.com/developers/applications",
+    },
+    {
+      title: "Copy your Server ID",
+      body: "In Discord, open User Settings (the gear) → Advanced and turn on Developer Mode. Then right-click your server's icon on the far left and choose \"Copy Server ID\". Paste it into the Server ID box on the right.",
     },
   ],
 };

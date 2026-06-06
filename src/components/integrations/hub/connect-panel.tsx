@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Check, ChevronDown, Loader2, ExternalLink, ShieldCheck } from "lucide-react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { Check, ChevronDown, Loader2, ExternalLink, ShieldCheck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { showError, showSuccess } from "@/lib/ui/toast";
@@ -53,6 +53,19 @@ interface Payload {
   approved: CatalogItem[];
 }
 
+/** Result of the live Discord connection check (see discord-check route). */
+interface DiscordChecks {
+  token: { ok: boolean; botTag?: string; error?: string; missing?: boolean };
+  guild: {
+    ok?: boolean;
+    name?: string;
+    error?: string;
+    inviteUrl?: string;
+    skipped?: boolean;
+    unknown?: boolean;
+  };
+}
+
 function pickPrimary(
   supported: ProviderInfo[],
   selected: string[],
@@ -102,6 +115,45 @@ export function ConnectPanel({ item }: { item: IntegrationItem }) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Live Discord validation: token works + bot is in the configured server.
+  const [checks, setChecks] = useState<DiscordChecks | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  const runChecks = useCallback(async (token?: string, guildId?: string) => {
+    setChecking(true);
+    try {
+      const res = await fetch("/api/agents/config/mcp-catalog/discord-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, guildId }),
+      });
+      setChecks(res.ok ? ((await res.json()) as DiscordChecks) : null);
+    } catch {
+      setChecks(null);
+    } finally {
+      setChecking(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (item.id !== "discord") return;
+    const e = data?.approved.find((a) => a.id === item.id);
+    if (!e) return;
+    const savedToken = e.credentialStatus["DISCORD_TOKEN"]?.hasValue ?? false;
+    const typedToken = creds["DISCORD_TOKEN"]?.trim() ?? "";
+    const typedGuild = creds["DISCORD_GUILD_ID"]?.trim() ?? "";
+    if (typedToken) {
+      if (typedToken.length < 50) return; // mid-typing — wait for a full token
+    } else if (!savedToken) {
+      setChecks(null);
+      return;
+    }
+    const t = setTimeout(() => {
+      void runChecks(typedToken || undefined, typedGuild || undefined);
+    }, 700);
+    return () => clearTimeout(t);
+  }, [item.id, data, creds, runChecks]);
 
   if (loadError) {
     return (
@@ -281,6 +333,14 @@ export function ConnectPanel({ item }: { item: IntegrationItem }) {
                 className="h-8 w-full rounded-md border border-border bg-background px-2.5 text-[13px] text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-foreground/20"
               />
               {c.hint && <p className="mt-1 text-[11px] text-muted-foreground">{c.hint}</p>}
+              {entry.id === "discord" &&
+                (c.envKey === "DISCORD_TOKEN" || c.envKey === "DISCORD_GUILD_ID") && (
+                  <FieldCheck
+                    kind={c.envKey === "DISCORD_TOKEN" ? "token" : "guild"}
+                    checks={checks}
+                    checking={checking}
+                  />
+                )}
             </div>
           );
         })}
@@ -372,5 +432,89 @@ function EnvRow({
         </span>
       )}
     </button>
+  );
+}
+
+/** Live status line shown under the Discord token / Server ID fields. */
+function FieldCheck({
+  kind,
+  checks,
+  checking,
+}: {
+  kind: "token" | "guild";
+  checks: DiscordChecks | null;
+  checking: boolean;
+}) {
+  if (checking && !checks) {
+    return (
+      <CheckStatus tone="muted" spin>
+        Checking…
+      </CheckStatus>
+    );
+  }
+  if (!checks) return null;
+
+  if (kind === "token") {
+    const t = checks.token;
+    if (t.missing) return null;
+    if (t.ok) return <CheckStatus tone="ok">Connected as {t.botTag}</CheckStatus>;
+    if (t.error) return <CheckStatus tone="error">{t.error}</CheckStatus>;
+    return null;
+  }
+
+  const g = checks.guild;
+  if (g.skipped || g.unknown) return null;
+  if (g.ok) return <CheckStatus tone="ok">Bot is in {g.name}</CheckStatus>;
+  if (g.error) {
+    return (
+      <CheckStatus tone="warn">
+        {g.error}
+        {g.inviteUrl && (
+          <>
+            {" "}
+            <a
+              href={g.inviteUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium underline underline-offset-2"
+            >
+              Invite the bot ↗
+            </a>
+          </>
+        )}
+      </CheckStatus>
+    );
+  }
+  return null;
+}
+
+function CheckStatus({
+  tone,
+  spin,
+  children,
+}: {
+  tone: "ok" | "error" | "warn" | "muted";
+  spin?: boolean;
+  children: ReactNode;
+}) {
+  const cls =
+    tone === "ok"
+      ? "text-emerald-600 dark:text-emerald-400"
+      : tone === "error"
+        ? "text-red-600 dark:text-red-400"
+        : tone === "warn"
+          ? "text-amber-600 dark:text-amber-400"
+          : "text-muted-foreground";
+  return (
+    <p className={cn("mt-1 flex items-center gap-1 text-[11px]", cls)}>
+      {spin ? (
+        <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
+      ) : tone === "ok" ? (
+        <Check className="h-3 w-3 shrink-0" />
+      ) : (
+        <X className="h-3 w-3 shrink-0" />
+      )}
+      <span>{children}</span>
+    </p>
   );
 }

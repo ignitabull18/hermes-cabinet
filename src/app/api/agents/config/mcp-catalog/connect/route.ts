@@ -8,7 +8,7 @@ import {
 } from "@/lib/agents/mcp-config-writer";
 import { resolveAuthBackend } from "@/lib/agents/deployment-mode";
 import { getSelectedEnvironments } from "@/lib/agents/integration-environments";
-import { isValidKey, upsertCabinetEnv } from "@/lib/runtime/cabinet-env";
+import { isValidKey, upsertCabinetEnv, getCabinetEnvSnapshot } from "@/lib/runtime/cabinet-env";
 
 /**
  * `/api/agents/config/mcp-catalog/connect`
@@ -54,17 +54,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   // Persist credentials for token / user-app backends. Validate required ones.
   if (backend === "token" || backend === "user-app") {
+    // A required credential already saved in .cabinet.env doesn't need to be
+    // re-entered — otherwise "Update" (e.g. changing environments or Server ID)
+    // would demand re-pasting the secret every time.
+    const savedKeys = new Set(
+      getCabinetEnvSnapshot().filter((s) => s.hasValue).map((s) => s.key),
+    );
     for (const c of entry.credentials) {
       const raw = creds[c.envKey];
       const value = typeof raw === "string" ? raw.trim() : "";
       if (!value) {
-        if (c.required) {
+        if (c.required && !savedKeys.has(c.envKey)) {
           return NextResponse.json(
             { error: `Missing required credential: ${c.label}` },
             { status: 400 },
           );
         }
-        continue;
+        continue; // optional, or already saved → keep the existing value
       }
       if (!isValidKey(c.envKey)) {
         return NextResponse.json(

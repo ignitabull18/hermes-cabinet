@@ -81,7 +81,7 @@ export const PREVIEW_INTEGRATIONS: IntegrationItem[] = [
     blurb: "Read and post in your community's channels.",
     brand: "#5865f2",
     implemented: true,
-    actions: ["Read channel history", "Post announcements", "Watch for keywords"],
+    actions: ["Read & summarize channel history", "Post messages and announcements", "Reply in threads & react"],
   },
   {
     id: "microsoft-teams",

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Plug, Loader2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { BrandLogo } from "@/components/integrations/brand-logo";
 
 /**
  * Settings → Integrations → "MCP Servers".
@@ -161,6 +162,10 @@ function ServerRow({ server }: { server: ServerEntry }) {
   return (
     <div className="bg-card border border-border rounded-lg px-3 py-2">
       <div className="flex items-center justify-between gap-3">
+        <BrandLogo
+          parts={[server.name, server.command, ...(server.args ?? []), server.url]}
+          fallbackIcon={Plug}
+        />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="text-[13px] font-medium truncate">{server.name}</span>

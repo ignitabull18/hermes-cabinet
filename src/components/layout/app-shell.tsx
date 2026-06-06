@@ -121,6 +121,7 @@ const OnboardingWizard = dynamic(
 import { findNodeByPath } from "@/lib/cabinets/tree";
 import { useCabinetUpdate } from "@/hooks/use-cabinet-update";
 import { useHashRoute } from "@/hooks/use-hash-route";
+import { useTaskFileSync } from "@/hooks/use-task-file-sync";
 import { useTreeStore } from "@/stores/tree-store";
 import { useAppStore } from "@/stores/app-store";
 import { useEditorStore } from "@/stores/editor-store";
@@ -179,6 +180,9 @@ export function AppShell() {
 
   // Sync navigation state with URL hash + localStorage
   useHashRoute();
+
+  // Live-refresh the tree + open page when agent tasks create/change files.
+  useTaskFileSync();
 
   // Onboarding wizard state. We initialize to `null` on both server and first
   // client render to avoid a hydration mismatch, then synchronously rehydrate

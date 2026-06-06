@@ -1,23 +1,32 @@
 "use client";
 
-import { ArrowLeft, Check, Sparkles, ShieldCheck, Bell } from "lucide-react";
+import { useState } from "react";
+import { ArrowLeft, Check, Sparkles, ShieldCheck, Bell, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { showSuccess } from "@/lib/ui/toast";
 import { ConnectPanel } from "@/components/integrations/hub/connect-panel";
+import { SetupGuide } from "@/components/integrations/hub/setup-guide";
+import { DiscordStepArt } from "@/components/integrations/hub/discord-setup-art";
+import { getCatalogEntry } from "@/lib/agents/mcp-catalog";
 import {
   CATEGORY_META,
   type IntegrationItem,
 } from "@/lib/integrations/preview-catalog";
 import {
-  LogoImg,
+  LogoTile,
   brandFace,
-  brandFill,
 } from "@/components/integrations/hub/integration-visuals";
 
 /**
  * Full-page configuration view for a single integration. Opened in place of
- * the browse grid (no modal) when a card is clicked. The browse layout the
- * user ultimately picks plugs into this same detail page.
+ * the browse grid (no modal) when a card is clicked.
+ *
+ * Built for non-developers: a high-contrast logo tile, a friendly trust note
+ * (the MCP/CLI detail tucked into a "For developers" disclosure), and a
+ * step-by-step setup guide with mini-mockups of the third-party UI. The static
+ * connect data (steps, tier) is read straight from the MCP catalog; the
+ * ConnectPanel handles the live runtime state.
  */
 export function IntegrationDetailPage({
   item,
@@ -27,6 +36,7 @@ export function IntegrationDetailPage({
   onBack: () => void;
 }) {
   const category = CATEGORY_META[item.category].label;
+  const entry = getCatalogEntry(item.id);
 
   return (
     <div className="h-full overflow-y-auto bg-background">
@@ -43,12 +53,13 @@ export function IntegrationDetailPage({
           </button>
 
           <div className="flex items-start gap-5">
-            <div
-              className="flex h-20 w-20 shrink-0 items-center justify-center rounded-3xl shadow-lg ring-1 ring-black/5"
-              style={{ background: brandFill(item.brand) }}
-            >
-              <LogoImg item={item} size={40} className="drop-shadow-sm" />
-            </div>
+            {/* White tile keeps the mark high-contrast on any brand colour. */}
+            <LogoTile
+              item={item}
+              size={80}
+              logoSize={44}
+              className="rounded-3xl shadow-lg ring-1 ring-black/5"
+            />
 
             <div className="min-w-0 flex-1 pt-1">
               <div className="flex flex-wrap items-center gap-2.5">
@@ -62,6 +73,11 @@ export function IntegrationDetailPage({
                 ) : (
                   <span className="inline-flex items-center rounded-full bg-foreground/[0.04] px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground/80">
                     Coming soon
+                  </span>
+                )}
+                {entry?.trustTier === "cabinet" && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-foreground/[0.05] px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                    <Sparkles className="h-3 w-3" /> Maintained by Cabinet
                   </span>
                 )}
               </div>
@@ -78,7 +94,7 @@ export function IntegrationDetailPage({
 
       {/* Body */}
       <div className="mx-auto grid max-w-4xl gap-8 px-6 py-8 lg:grid-cols-[1fr_320px]">
-        {/* Left: capabilities */}
+        {/* Left: capabilities + guide */}
         <div>
           <h2 className="text-[13px] font-semibold uppercase tracking-wide text-muted-foreground">
             What your agents can do
@@ -97,17 +113,19 @@ export function IntegrationDetailPage({
             ))}
           </ul>
 
-          <div className="mt-8 rounded-xl border border-border bg-card/50 p-4">
-            <div className="flex items-center gap-2 text-[13px] font-medium text-foreground">
-              <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-              Runs through your own CLI
-            </div>
-            <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-              Cabinet registers this as an MCP server in your agent CLI&apos;s
-              config. Secrets stay in <code className="rounded bg-foreground/[0.06] px-1 py-0.5 text-[12px]">.cabinet.env</code> — never
-              written into a config file.
-            </p>
-          </div>
+          {entry?.setupSteps?.length ? (
+            <SetupGuide
+              steps={entry.setupSteps}
+              brand={item.brand}
+              art={
+                item.id === "discord"
+                  ? (i) => <DiscordStepArt step={i} brand={item.brand} />
+                  : undefined
+              }
+            />
+          ) : null}
+
+          {entry ? <TrustNote /> : null}
         </div>
 
         {/* Right: config / status panel */}
@@ -140,6 +158,42 @@ export function IntegrationDetailPage({
           )}
         </aside>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Friendly, non-scary reassurance up front; the MCP/CLI/`.cabinet.env` detail
+ * lives behind a "For developers" disclosure for the people who want it.
+ */
+function TrustNote() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-8 rounded-xl border border-border bg-card/50 p-4">
+      <div className="flex items-center gap-2 text-[13px] font-medium text-foreground">
+        <ShieldCheck className="h-4 w-4 text-emerald-500" />
+        Your token stays on this device
+      </div>
+      <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
+        Cabinet saves it locally on your computer and never uploads it anywhere.
+      </p>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="mt-2 inline-flex items-center gap-1 text-[12px] text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
+        For developers
+      </button>
+      {open && (
+        <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
+          Cabinet registers this as an MCP server in your agent CLI&apos;s config. The
+          secret is stored in{" "}
+          <code className="rounded bg-foreground/[0.06] px-1 py-0.5 text-[11px]">.cabinet.env</code>{" "}
+          (file perms 0600) and injected into the agent process at spawn — never
+          written into the config file itself.
+        </p>
+      )}
     </div>
   );
 }
