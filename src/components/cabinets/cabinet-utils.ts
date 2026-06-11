@@ -11,6 +11,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { createElement } from "react";
+import { TelegramMark } from "@/components/integrations/telegram-mark";
 
 /* ─── String helpers ─── */
 
@@ -80,6 +81,7 @@ export const TRIGGER_LABELS: Record<ConversationMeta["trigger"], string> = {
 export function TriggerIcon({ trigger }: { trigger: ConversationMeta["trigger"] }) {
   if (trigger === "job") return createElement(Clock3, { className: "h-2.5 w-2.5" });
   if (trigger === "heartbeat") return createElement(HeartPulse, { className: "h-2.5 w-2.5" });
+  if (trigger === "telegram") return createElement(TelegramMark, { className: "h-2.5 w-2.5" });
   return createElement(Bot, { className: "h-2.5 w-2.5" });
 }
 

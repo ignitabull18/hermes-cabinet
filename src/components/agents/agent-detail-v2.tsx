@@ -103,6 +103,7 @@ import { markdownToHtml } from "@/lib/markdown/to-html";
 import { htmlToMarkdown } from "@/lib/markdown/to-markdown";
 import { useLocale } from "@/i18n/use-locale";
 import { DirIcon } from "@/components/ui/dir-icon";
+import { TelegramMark } from "@/components/integrations/telegram-mark";
 
 interface AgentJob {
   id: string;
@@ -147,6 +148,8 @@ function triggerIcon(trigger: ConversationMeta["trigger"]) {
       return Briefcase;
     case "heartbeat":
       return Sparkles;
+    case "telegram":
+      return TelegramMark;
     default:
       return MessageSquare;
   }
@@ -158,6 +161,8 @@ function triggerLabel(trigger: ConversationMeta["trigger"]): string {
       return "Job";
     case "heartbeat":
       return "Heartbeat";
+    case "telegram":
+      return "Telegram";
     default:
       return "Chat";
   }
