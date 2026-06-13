@@ -5,6 +5,7 @@ import remarkRehype from "remark-rehype";
 import rehypeStringify from "rehype-stringify";
 import { detectEmbed } from "@/lib/embeds/detect";
 import { slugifyPageName } from "@/lib/markdown/wiki-links";
+import { addHeadingIds } from "@/lib/markdown/heading-slug";
 
 /**
  * Pre-process markdown to convert [[Wiki Links]] to HTML anchors
@@ -163,6 +164,10 @@ export async function markdownToHtml(markdown: string, pagePath?: string): Promi
 
   // Heal <video src="youtube-url"> into real iframe embeds
   html = upgradeProviderVideos(html);
+
+  // Add heading ids so #section anchors work in previews/agent messages too
+  // (PRD §11), matching the editor's HeadingAnchors slug scheme.
+  html = addHeadingIds(html);
 
   // Resolve relative URLs if page path is provided
   if (pagePath) {

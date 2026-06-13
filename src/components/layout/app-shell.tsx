@@ -122,7 +122,7 @@ const OnboardingWizard = dynamic(
 );
 import { findNodeByPath } from "@/lib/cabinets/tree";
 import { useCabinetUpdate } from "@/hooks/use-cabinet-update";
-import { useHashRoute } from "@/hooks/use-hash-route";
+import { useRoute } from "@/hooks/use-hash-route";
 import { useTaskFileSync } from "@/hooks/use-task-file-sync";
 import { useTreeStore } from "@/stores/tree-store";
 import { useAppStore } from "@/stores/app-store";
@@ -180,8 +180,8 @@ export function AppShell() {
     applyUpdate,
   } = useCabinetUpdate({ autoRefresh: true });
 
-  // Sync navigation state with URL hash + localStorage
-  useHashRoute();
+  // Sync navigation state with the URL path (clean-path routing).
+  useRoute();
 
   // Live-refresh the tree + open page when agent tasks create/change files.
   useTaskFileSync();
@@ -320,22 +320,47 @@ export function AppShell() {
   // carry a cabinetPath and are left untouched.
   const loadRooms = useRoomsStore((s) => s.load);
   const defaultRoom = useRoomsStore((s) => s.defaultRoom);
+  const reopen = useRoomsStore((s) => s.reopen);
   useEffect(() => {
     void loadRooms();
   }, [loadRooms]);
   useEffect(() => {
-    if (!defaultRoom || defaultRoom === ROOT_CABINET_PATH) return;
+    // Reopen into the last active room (PRD §10.5), falling back to the
+    // configured default. Phase 2 routing extends this to restore the deepest
+    // path (reopen.path); within a returning tab the persisted route already does.
+    const landingRoom = reopen?.room ?? defaultRoom;
+    if (!landingRoom || landingRoom === ROOT_CABINET_PATH) return;
     const cp = section.cabinetPath;
-    // Snap into the default room whenever a section would otherwise show the
-    // neutral home container: the bare home screen, or any content view scoped
-    // to the data-dir root ("."). You're always inside a room, never the dir
-    // above it. (settings/help/registry carry no cabinetPath, so are untouched.)
+    // Snap into the room whenever a section would otherwise show the neutral
+    // home container: the bare home screen, or any content view scoped to the
+    // data-dir root ("."). You're always inside a room, never the dir above
+    // it. (settings/help/registry carry no cabinetPath, so are untouched.)
     const onHomeContainer =
       (section.type === "home" && !cp) || cp === ROOT_CABINET_PATH;
     if (onHomeContainer) {
-      setSection({ type: "cabinet", cabinetPath: defaultRoom });
+      setSection({ type: "cabinet", cabinetPath: landingRoom });
     }
-  }, [defaultRoom, section.type, section.cabinetPath, setSection]);
+  }, [reopen, defaultRoom, section.type, section.cabinetPath, setSection]);
+
+  // Persist the current location so the app reopens here next launch
+  // (PRD §10.5). Debounced; best-effort. setLastActive ignores the home
+  // container and unknown rooms server-side.
+  useEffect(() => {
+    const current =
+      selectedPath ||
+      (section.cabinetPath && section.cabinetPath !== ROOT_CABINET_PATH
+        ? section.cabinetPath
+        : "");
+    if (!current) return;
+    const id = window.setTimeout(() => {
+      void fetch("/api/rooms/active", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ path: current }),
+      }).catch(() => {});
+    }, 1000);
+    return () => window.clearTimeout(id);
+  }, [selectedPath, section.cabinetPath]);
 
   // Dynamic document.title — reflects the current section and page.
   useEffect(() => {
