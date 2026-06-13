@@ -122,6 +122,8 @@ export async function listRooms(): Promise<RoomMeta[]> {
 export interface HomeConfig {
   defaultRoom: string | null;
   lastActiveRoom: string | null;
+  /** Deepest valid path the user was on, restored on reopen (PRD §10.5). */
+  lastActivePath: string | null;
 }
 
 const HOME_CONFIG_PATH = path.join(DATA_DIR, ".home", "home.json");
@@ -138,9 +140,13 @@ export async function getHomeConfig(): Promise<HomeConfig> {
         typeof parsed.lastActiveRoom === "string"
           ? parsed.lastActiveRoom
           : null,
+      lastActivePath:
+        typeof parsed.lastActivePath === "string"
+          ? parsed.lastActivePath
+          : null,
     };
   } catch {
-    return { defaultRoom: null, lastActiveRoom: null };
+    return { defaultRoom: null, lastActiveRoom: null, lastActivePath: null };
   }
 }
 
@@ -169,6 +175,10 @@ async function patchHomeConfig(patch: Partial<HomeConfig>): Promise<void> {
   if (patch.lastActiveRoom !== undefined) {
     if (patch.lastActiveRoom === null) delete current.lastActiveRoom;
     else current.lastActiveRoom = patch.lastActiveRoom;
+  }
+  if (patch.lastActivePath !== undefined) {
+    if (patch.lastActivePath === null) delete current.lastActivePath;
+    else current.lastActivePath = patch.lastActivePath;
   }
   const tmp = `${HOME_CONFIG_PATH}.tmp-${process.pid}-${Date.now()}`;
   await fs.writeFile(tmp, JSON.stringify(current, null, 2), "utf-8");
@@ -213,6 +223,55 @@ export async function resolveDefaultRoom(): Promise<string | null> {
   }
 
   return resolved;
+}
+
+/**
+ * Record the user's current location for reopen (PRD §10.5). Persists both
+ * the full `lastActivePath` (deepest path) and its owning `lastActiveRoom`
+ * (first segment). No-ops for the home container and for a path whose room
+ * doesn't exist, so a stale client can't poison the config. Best-effort.
+ */
+export async function setLastActive(cabinetPath: string): Promise<void> {
+  const normalized =
+    normalizeCabinetPath(cabinetPath, true) || ROOT_CABINET_PATH;
+  if (normalized === ROOT_CABINET_PATH) return; // home has no content of its own
+  const room = normalized.split("/")[0];
+  const rooms = await listRooms();
+  if (!rooms.some((r) => r.path === room)) return; // unknown room — ignore
+  await patchHomeConfig({ lastActiveRoom: room, lastActivePath: normalized });
+}
+
+export interface ReopenTarget {
+  /** The room (first path segment) to land in. */
+  room: string;
+  /** The deepest path to restore; equals `room` when only a room is known. */
+  path: string;
+}
+
+/**
+ * Resolve where the app should reopen (PRD §10.5). Fallback chain:
+ * valid `lastActivePath` → valid `lastActiveRoom` → `defaultRoom`
+ * (self-healing) → first room. Returns null only when no rooms exist.
+ * "Valid" here means the path's owning room still exists; a missing deeper
+ * page degrades to the room root at load time, not an error.
+ */
+export async function resolveReopen(): Promise<ReopenTarget | null> {
+  const [rooms, home] = await Promise.all([listRooms(), getHomeConfig()]);
+  if (rooms.length === 0) return null;
+  const paths = new Set(rooms.map((r) => r.path));
+  const roomOf = (p: string | null): string | null =>
+    p ? p.split("/")[0] : null;
+
+  const lapRoom = roomOf(home.lastActivePath);
+  if (home.lastActivePath && lapRoom && paths.has(lapRoom)) {
+    return { room: lapRoom, path: home.lastActivePath };
+  }
+  if (home.lastActiveRoom && paths.has(home.lastActiveRoom)) {
+    return { room: home.lastActiveRoom, path: home.lastActiveRoom };
+  }
+  const def = await resolveDefaultRoom();
+  if (def) return { room: def.split("/")[0], path: def };
+  return { room: rooms[0].path, path: rooms[0].path };
 }
 
 function resolveRoomDir(normalizedPath: string): string {
