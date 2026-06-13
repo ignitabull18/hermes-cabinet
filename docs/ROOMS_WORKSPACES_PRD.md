@@ -421,10 +421,28 @@ Add focused tests for:
 > property; browser E2E: a deep page reloads to the same URL and renders). Reserved cabinet names:
 > `data`/`agents`/`tasks`. The legacy no-`/data/` page form now resolves to a cabinet root (accepted
 > back-compat change; the canonical builder always emits `/data/`).
-> ⏳ **Remaining (the cutover):** the `/room` rename, dropping `/data/` + the doubled prefix from live
-> URLs, `useHashRoute → useRoute` (pathname + History API), the `[[...slug]]` catch-all + Electron
-> `main.cjs` clean-path serving, section anchors (`rehype-slug` + scroll-to-`#`), and the legacy-hash
-> redirect. This is one focused, app-wide change best verified step-by-step in the browser.
+> **Cutover progress (incremental, checkpointed):**
+> - ✅ **Step 1 — serving.** `src/app/[...slug]/page.tsx` catch-all renders the shell for any clean
+>   path. Verified: `/room/a/b/c` → 200 + shell; `/api/*` and `/` unaffected. App still hash-routed
+>   (additive, safe).
+> - ✅ **Step 2 — route module.** `src/lib/navigation/route-scheme.ts` (`buildPath`/`parsePath`,
+>   `/room/<path>` + `/-/` marker; `CleanRoute.content` defers cabinet-vs-page to the apply layer).
+>   8 tests incl. deep nesting + round-trip. Not wired yet.
+> - ⏳ **Step 3 — the cutover (NOT started):** rewrite `useHashRoute → useRoute` to read/write
+>   `window.location.pathname` via the History API (`pushState`/`popstate`), feed `parsePath` into a
+>   new `applyCleanRoute`, switch the two store subscribers + `app-store` back/forward off the hash,
+>   and add the legacy `#/...` → clean-path redirect on load.
+>   - **Open product decision blocking Step 3:** for a bare `/room/<path>`, when `<path>` is a
+>     *nested* cabinet, show its **overview dashboard** (today's `type:"cabinet"` CabinetView) or its
+>     **index page** (KBEditor)? Top-level rooms clearly stay overview. Proposed default:
+>     single-segment ⇒ overview; deeper ⇒ index page (mirrors "open the folder → see its content").
+>     Needs confirmation before wiring, since it changes nested-cabinet navigation.
+> - ⏳ **Step 4 — Electron** (`room-window.ts` + `electron/main.cjs` pass clean paths).
+> - ⏳ **Step 5 — section anchors** (`rehype-slug` + scroll-to-`#`).
+>
+> Steps 1–2 are committed and safe (the app runs on hash routing). Step 3 is the core-router cutover
+> and is intentionally held for a focused pass with full browser verification of every navigation
+> path (room landing, page, nested cabinet, agents/tasks, back/forward, Electron, the §10.5 persist).
 
 ### 11.1 Problem
 
