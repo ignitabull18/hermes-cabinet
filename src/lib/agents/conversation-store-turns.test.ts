@@ -66,16 +66,23 @@ test("readConversationTurns synthesizes turn 1 from prompt + transcript on a sin
   assert.match(turns[1].content, /I created the poem/);
 });
 
-test("readConversationTurns returns only user turn 1 when the conversation is still running", async () => {
+test("readConversationTurns fabricates a pending agent turn while running with no output yet", async () => {
   const meta = await store.createConversation({
     agentSlug: "general",
     title: "In flight",
     trigger: "manual",
     prompt: "User request:\ndo something",
   });
+  // createConversation defaults to status "running". With no transcript bytes
+  // yet, readTurnOne deliberately fabricates an empty *pending* agent turn so
+  // the UI shows a typing indicator (not a blank gap) during adapter
+  // cold-start, rather than returning the user turn alone.
   const turns = await store.readConversationTurns(meta.id);
-  assert.equal(turns.length, 1);
+  assert.equal(turns.length, 2, "user turn + fabricated pending agent placeholder");
   assert.equal(turns[0].role, "user");
+  assert.equal(turns[1].role, "agent");
+  assert.equal(turns[1].pending, true);
+  assert.equal(turns[1].content, "");
 });
 
 test("appendUserTurn + appendAgentTurn build up multi-turn state and aggregate tokens", async () => {

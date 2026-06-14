@@ -24,7 +24,7 @@
     "lint": "eslint src server electron scripts test eslint.config.mjs next.config.ts",
     "skills:sync": "tsx scripts/skills-sync.ts",
     "test:unit": "tsx --test test/update-system.test.ts",
-    "test": "tsx --test test/*.test.ts",
+    "test": "tsx --test $(find test src -name '*.test.ts')",
     "i18n:extract": "node scripts/i18n-extract.mjs",
     "i18n:check": "node scripts/i18n-extract.mjs --check",
     "i18n:report": "node scripts/i18n-find-hardcoded.mjs",
