@@ -1,15 +1,23 @@
-import test, { before } from "node:test";
+import test, { before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
+import { resetLoginRateLimit } from "@/lib/auth/login-rate-limit";
 
-// KB_PASSWORD is read at module load, so set it before importing the handler.
 type Route = typeof import("./route");
 let route: Route;
 
 before(async () => {
   process.env.KB_PASSWORD = "s3cret";
+  // Keep PBKDF2 cheap so the many derivations in these tests stay fast.
+  process.env.CABINET_LOGIN_PBKDF2_ITERS = "1";
+  // Small lockout threshold so the rate-limit test doesn't need many rounds.
+  process.env.CABINET_LOGIN_MAX_ATTEMPTS = "3";
+  process.env.CABINET_LOGIN_LOCKOUT_MS = "60000";
   route = await import("./route");
 });
+
+// Isolate rate-limit state (global + per-client buckets) between cases.
+beforeEach(() => resetLoginRateLimit());
 
 const URL = "http://127.0.0.1:4000/api/auth/login";
 
@@ -21,10 +29,10 @@ function formReq(password: string, headers: Record<string, string> = {}): NextRe
   });
 }
 
-function jsonReq(password: string): NextRequest {
+function jsonReq(password: string, headers: Record<string, string> = {}): NextRequest {
   return new NextRequest(URL, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...headers },
     body: JSON.stringify({ password }),
   });
 }
@@ -64,4 +72,40 @@ test("JSON login: correct → ok + cookie; wrong → 401", async () => {
 
   const bad = await route.POST(jsonReq("nope"));
   assert.equal(bad.status, 401);
+});
+
+test("JSON login: locks out after N failed attempts (429 + Retry-After)", async () => {
+  const xff = { "x-forwarded-for": "203.0.113.7" };
+  // MAX_ATTEMPTS=3 → first 3 wrong return 401, then the client is locked.
+  for (let i = 0; i < 3; i++) {
+    const res = await route.POST(jsonReq("nope", xff));
+    assert.equal(res.status, 401, `attempt ${i + 1} should be 401`);
+  }
+  const locked = await route.POST(jsonReq("nope", xff));
+  assert.equal(locked.status, 429);
+  assert.ok(Number(locked.headers.get("retry-after")) > 0, "Retry-After set");
+
+  // Even the CORRECT password is refused while locked out.
+  const lockedCorrect = await route.POST(jsonReq("s3cret", xff));
+  assert.equal(lockedCorrect.status, 429);
+});
+
+test("form login: over-limit → 303 /login?error=rate with Retry-After", async () => {
+  const xff = { "x-forwarded-for": "203.0.113.8" };
+  for (let i = 0; i < 3; i++) await route.POST(formReq("nope", xff));
+  const res = await route.POST(formReq("nope", xff));
+  assert.equal(res.status, 303);
+  assert.equal(res.headers.get("location"), "/login?error=rate");
+  assert.ok(Number(res.headers.get("retry-after")) > 0, "Retry-After set");
+});
+
+test("a successful login resets the client's failure budget", async () => {
+  const xff = { "x-forwarded-for": "203.0.113.9" };
+  await route.POST(jsonReq("nope", xff)); // 1 failure
+  await route.POST(jsonReq("nope", xff)); // 2 failures
+  const good = await route.POST(jsonReq("s3cret", xff));
+  assert.equal(good.status, 200, "correct password still allowed (under limit)");
+  // Budget reset → two more failures don't immediately lock.
+  const after = await route.POST(jsonReq("nope", xff));
+  assert.equal(after.status, 401, "counter reset after success, not locked");
 });

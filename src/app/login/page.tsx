@@ -1,16 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 
+function errorFromParam(code: string | null): string {
+  if (code === "1") return "Wrong password";
+  if (code === "rate") return "Too many attempts. Try again later.";
+  return "";
+}
+
 export default function LoginPage() {
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
   const searchParams = useSearchParams();
-  useEffect(() => {
-    if (searchParams.get("error") === "1") setError("Wrong password");
-  }, [searchParams]);
+  const [password, setPassword] = useState("");
+  // Native form posts redirect to /login?error=… as a full navigation, so this
+  // initializer runs fresh on each mount; the JS submit handler overrides below.
+  const [error, setError] = useState(() => errorFromParam(searchParams.get("error")));
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,6 +41,8 @@ export default function LoginPage() {
         // and bounces back to /login).
         window.location.assign("/");
         return;
+      } else if (res.status === 429) {
+        setError("Too many attempts. Try again later.");
       } else {
         setError("Wrong password");
       }

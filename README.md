@@ -239,7 +239,10 @@ cp .env.example .env.local
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `KB_PASSWORD` | _(empty)_ | Password to protect the UI. Leave empty for no auth. |
+| `KB_PASSWORD` | _(empty)_ | Password to protect the UI. Leave empty for no auth. The auth cookie is PBKDF2(password, per-install salt) with login rate-limiting; changing the password logs everyone out once. |
+| `CABINET_AUTH_SALT` | _(auto)_ | Per-install auth salt, auto-generated into `.cabinet.env` on first run. Set only to pin a value; changing it forces a one-time re-login. |
+| `CABINET_LOGIN_PBKDF2_ITERS` | `600000` | PBKDF2 iteration count for the auth token. Lower only for constrained hardware. |
+| `CABINET_LOGIN_MAX_ATTEMPTS` / `_WINDOW_MS` / `_LOCKOUT_MS` / `CABINET_LOGIN_GLOBAL_MAX` | `10` / `900000` / `900000` / `60` | Login rate-limit tuning (per-client + global failed-attempt buckets). |
 | `DOMAIN` | `localhost` | Domain for the app. |
 
 ## Commands

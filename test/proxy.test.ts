@@ -2,6 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import { proxy } from "@/proxy";
+import { deriveAuthToken, getAuthSalt } from "@/lib/auth/kb-auth";
+
+// Keep PBKDF2 cheap for tests — the shared module reads this at call time.
+process.env.CABINET_LOGIN_PBKDF2_ITERS = "1";
 
 function makeReq(pathname: string, cookies: Record<string, string> = {}) {
   const url = new URL(pathname, "http://localhost:4000");
@@ -11,15 +15,6 @@ function makeReq(pathname: string, cookies: Record<string, string> = {}) {
   return new NextRequest(url, {
     headers: cookieHeader ? { cookie: cookieHeader } : undefined,
   });
-}
-
-async function hashToken(password: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password + "cabinet-salt");
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(hashBuffer))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
 }
 
 test("proxy passes through every path when KB_PASSWORD is unset", async () => {
@@ -86,7 +81,7 @@ test("proxy admits authenticated requests when locked", async () => {
   const prev = process.env.KB_PASSWORD;
   process.env.KB_PASSWORD = "secret";
   try {
-    const token = await hashToken("secret");
+    const token = await deriveAuthToken("secret", getAuthSalt());
     const res = await proxy(makeReq("/some-page", { "kb-auth": token }));
     assert.equal(res.status, 200);
   } finally {

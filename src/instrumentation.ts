@@ -25,6 +25,16 @@ export async function register(): Promise<void> {
   } catch (err) {
     console.error("instrumentation: loadCabinetEnv failed", err);
   }
+  // Generate a per-install auth salt on first run (persisted to .cabinet.env)
+  // so the kb-auth token is PBKDF2(password, per-install-salt). Best-effort:
+  // on failure the auth path falls back to the legacy fixed salt. Must run
+  // after loadCabinetEnv so an existing salt isn't regenerated.
+  try {
+    const { ensureAuthSalt } = await import("./lib/auth/kb-auth-salt.node");
+    ensureAuthSalt();
+  } catch (err) {
+    console.error("instrumentation: ensureAuthSalt failed", err);
+  }
   try {
     const { ensureGlobalAgents } = await import("./lib/agents/library-manager");
     await ensureGlobalAgents();
