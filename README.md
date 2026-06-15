@@ -245,6 +245,15 @@ cp .env.example .env.local
 | `CABINET_LOGIN_MAX_ATTEMPTS` / `_WINDOW_MS` / `_LOCKOUT_MS` / `CABINET_LOGIN_GLOBAL_MAX` | `10` / `900000` / `900000` / `60` | Login rate-limit tuning (per-client + global failed-attempt buckets). |
 | `DOMAIN` | `localhost` | Domain for the app. |
 
+### Authentication
+
+Setting `KB_PASSWORD` turns on a single password gate for the whole UI/API
+(leave it empty for no auth). The session cookie is `PBKDF2-HMAC-SHA256` over a
+per-install salt that's auto-generated into `.cabinet.env` on first run, the
+login endpoint is rate-limited against brute force, and the gate verifies in
+constant time. Changing the password (or salt/iterations) logs everyone out
+once. Full details, threat model, and tuning: **[docs/AUTH.md](docs/AUTH.md)**.
+
 ## Commands
 
 ```bash
