@@ -131,21 +131,29 @@ When an OAuth app is in Testing status, it is limited to explicitly listed test 
 
 ## Database
 
-Both options store the resulting token in the same table:
+Both OAuth options store their token in this table. Service Account connections
+(see [GoogleDrive.md](GoogleDrive.md), [Gmail.md](Gmail.md)) store their JSON key
+in the same table, distinguished by `auth_type`:
 
 ```sql
 CREATE TABLE IF NOT EXISTS google_credentials (
-  id            TEXT PRIMARY KEY DEFAULT 'default',
-  client_source TEXT NOT NULL DEFAULT 'cabinet', -- 'cabinet' | 'user'
-  access_token  TEXT NOT NULL,
-  refresh_token TEXT NOT NULL,
-  token_expiry  TEXT NOT NULL,   -- ISO8601
-  email         TEXT,
-  scopes        TEXT             -- JSON array of active scopes
+  id                  TEXT PRIMARY KEY DEFAULT 'default',
+  auth_type           TEXT NOT NULL DEFAULT 'oauth',    -- 'oauth' | 'service_account'
+  client_source       TEXT NOT NULL DEFAULT 'cabinet',  -- 'cabinet' | 'user' (OAuth only)
+  access_token        TEXT,            -- OAuth only
+  refresh_token       TEXT,            -- OAuth only
+  token_expiry        TEXT,            -- ISO8601 (OAuth only)
+  service_account_key TEXT,            -- JSON key file contents (service account only)
+  email               TEXT,
+  scopes              TEXT             -- JSON array of active scopes
 );
 ```
 
-`client_source` records which option the user chose, so Cabinet can display the correct status in Settings and use the right client ID/secret on token refresh.
+`auth_type` distinguishes OAuth connections (which populate `access_token` /
+`refresh_token` / `token_expiry`) from Service Account connections (which populate
+`service_account_key`). `client_source` records which OAuth option the user chose,
+so Cabinet can display the correct status in Settings and use the right client
+ID/secret on token refresh.
 
 ---
 
