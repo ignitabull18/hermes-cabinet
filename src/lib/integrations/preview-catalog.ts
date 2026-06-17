@@ -232,7 +232,7 @@ const RAW_INTEGRATIONS: IntegrationItem[] = [
     blurb: "Triage, search, and draft replies to email.",
     brand: "#ea4335",
     implemented: false,
-    actions: ["Search inbox", "Summarise threads", "Draft replies"],
+    actions: ["Search inbox", "Summarise threads", "Send & reply (with approval)"],
   },
 
   // ── Files & Storage ─────────────────────────────────────────────

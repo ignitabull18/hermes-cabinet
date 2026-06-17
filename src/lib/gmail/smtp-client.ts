@@ -25,6 +25,7 @@ export function createTransport() {
 
 export interface SendEmailOptions {
   to: string | string[];
+  cc?: string | string[];
   subject: string;
   body: string;
   replyToMessageId?: string;
@@ -44,6 +45,10 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendResult> 
     subject: options.subject,
     text: options.body,
   };
+
+  if (options.cc && options.cc.length) {
+    mailOptions.cc = Array.isArray(options.cc) ? options.cc.join(", ") : options.cc;
+  }
 
   if (options.replyToMessageId) {
     mailOptions.inReplyTo = options.replyToMessageId;
