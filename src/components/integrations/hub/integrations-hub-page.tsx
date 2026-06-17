@@ -144,7 +144,12 @@ export function IntegrationsHubPage() {
             items={filtered}
             connectedIds={connectedIds}
             onOpen={(id) =>
-              setSection({ type: "integrations", slug: connectTargetFor(id) })
+              setSection({
+                type: "integrations",
+                // Google Drive has its own (Drive-for-Desktop) detail page rather
+                // than folding into the Google Workspace OAuth suite.
+                slug: id === "google-drive" ? "google-drive" : connectTargetFor(id),
+              })
             }
           />
         )}
