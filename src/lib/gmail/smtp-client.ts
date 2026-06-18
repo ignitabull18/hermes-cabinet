@@ -64,12 +64,17 @@ export interface ReplyOptions {
   threadId: string;
   body: string;
   subject?: string;
-  to?: string;
+  to: string;
 }
 
 export async function replyToThread(options: ReplyOptions): Promise<SendResult> {
+  // Fail fast on an empty recipient rather than handing sendEmail an invalid
+  // envelope (which would surface as an opaque SMTP error downstream).
+  if (!options.to.trim()) {
+    throw new Error("replyToThread: 'to' recipient is required");
+  }
   return sendEmail({
-    to: options.to ?? "",
+    to: options.to,
     subject: options.subject ?? "",
     body: options.body,
     replyToMessageId: options.messageId,
