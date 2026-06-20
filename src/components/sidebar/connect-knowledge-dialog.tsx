@@ -14,6 +14,7 @@ import {
   CONNECT_KNOWLEDGE_TILES,
   type ConnectKnowledgeTile,
 } from "@/lib/knowledge-sources/providers";
+import type { KnowledgeProviderId } from "@/lib/knowledge-sources/store";
 
 /**
  * Connect Knowledge picker — a tile grid of knowledge sources styled like the
@@ -25,11 +26,15 @@ import {
 export function ConnectKnowledgeDialog({
   open,
   onOpenChange,
-  onPick,
+  onLocal,
+  onCloud,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onPick: (kind: "local" | "google-drive") => void;
+  /** Local folder → the symlink dialog. */
+  onLocal: () => void;
+  /** A desktop-sync provider → the cloud folder picker. */
+  onCloud: (provider: KnowledgeProviderId) => void;
 }) {
   const setSection = useAppStore((s) => s.setSection);
 
@@ -42,9 +47,8 @@ export function ConnectKnowledgeDialog({
       onOpenChange(false);
       return;
     }
-    if (tile.kind === "local" || tile.kind === "google-drive") {
-      onPick(tile.kind);
-    }
+    if (tile.kind === "local") onLocal();
+    else if (tile.kind === "cloud" && tile.provider) onCloud(tile.provider);
   };
 
   return (

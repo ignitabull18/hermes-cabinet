@@ -5,7 +5,8 @@ import { resolveContentPath, sanitizeFilename } from "@/lib/storage/path-utils";
 import { ensureDirectory } from "@/lib/storage/fs-operations";
 import { invalidateTreeCache } from "@/lib/storage/tree-builder";
 import { autoCommit } from "@/lib/git/git-service";
-import { detectDriveDesktop } from "@/lib/google-drive/detect-desktop";
+import { detectProvider, type CloudProviderId } from "@/lib/google-drive/detect-desktop";
+import { providerLabel } from "@/lib/knowledge-sources/providers";
 import {
   addKnowledgeSource,
   DuplicateSourceError,
@@ -36,7 +37,16 @@ export async function POST(req: NextRequest) {
       parentPath?: string;
     };
 
-    const provider = body.provider === "google-drive" ? "google-drive" : null;
+    const CLOUD: CloudProviderId[] = [
+      "google-drive",
+      "icloud",
+      "onedrive",
+      "sharepoint",
+      "dropbox",
+    ];
+    const provider = CLOUD.includes(body.provider as CloudProviderId)
+      ? (body.provider as CloudProviderId)
+      : null;
     if (!provider) {
       return NextResponse.json({ error: "Unsupported provider" }, { status: 400 });
     }
@@ -47,10 +57,10 @@ export async function POST(req: NextRequest) {
 
     // The folder must exist and sit within the detected provider mount, so an
     // arbitrary host directory can't be symlinked in through this endpoint.
-    const detection = await detectDriveDesktop();
+    const detection = await detectProvider(provider);
     if (!detection.mountPath) {
       return NextResponse.json(
-        { error: "Google Drive for Desktop not detected" },
+        { error: `${providerLabel(provider)} not detected` },
         { status: 400 },
       );
     }
@@ -99,7 +109,7 @@ export async function POST(req: NextRequest) {
     let sourceId: string;
     try {
       const source = await addKnowledgeSource(cabinet, {
-        provider: "google-drive",
+        provider,
         absPath: absPathInput,
         name: folderName,
         policy,

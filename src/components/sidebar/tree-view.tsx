@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { LinkRepoDialog } from "./link-repo-dialog";
 import { ConnectDriveDialog } from "./connect-drive-dialog";
 import { ConnectKnowledgeDialog } from "./connect-knowledge-dialog";
+import type { KnowledgeProviderId } from "@/lib/knowledge-sources/store";
 import { NewFileDialog } from "./new-file-dialog";
 import { MoveToDialog } from "./move-to-dialog";
 import { RecentTasks } from "./recent-tasks";
@@ -155,6 +156,7 @@ export function TreeView() {
   const [linkRepoOpen, setLinkRepoOpen] = useState(false);
   const [connectDriveOpen, setConnectDriveOpen] = useState(false);
   const [connectKnowledgeOpen, setConnectKnowledgeOpen] = useState(false);
+  const [driveProvider, setDriveProvider] = useState<KnowledgeProviderId>("google-drive");
   const [newFileOpen, setNewFileOpen] = useState(false);
   const [moveToOpen, setMoveToOpen] = useState(false);
   const [moveToSource, setMoveToSource] = useState<TreeNodeType | null>(null);
@@ -956,10 +958,14 @@ export function TreeView() {
     <ConnectKnowledgeDialog
       open={connectKnowledgeOpen}
       onOpenChange={setConnectKnowledgeOpen}
-      onPick={(kind) => {
+      onLocal={() => {
         setConnectKnowledgeOpen(false);
-        if (kind === "local") setLinkRepoOpen(true);
-        else setConnectDriveOpen(true);
+        setLinkRepoOpen(true);
+      }}
+      onCloud={(provider) => {
+        setConnectKnowledgeOpen(false);
+        setDriveProvider(provider);
+        setConnectDriveOpen(true);
       }}
     />
 
@@ -967,6 +973,10 @@ export function TreeView() {
       open={connectDriveOpen}
       onOpenChange={setConnectDriveOpen}
       cabinetPath={dataRootPath}
+      provider={driveProvider}
+      // Google Drive uses the dedicated per-room browser; the others mount
+      // inline at the room root (no browser surface for them yet).
+      mountAt={driveProvider === "google-drive" ? undefined : dataRootPath}
     />
 
     <NewFileDialog

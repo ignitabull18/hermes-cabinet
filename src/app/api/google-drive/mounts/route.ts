@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { detectDriveDesktop } from "@/lib/google-drive/detect-desktop";
+import { detectProvider, type CloudProviderId } from "@/lib/google-drive/detect-desktop";
 import {
   addKnowledgeSource,
   readKnowledgeSources,
@@ -30,12 +30,15 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { absPath, folderName, cabinet, policy } = (await request.json()) as {
-      absPath: string;
-      folderName: string;
-      cabinet?: string;
-      policy?: "read-only" | "read-write";
-    };
+    const { absPath, folderName, cabinet, policy, provider: rawProvider } =
+      (await request.json()) as {
+        absPath: string;
+        folderName: string;
+        cabinet?: string;
+        policy?: "read-only" | "read-write";
+        provider?: string;
+      };
+    const provider = (rawProvider ?? "google-drive") as CloudProviderId;
 
     if (!absPath || !folderName) {
       return NextResponse.json(
@@ -57,10 +60,10 @@ export async function POST(request: NextRequest) {
     // Constrain mounts to within the detected Drive root, so arbitrary host
     // directories can't be mounted and exposed through the Drive APIs. Compare
     // realpaths to defeat symlinks pointing outside the mount.
-    const detection = await detectDriveDesktop();
+    const detection = await detectProvider(provider);
     if (!detection.mountPath) {
       return NextResponse.json(
-        { error: "Google Drive for Desktop not detected" },
+        { error: "Provider not detected on this machine" },
         { status: 400 },
       );
     }
@@ -84,7 +87,7 @@ export async function POST(request: NextRequest) {
 
     try {
       const source = await addKnowledgeSource(cabinet ?? "", {
-        provider: "google-drive",
+        provider,
         absPath,
         name: folderName,
         policy: policy === "read-write" ? "read-write" : "read-only",

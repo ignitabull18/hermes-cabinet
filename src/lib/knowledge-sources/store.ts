@@ -18,6 +18,7 @@ export type KnowledgeProviderId =
   | "local"
   | "google-drive"
   | "icloud"
+  | "onedrive"
   | "sharepoint"
   | "dropbox";
 

@@ -49,7 +49,7 @@ export interface TreeNode {
    * `knowledgePolicy` is inherited by descendants so the UI can gate edits.
    * See docs/CONNECT_KNOWLEDGE_PRD.md §6.
    */
-  knowledgeProvider?: "local" | "google-drive" | "icloud" | "sharepoint" | "dropbox";
+  knowledgeProvider?: "local" | "google-drive" | "icloud" | "onedrive" | "sharepoint" | "dropbox";
   knowledgePolicy?: "read-only" | "read-write";
   frontmatter?: Partial<FrontMatter>;
   children?: TreeNode[];

@@ -37,6 +37,7 @@ import {
   FolderInput,
   Settings2,
   Sheet,
+  Cloud,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { decodeDrivePath } from "@/lib/google-drive/paths";
@@ -68,6 +69,7 @@ import { LinkRepoDialog } from "./link-repo-dialog";
 import { ConnectKnowledgeDialog } from "./connect-knowledge-dialog";
 import { ConnectDriveDialog } from "./connect-drive-dialog";
 import { providerLogo } from "@/lib/knowledge-sources/providers";
+import type { KnowledgeProviderId } from "@/lib/knowledge-sources/store";
 import { NewCabinetDialog } from "./new-cabinet-dialog";
 import { NewFileDialog } from "./new-file-dialog";
 import { EditSymlinkDialog } from "./edit-symlink-dialog";
@@ -168,6 +170,7 @@ function TreeNodeImpl({
   const [linkRepoOpen, setLinkRepoOpen] = useState(false);
   const [connectKnowledgeOpen, setConnectKnowledgeOpen] = useState(false);
   const [connectDriveOpen, setConnectDriveOpen] = useState(false);
+  const [driveProvider, setDriveProvider] = useState<KnowledgeProviderId>("google-drive");
   // Inline Connect Knowledge mount metadata (set by the tree-builder).
   const isReadOnly = node.knowledgePolicy === "read-only";
   const knowledgeLogo = node.knowledgeProvider
@@ -717,6 +720,9 @@ function TreeNodeImpl({
               // Inline Connect Knowledge mount → provider brand mark.
               // eslint-disable-next-line @next/next/no-img-element
               <img src={knowledgeLogo} alt="" className="h-3.5 w-3.5 shrink-0" />
+            ) : node.knowledgeProvider ? (
+              // Mount whose provider has no brand asset (e.g. iCloud).
+              <Cloud className="h-3.5 w-3.5 shrink-0 text-sky-400" />
             ) : node.frontmatter?.google ? (
               <GoogleNodeIcon kind={node.frontmatter.google.kind} />
             ) : node.type === "csv" ? (
@@ -1049,10 +1055,14 @@ function TreeNodeImpl({
       <ConnectKnowledgeDialog
         open={connectKnowledgeOpen}
         onOpenChange={setConnectKnowledgeOpen}
-        onPick={(kind) => {
+        onLocal={() => {
           setConnectKnowledgeOpen(false);
-          if (kind === "local") setLinkRepoOpen(true);
-          else setConnectDriveOpen(true);
+          setLinkRepoOpen(true);
+        }}
+        onCloud={(provider) => {
+          setConnectKnowledgeOpen(false);
+          setDriveProvider(provider);
+          setConnectDriveOpen(true);
         }}
       />
 
@@ -1060,6 +1070,7 @@ function TreeNodeImpl({
         open={connectDriveOpen}
         onOpenChange={setConnectDriveOpen}
         cabinetPath={contextCabinetPath || ""}
+        provider={driveProvider}
         mountAt={node.path}
       />
 

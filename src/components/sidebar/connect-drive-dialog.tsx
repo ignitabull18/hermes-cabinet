@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/dialog";
 import { GDRIVE_MOUNTS_CHANGED_EVENT } from "@/components/sidebar/google-drive-tree";
 import { useTreeStore } from "@/stores/tree-store";
+import { providerLabel } from "@/lib/knowledge-sources/providers";
+import type { KnowledgeProviderId } from "@/lib/knowledge-sources/store";
 
 interface BrowseDir {
   name: string;
@@ -39,6 +41,7 @@ export function ConnectDriveDialog({
   onOpenChange,
   cabinetPath,
   mountAt,
+  provider = "google-drive",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -48,6 +51,8 @@ export function ConnectDriveDialog({
    * (F2) instead of into the room's Drive browser. Undefined → browser surface.
    */
   mountAt?: string;
+  /** Which desktop-sync provider to browse/connect (default Google Drive). */
+  provider?: KnowledgeProviderId;
 }) {
   const [detected, setDetected] = useState<boolean | null>(null);
   const [rootPath, setRootPath] = useState<string | null>(null);
@@ -58,7 +63,10 @@ export function ConnectDriveDialog({
   const [policy, setPolicy] = useState<Policy>("read-only");
   const loadTree = useTreeStore((s) => s.loadTree);
 
-  const cabinetQs = cabinetPath ? `?cabinet=${encodeURIComponent(cabinetPath)}` : "";
+  const label = providerLabel(provider);
+  const statusQs = `?provider=${encodeURIComponent(provider)}${
+    cabinetPath ? `&cabinet=${encodeURIComponent(cabinetPath)}` : ""
+  }`;
 
   const browse = useCallback(async (target: string) => {
     setLoading(true);
@@ -89,7 +97,7 @@ export function ConnectDriveDialog({
     setDetected(null);
     (async () => {
       try {
-        const res = await fetch(`/api/google-drive/status${cabinetQs}`, { cache: "no-store" });
+        const res = await fetch(`/api/google-drive/status${statusQs}`, { cache: "no-store" });
         const data = (await res.json()) as { desktopDetected: boolean; mountPath: string | null };
         if (cancelled) return;
         setDetected(data.desktopDetected);
@@ -102,7 +110,7 @@ export function ConnectDriveDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, cabinetQs, browse]);
+  }, [open, statusQs, browse]);
 
   const atRoot = rootPath !== null && currentPath === rootPath;
   const folderName = currentPath
@@ -128,14 +136,14 @@ export function ConnectDriveDialog({
           body: JSON.stringify(
             inline
               ? {
-                  provider: "google-drive",
+                  provider,
                   absPath: currentPath,
                   name: folderName,
                   cabinet: cabinetPath,
                   policy,
                   parentPath: mountAt,
                 }
-              : { absPath: currentPath, folderName, cabinet: cabinetPath, policy },
+              : { absPath: currentPath, folderName, cabinet: cabinetPath, policy, provider },
           ),
         },
       );
@@ -164,7 +172,7 @@ export function ConnectDriveDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Cloud className="h-4 w-4 text-blue-400" /> Connect a Google Drive folder
+            <Cloud className="h-4 w-4 text-blue-400" /> Connect a {label} folder
           </DialogTitle>
         </DialogHeader>
 
@@ -172,7 +180,8 @@ export function ConnectDriveDialog({
           <div className="flex flex-col items-center gap-2 py-6 text-center">
             <CloudOff className="h-8 w-8 text-muted-foreground/50" />
             <p className="text-sm text-muted-foreground">
-              Google Drive for Desktop isn&apos;t detected. Install it and sign in, then try again.
+              {label} isn&apos;t detected on this Mac. Install its desktop app and
+              sign in, then try again.
             </p>
           </div>
         ) : detected === null ? (
