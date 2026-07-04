@@ -6,6 +6,36 @@ All notable changes to Cabinet.
 
 ---
 
+## v0.5.0 · 2026-07-04
+
+The largest release since v0.4.0 (238 commits): Connect Knowledge brings your cloud drives into every room, the Integrations Hub gains Slack, Google, Microsoft, and Snowflake, your agents get their own Channels, and a borderless "Manila Arc" redesign.
+
+### 🟢 New
+- 🟢 **Connect Knowledge:** per-room knowledge sources. Browse Google Drive, iCloud, OneDrive/SharePoint, and Dropbox read-only inside a room, or mount a synced folder inline with read-only enforced on the server. Native Google Docs/Sheets shortcuts render in place, and the cloud picker auto-detects your desktop-sync accounts. No OAuth required.
+- 🟢 **Integrations Hub, expanded:** Slack, Google (Gmail, Calendar, Drive), Microsoft (OneDrive, SharePoint, Teams), and Snowflake, plus Notion and Confluence in the catalog. New Social category and a "Soon" request flow.
+- 🟢 **Channels:** per-room team chat for your agents. @mention an agent and it actually replies, with a live "is typing" indicator; channels sort by most recent activity and live under `.channels` per room.
+- 🟢 **Knowledge import:** bring Apple Notes (macOS) and a Notion export (.zip) in as local Markdown.
+- 🟢 **In-app browser:** external links and web pages open inside Cabinet in the desktop app, using a native web view that loads sites an iframe can't, with an iframe fallback on the web build.
+- 🟢 **Onboarding:** a new knowledge-graph step in the wizard.
+
+### 🔵 Improved
+- 🔵 **Editor:** inline Mermaid diagrams with zoom/pan, LaTeX (`.tex`) embed rendering and a file viewer, `file://` links, tree-view sorting, and paginated PDF export that skips cross-origin fonts.
+- 🔵 **Paste a URL, your way:** pasting a link on its own line now offers a Link vs Embed chooser instead of forcing an iframe. Embed is frame-checked so a site that refuses framing can't leave a dead box, and any embed can be turned back into a plain link.
+- 🔵 **Manila Arc:** a borderless redesign where the bright content sheet floats on a manila "desk", with softened hairline borders.
+- 🔵 **Tasks:** cleaner new-chat and conversation headers.
+
+### 🟣 AI & providers
+- 🟣 Added Claude Fable 5 and bumped Opus 4.7 to 4.8.
+- 🟣 Conversation run timeout raised from 10 minutes to 1 hour (env-tunable); stale task errors clear on recovery.
+- 🟣 Scheduler trigger health is exposed on the daemon `/health` endpoint.
+
+### 🟡 Fixed
+- 🟡 **Agents:** unified the agent spawn working directory, fixing scheduled-run `ENOENT` failures.
+- 🟡 **Editor:** keep `EditorContent` mounted to avoid a flushSync-in-lifecycle warning.
+- 🟡 **Security:** patched `ws` and `next` advisories.
+
+---
+
 ## v0.4.4 · 2026-05-23
 
 The largest release since v0.4.0 (169 commits): Rooms, full internationalization, an Integrations Hub, a mobile layout, and a deep onboarding + tasks rework.
