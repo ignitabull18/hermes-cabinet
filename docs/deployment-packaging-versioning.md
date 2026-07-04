@@ -307,11 +307,39 @@ Release/CI (so the manifest can't lie):
 6. Make the Electron build part of the automated release (or block manifest publish until it runs) so the advertised version always has an installable build.
 7. Verify macOS signing/notarization end-to-end, or `update-electron-app` keeps emitting `error → failed` and re-pinning the modal.
 
+## Release Troubleshooting: Desktop Packaging Failures (from the v0.5.0 ship, 2026-07-04)
+
+The `electron-release.yml` desktop build hit three separate failures shipping v0.5.0. All are now fixed or documented; keep this as the runbook.
+
+### macOS: `notarytool` HTTP 403, "a required agreement is missing or has expired"
+
+Packaging and code-signing succeed, then `electron-forge publish` fails at *Finalizing package* with a notarize 403. This is **not** a code or secrets problem: the Apple Developer Program License Agreement is unsigned or expired on the account. Apple updates these terms periodically and blocks all notarization until accepted.
+
+- Fix (Account Holder only): sign in at <https://developer.apple.com/account> (and check App Store Connect agreements), accept the pending "Review Agreement" banner, then re-dispatch `electron-release.yml`.
+- The `APPLE_ID` / `APPLE_APP_PASSWORD` / `APPLE_TEAM_ID` / `APPLE_SIGN_IDENTITY` secrets being present does not prevent this.
+
+### macOS: `ENOENT` on `.next/standalone/.next/node_modules/node-pty-<hash>`
+
+electron-packager crashes during *Copying files* stat-ing a dangling symlink. Next.js output tracing writes hashed dedup symlinks (`node-pty-<hash> -> ../../node_modules/node-pty`); `scripts/prepare-electron-package.mjs` deletes node-pty's real dir so the daemon resolves it only from the staged `.native/` copy, which orphans that symlink. Fixed by `removeDanglingTracedSymlinks()` sweeping the traced `node_modules` after the removal. Reproduce/verify locally on a Mac with `npm run electron:make` (the DMG step's `cp` to `/Volumes` may fail under a sandbox, but packaging + signing completing is the signal the fix works).
+
+### Windows: Squirrel maker fails "Description is required"
+
+`electron-winstaller` requires a `<description>` in the generated `cabinet.nuspec`. Fixed by adding `description` to the `MakerSquirrel` config in `forge.config.cjs` (and `package.json`).
+
+### Windows asset name: space becomes a dot
+
+The Squirrel maker outputs `Cabinet-<version> Setup.exe`, but GitHub replaces the space with a dot when storing the release asset (`Cabinet-<version>.Setup.exe`). `generate-release-manifest.mjs` now advertises the as-uploaded (dot) name.
+
+### Getting a build-config fix into an already-tagged release
+
+`electron-release.yml` checks out `ref: <tag>`, so a fix on `main` is not built until the tag includes it. To rebuild desktop artifacts for the same version, force-move the tag (`git tag -f vX.Y.Z <fix-sha>; git push -f origin vX.Y.Z`) and re-dispatch. Re-pushing the tag re-fires `release.yml`; its two npm-publish jobs fail harmlessly because the version is already on npm (cosmetic), while `release-assets` refreshes the draft release + manifest.
+
 ## Recommended Operating Model Today
 
 - Use `create-cabinet` for the best end-user install and update experience.
 - Use Electron as the desktop packaging path for macOS, with user data stored outside the app bundle.
 - Treat GitHub Releases as the release authority and keep npm, the app version, and the release manifest in lockstep.
+- CI actions run on current majors (`actions/checkout@v7`, `actions/setup-node@v6`, `actions/upload-artifact@v7`, `softprops/action-gh-release@v3`) to stay off the deprecated Node 20 runtime.
 
 ---
 
