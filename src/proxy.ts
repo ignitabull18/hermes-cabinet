@@ -101,7 +101,11 @@ async function cloudProxy(req: NextRequest): Promise<NextResponse> {
 
 export async function proxy(req: NextRequest) {
   // Hosted edition: Supabase-JWT gate, independent of the KB_PASSWORD path.
-  if (process.env.CABINET_CLOUD === "1") {
+  // Opt-in via CABINET_JWT_JWKS_URL: only gate when it's configured. This keeps
+  // the in-app gate a deliberate, verifiable choice (the host agent already gates
+  // at the edge) — a cloud tenant with CABINET_CLOUD=1 but no JWKS URL configured
+  // must NOT fail closed and lock itself out.
+  if (process.env.CABINET_CLOUD === "1" && process.env.CABINET_JWT_JWKS_URL) {
     return cloudProxy(req);
   }
 

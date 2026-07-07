@@ -78,6 +78,7 @@ import {
   normalizeJobId,
 } from "../src/lib/jobs/job-normalization";
 import { stripAnsi } from "./pty/ansi";
+import { claudeStart, claudeCode, claudeStatus, claudeClear } from "./claude-login";
 import {
   completeClaudeSession,
   distillPtyOutput,
@@ -1936,6 +1937,41 @@ const server = http.createServer(async (req, res) => {
         lastTriggerError: schedulerStats.lastTriggerError,
       })
     );
+    return;
+  }
+
+  // ── Cloud Claude Code login (CABINET_CLOUD) ── one-click setup-token orchestration.
+  if (url.pathname.startsWith("/auth/claude/")) {
+    if (process.env.CABINET_CLOUD !== "1") {
+      res.writeHead(404).end(JSON.stringify({ error: "cloud only" }));
+      return;
+    }
+    const action = url.pathname.slice("/auth/claude/".length);
+    const sendJson = (code: number, body: unknown) => {
+      res.writeHead(code, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(body));
+    };
+    const readBody = (): Promise<Record<string, unknown>> =>
+      new Promise((resolve) => {
+        let b = "";
+        req.on("data", (c) => (b += c));
+        req.on("end", () => { try { resolve(JSON.parse(b || "{}")); } catch { resolve({}); } });
+      });
+    (async () => {
+      try {
+        if (action === "status") return sendJson(200, await claudeStatus());
+        if (action === "start" && req.method === "POST") return sendJson(200, await claudeStart());
+        if (action === "code" && req.method === "POST") {
+          const { code } = await readBody();
+          if (typeof code !== "string" || !code.trim()) return sendJson(400, { error: "code required" });
+          return sendJson(200, await claudeCode(code));
+        }
+        if (action === "clear" && req.method === "POST") return sendJson(200, await claudeClear());
+        sendJson(404, { error: "unknown action" });
+      } catch (e) {
+        sendJson(500, { error: (e as Error).message });
+      }
+    })();
     return;
   }
 
