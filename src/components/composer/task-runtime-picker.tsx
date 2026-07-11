@@ -56,7 +56,7 @@ const EFFORT_TONES: Record<
 > = {
   [AUTO_EFFORT_ID]: {
     header: "text-slate-600 dark:text-slate-200",
-    bg: "bg-slate-100 border border-slate-200 dark:bg-slate-800/50 dark:border-slate-700",
+    bg: "bg-slate-100 dark:bg-slate-800/50",
     line: "bg-slate-400 dark:bg-slate-500",
     dot: "bg-slate-500 dark:bg-slate-400",
     selected:
@@ -68,7 +68,7 @@ const EFFORT_TONES: Record<
   },
   none: {
     header: "text-slate-600 dark:text-slate-200",
-    bg: "bg-slate-100 border border-slate-200 dark:bg-slate-800/50 dark:border-slate-700",
+    bg: "bg-slate-100 dark:bg-slate-800/50",
     line: "bg-slate-400 dark:bg-slate-500",
     dot: "bg-slate-500 dark:bg-slate-400",
     selected:
@@ -80,7 +80,7 @@ const EFFORT_TONES: Record<
   },
   minimal: {
     header: "text-yellow-700 dark:text-yellow-300",
-    bg: "bg-yellow-50 border border-yellow-200 dark:bg-yellow-900/30 dark:border-yellow-800/60",
+    bg: "bg-yellow-50 dark:bg-yellow-900/30",
     line: "bg-yellow-400 dark:bg-yellow-500",
     dot: "bg-yellow-500 dark:bg-yellow-400",
     selected:
@@ -92,7 +92,7 @@ const EFFORT_TONES: Record<
   },
   low: {
     header: "text-amber-700 dark:text-amber-300",
-    bg: "bg-amber-50 border border-amber-200 dark:bg-amber-900/30 dark:border-amber-800/60",
+    bg: "bg-amber-50 dark:bg-amber-900/30",
     line: "bg-amber-400 dark:bg-amber-500",
     dot: "bg-amber-500 dark:bg-amber-400",
     selected:
@@ -104,7 +104,7 @@ const EFFORT_TONES: Record<
   },
   medium: {
     header: "text-orange-700 dark:text-orange-300",
-    bg: "bg-orange-50 border border-orange-200 dark:bg-orange-900/30 dark:border-orange-800/60",
+    bg: "bg-orange-50 dark:bg-orange-900/30",
     line: "bg-orange-400 dark:bg-orange-500",
     dot: "bg-orange-500 dark:bg-orange-400",
     selected:
@@ -116,7 +116,7 @@ const EFFORT_TONES: Record<
   },
   high: {
     header: "text-emerald-700 dark:text-emerald-300",
-    bg: "bg-emerald-50 border border-emerald-200 dark:bg-emerald-900/30 dark:border-emerald-800/60",
+    bg: "bg-emerald-50 dark:bg-emerald-900/30",
     line: "bg-emerald-400 dark:bg-emerald-500",
     dot: "bg-emerald-500 dark:bg-emerald-400",
     selected:
@@ -128,7 +128,7 @@ const EFFORT_TONES: Record<
   },
   xhigh: {
     header: "text-rose-700 dark:text-rose-300",
-    bg: "bg-rose-50 border border-rose-200 dark:bg-rose-900/30 dark:border-rose-800/60",
+    bg: "bg-rose-50 dark:bg-rose-900/30",
     line: "bg-rose-400 dark:bg-rose-500",
     dot: "bg-rose-500 dark:bg-rose-400",
     selected:
@@ -140,7 +140,7 @@ const EFFORT_TONES: Record<
   },
   max: {
     header: "text-red-700 dark:text-red-300",
-    bg: "bg-red-50 border border-red-200 dark:bg-red-900/30 dark:border-red-800/60",
+    bg: "bg-red-50 dark:bg-red-900/30",
     line: "bg-red-400 dark:bg-red-500",
     dot: "bg-red-500 dark:bg-red-400",
     selected:
