@@ -1846,7 +1846,8 @@
       "consoleLabel": "Live activity",
       "manualToggle": "Set it up manually",
       "manualHide": "Hide manual steps",
-      "whatNext": "You can close this and start a task."
+      "whatNext": "You can close this and start a task.",
+      "setUp": "Set up"
     }
   },
   "sidebar": {

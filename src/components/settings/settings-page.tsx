@@ -1454,18 +1454,26 @@ export function SettingsPage() {
                                   </div>
                                   <div className="flex items-center gap-2">
                                     {/* Seamless in-app setup (install / log in / verify) —
-                                        the no-terminal path. Guide stays as the manual
-                                        copy-paste fallback. */}
-                                    {!isReady && (
-                                      <button
-                                        onClick={() => useAppStore.getState().openProviderSetup(provider.id)}
-                                        className="inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
-                                        title={t("settings:providerSetup.title", { name: provider.name })}
-                                      >
-                                        <Sparkles className="size-3" />
-                                        {isInstalled ? t("status:server.logIn") : t("settings:providerSetup.installForMe")}
-                                      </button>
-                                    )}
+                                        the guided popup. Always available so a "ready"
+                                        provider that's actually misbehaving can be
+                                        re-run; prominent when not ready, quiet when it is.
+                                        Guide stays as the manual copy-paste fallback. */}
+                                    <button
+                                      onClick={() => useAppStore.getState().openProviderSetup(provider.id)}
+                                      className={cn(
+                                        "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
+                                        isReady
+                                          ? "border border-border text-foreground/70 hover:bg-muted hover:text-foreground"
+                                          : "bg-primary text-primary-foreground hover:opacity-90",
+                                      )}
+                                      title={t("settings:providerSetup.title", { name: provider.name })}
+                                    >
+                                      {!isInstalled
+                                        ? t("settings:providerSetup.installForMe")
+                                        : !isReady
+                                          ? t("status:server.logIn")
+                                          : t("settings:providerSetup.setUp")}
+                                    </button>
                                     {setupSteps.length > 0 && (
                                       <button
                                         onClick={() => setExpandedProvider(isExpanded ? null : provider.id)}
@@ -1799,7 +1807,7 @@ export function SettingsPage() {
                 <div className="flex items-center justify-between py-2 border-b border-border">
                   <span className="text-muted-foreground">{t("settings:about.aiLabel")}</span>
                   <span className="flex items-center gap-1.5">
-                    <Sparkles className="h-3.5 w-3.5" />
+                    <Cpu className="h-3.5 w-3.5" />
                     {t("settings:about.aiValue")}
                   </span>
                 </div>

@@ -406,7 +406,7 @@ export function Sidebar() {
         // the matching inline-start gap via --sidebar-toggle-offset.
         <div
           className="absolute top-[10px] z-20 flex h-10 items-center gap-1 animate-in fade-in zoom-in-95 duration-200"
-          style={{ insetInlineStart: "calc(0.5rem + var(--traffic-clearance, 0px))" }}
+          style={{ insetInlineStart: "calc(1rem + var(--traffic-clearance, 0px))" }}
         >
           {/* Brand persists when the sidebar is collapsed — it otherwise
               vanishes with the 0-width rail (and full-screen leaves the corner
@@ -430,7 +430,10 @@ export function Sidebar() {
             className="h-7 w-7 text-muted-foreground/60 hover:text-muted-foreground"
             onClick={() => setCollapsed(false)}
           >
-            <PanelLeft className="h-4 w-4 rtl:rotate-180" />
+            {/* translate-y: optical nudge — the icon centers on the wordmark's
+                full ascender box, but the italic lowercase reads along its
+                x-height band, so a geometric center looks ~2px high. */}
+            <PanelLeft className="h-4 w-4 translate-y-px rtl:rotate-180" />
           </Button>
         </div>
       )}
