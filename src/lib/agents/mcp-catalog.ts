@@ -255,7 +255,7 @@ const SLACK: CatalogEntry = {
   // connect" on a registered + authenticated server is now most likely an
   // app that was never installed to the workspace, not the toggle.
   connectFailureHint:
-    "Slack rejected the connection. Most likely, the app hasn't been installed to your workspace yet — go to OAuth & Permissions and click Install to Workspace. If it's already installed, check your app's MCP toggle under Features → Agents, then sign in again.",
+    "Slack rejected the connection. Most likely the app hasn't been installed to your workspace yet, so go to OAuth & Permissions and click Install to Workspace. If it's already installed, check your app's MCP toggle under Features → Agents, then sign in again.",
   credentials: [
     {
       envKey: "SLACK_CLIENT_ID",
@@ -263,7 +263,7 @@ const SLACK: CatalogEntry = {
       kind: "plain",
       required: true,
       placeholder: "1234567890.1234567890",
-      hint: "From your Slack app's Basic Information page. Required — Slack's MCP server needs your own app (it has no one-click sign-in).",
+      hint: "From your Slack app's Basic Information page. Required, because Slack's MCP server needs your own app (it has no one-click sign-in).",
     },
     {
       envKey: "SLACK_CLIENT_SECRET",
@@ -283,16 +283,16 @@ const SLACK: CatalogEntry = {
   setupSteps: [
     {
       title: "Create your Slack app",
-      body: "Slack's MCP server has no one-click sign-in — it needs an app you own. This button opens Slack with everything already filled in: pick your workspace, check the summary, and click Create.",
+      body: "Slack's MCP server has no one-click sign-in, so it needs an app you own. This button opens Slack with everything already filled in: pick your workspace, check the summary, and click Create.",
       action: { label: "Create my Slack app", href: buildSlackCreateUrl(SLACK_MANIFEST_OPTIONS) },
       callout: {
         tone: "warning",
-        body: "Choose the workspace carefully — Slack won't let an app move to a different one later.",
+        body: "Choose the workspace carefully. Slack won't let an app move to a different one later.",
       },
       image: {
         src: "/integrations/slack/01-create.png",
         alt: "Slack's review summary dialog showing User Scopes (6) and Redirect URLs (1), with a Create button",
-        caption: "Slack shows you exactly what it's about to create — 6 scopes, one redirect URL.",
+        caption: "Slack shows you exactly what it's about to create: 6 scopes, one redirect URL.",
         frameLabel: "What you'll see in Slack",
       },
       fallback: {
