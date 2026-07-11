@@ -158,6 +158,7 @@ export function SourceViewer({ path }: SourceViewerProps) {
           <ToolbarButton
             icon={WrapText}
             label="Wrap"
+            iconOnly
             active={wrap}
             onClick={() => setWrap((v) => !v)}
             title={wrap ? "Disable line wrap" : "Enable line wrap"}
@@ -167,6 +168,7 @@ export function SourceViewer({ path }: SourceViewerProps) {
           <ToolbarButton
             icon={copied ? Check : Copy}
             label={copied ? "Copied" : "Copy"}
+            iconOnly
             onClick={copyToClipboard}
             title={t("sourceViewer:copyContents")}
           />
@@ -174,6 +176,7 @@ export function SourceViewer({ path }: SourceViewerProps) {
         <ToolbarButton
           icon={Download}
           label="Download"
+          iconOnly
           title={t("sourceViewer:downloadFile")}
           onClick={() => {
             const a = document.createElement("a");
@@ -185,6 +188,7 @@ export function SourceViewer({ path }: SourceViewerProps) {
         <ToolbarButton
           icon={ExternalLink}
           label="Raw"
+          iconOnly
           onClick={() => window.open(assetUrl, "_blank")}
         />
         </ViewerToolbar>
