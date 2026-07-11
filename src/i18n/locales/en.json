@@ -1810,7 +1810,17 @@
       "verify": "Run verify",
       "verifyPass": "Verified — agents can use this provider.",
       "openSettings": "Open provider settings",
-      "done": "Done"
+      "done": "Done",
+      "installIntro": "Cabinet will install this for you. No terminal needed.",
+      "installingLong": "Installing… this takes about a minute.",
+      "showDetails": "Show details",
+      "hideDetails": "Hide details",
+      "signIn": "Sign in",
+      "signInHint": "A browser window will open. Approve it, then come back and click below.",
+      "signedInCheck": "I've signed in",
+      "stepInstall": "1. Install",
+      "stepLogin": "2. Sign in",
+      "stepVerify": "3. Check it works"
     }
   },
   "sidebar": {

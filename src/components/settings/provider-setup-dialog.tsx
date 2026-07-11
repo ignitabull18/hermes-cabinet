@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, Check, X, ExternalLink, Copy, Terminal as TerminalIcon } from "lucide-react";
+import { Loader2, Check, X, ExternalLink, Copy } from "lucide-react";
 import { useAppStore } from "@/stores/app-store";
 import { useLocale } from "@/i18n/use-locale";
 import { WebTerminal } from "@/components/terminal/web-terminal";
@@ -238,6 +238,7 @@ function InstallSection({ providerId, command, onDone }: { providerId: string; c
   const [running, setRunning] = useState(false);
   const [log, setLog] = useState("");
   const [result, setResult] = useState<null | { ok: boolean }>(null);
+  const [showDetails, setShowDetails] = useState(false);
   const preRef = useRef<HTMLPreElement>(null);
 
   useEffect(() => { preRef.current?.scrollTo(0, preRef.current.scrollHeight); }, [log]);
@@ -282,33 +283,56 @@ function InstallSection({ providerId, command, onDone }: { providerId: string; c
       <h3 className="text-xs font-semibold text-foreground/80">{t("settings:providerSetup.installTitle")}</h3>
       {command ? (
         <>
-          {/* Transparent: the exact command, always visible before/while it runs. */}
-          <div className="flex items-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-1 font-mono text-[11px]">
-            <span className="flex-1 truncate">{command}</span>
-            <CopyButton text={command} />
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={run}
-              disabled={running}
-              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
-            >
-              {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-              {running ? t("settings:providerSetup.installing") : t("settings:providerSetup.installForMe")}
-            </button>
-            {result && (
-              <span className={`text-[11px] ${result.ok ? "text-green-600 dark:text-green-400" : "text-destructive"}`}>
-                {result.ok ? t("settings:providerSetup.installOk") : t("settings:providerSetup.installFail")}
-              </span>
-            )}
-          </div>
+          {/* Non-technical framing first — the raw command lives under "details". */}
+          {result?.ok ? (
+            <p className="flex items-center gap-1.5 text-[12px] text-green-600 dark:text-green-400">
+              <Check className="h-4 w-4" /> {t("settings:providerSetup.installOk")}
+            </p>
+          ) : (
+            <>
+              <p className="text-[12px] text-muted-foreground">
+                {running ? t("settings:providerSetup.installingLong") : t("settings:providerSetup.installIntro")}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={run}
+                  disabled={running}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60"
+                >
+                  {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                  {running ? t("settings:providerSetup.installing") : t("settings:providerSetup.installForMe")}
+                </button>
+                {result && !result.ok && (
+                  <span className="text-[11px] text-destructive">{t("settings:providerSetup.installFail")}</span>
+                )}
+              </div>
+            </>
+          )}
+          {/* Details: the exact command + live output, collapsed by default so a
+              non-technical user isn't faced with a wall of terminal text. */}
           {(running || log) && (
-            <pre
-              ref={preRef}
-              className="max-h-40 overflow-auto rounded-md border border-border bg-black/90 p-2 font-mono text-[10.5px] leading-relaxed text-green-300"
-            >
-              {log || "…"}
-            </pre>
+            <div>
+              <button
+                onClick={() => setShowDetails((v) => !v)}
+                className="text-[10px] text-muted-foreground underline hover:text-foreground"
+              >
+                {showDetails ? t("settings:providerSetup.hideDetails") : t("settings:providerSetup.showDetails")}
+              </button>
+              {showDetails && (
+                <div className="mt-1 space-y-1">
+                  <div className="flex items-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-1 font-mono text-[10.5px]">
+                    <span className="flex-1 truncate">{command}</span>
+                    <CopyButton text={command} />
+                  </div>
+                  <pre
+                    ref={preRef}
+                    className="max-h-40 overflow-auto rounded-md border border-border bg-black/90 p-2 font-mono text-[10.5px] leading-relaxed text-green-300"
+                  >
+                    {log || "…"}
+                  </pre>
+                </div>
+              )}
+            </div>
           )}
         </>
       ) : (
@@ -412,25 +436,51 @@ function ClaudeLogin({ onDone }: { onDone: () => void }) {
 function TerminalLogin({ command, onDone }: { command: string; onDone: () => void }) {
   const { t } = useLocale();
   const [sessionId] = useState(() => `provider-login-${Date.now()}`);
+  const [started, setStarted] = useState(false);
+  const [showTerminal, setShowTerminal] = useState(false);
   return (
     <section className="space-y-2">
       <h3 className="text-xs font-semibold text-foreground/80">{t("settings:providerSetup.loginTitle")}</h3>
-      <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-        <TerminalIcon className="h-3.5 w-3.5" />
-        {t("settings:providerSetup.terminalLoginHint", { command })}
-      </p>
-      <div className="h-56 overflow-hidden rounded-md border border-border">
-        <WebTerminal
-          sessionId={sessionId}
-          adapterType="shell"
-          initialInput={command}
-          themeSurface="page"
-          onClose={() => { /* session ended; user clicks re-check */ }}
-        />
-      </div>
-      <button onClick={() => void onDone()} className="rounded-md border border-border px-2.5 py-1 text-xs hover:bg-muted">
-        {t("settings:providerSetup.recheck")}
-      </button>
+      {!started ? (
+        <>
+          <p className="text-[12px] text-muted-foreground">{t("settings:providerSetup.signInHint")}</p>
+          <button
+            onClick={() => setStarted(true)}
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90"
+          >
+            {t("settings:providerSetup.signIn")}
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> {t("settings:providerSetup.signInHint")}
+          </p>
+          {/* The terminal drives `<cli> login`; for browser OAuth it mostly opens
+              a window, so keep it collapsed by default — the user acts in the browser. */}
+          <button
+            onClick={() => setShowTerminal((v) => !v)}
+            className="text-[10px] text-muted-foreground underline hover:text-foreground"
+          >
+            {showTerminal ? t("settings:providerSetup.hideDetails") : t("settings:providerSetup.showDetails")}
+          </button>
+          <div className={showTerminal ? "h-56 overflow-hidden rounded-md border border-border" : "h-px w-px overflow-hidden opacity-0"}>
+            <WebTerminal
+              sessionId={sessionId}
+              adapterType="shell"
+              initialInput={command}
+              themeSurface="page"
+              onClose={() => { /* session ended; user clicks the button below */ }}
+            />
+          </div>
+          <button
+            onClick={() => void onDone()}
+            className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90"
+          >
+            {t("settings:providerSetup.signedInCheck")}
+          </button>
+        </>
+      )}
     </section>
   );
 }

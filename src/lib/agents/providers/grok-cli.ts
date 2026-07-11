@@ -1,9 +1,23 @@
+import fs from "fs";
+import os from "os";
+import path from "path";
 import type { AgentProvider, ProviderStatus } from "../provider-interface";
 import {
   checkCliProviderAvailable,
   execCli,
   resolveCliCommand,
 } from "../provider-cli";
+
+// `grok login` writes credentials here (mode 0600). Its presence means the
+// user signed in with their X account — no XAI_API_KEY needed. Checked so a
+// browser-logged-in user shows as authenticated, not "not logged in".
+function hasGrokBrowserAuth(): boolean {
+  try {
+    return fs.statSync(path.join(os.homedir(), ".grok", "auth.json")).size > 0;
+  } catch {
+    return false;
+  }
+}
 
 // Verified 2026-07-11 against xAI's Grok Build docs (x.ai/cli). grok-4.5 is
 // the model that powers Grok Build and is xAI's current recommended default;
@@ -54,21 +68,21 @@ export const grokCliProvider: AgentProvider = {
       link: { label: "Grok CLI docs", url: "https://x.ai/cli" },
     },
     {
-      title: "Get an xAI API key",
-      detail:
-        "On first launch grok opens a browser to sign in. For headless/agent runs Cabinet authenticates via XAI_API_KEY (or GROK_API_KEY) — create or retrieve one from the xAI Console.",
-      link: { label: "Open xAI Console", url: "https://console.x.ai/" },
-    },
-    {
-      title: "Export your API key",
-      detail:
-        "Add XAI_API_KEY to your shell (e.g. ~/.zshrc or ~/.bashrc) so agent runs can authenticate:",
-      command: "export XAI_API_KEY=xai-...",
+      title: "Log in",
+      detail: "Sign in with your X account. A browser window opens; approve it, then come back.",
+      command: "grok login --oauth",
     },
     {
       title: "Verify setup",
       detail: "Confirm headless mode works:",
       command: "grok -p 'Reply with exactly OK'",
+    },
+    {
+      title: "Or use an API key",
+      detail:
+        "Prefer a key instead of browser sign-in? Add XAI_API_KEY (from the xAI Console) to your shell so agent runs can authenticate.",
+      command: "export XAI_API_KEY=xai-...",
+      link: { label: "Open xAI Console", url: "https://console.x.ai/" },
     },
   ],
   detachedPromptLaunchMode: "one-shot",
@@ -118,36 +132,30 @@ export const grokCliProvider: AgentProvider = {
         };
       }
 
-      const hasKey =
+      // Authenticated if the user signed in with `grok login` (auth.json) OR
+      // set an API key. Either path lets agent runs reach the model.
+      const authed =
+        hasGrokBrowserAuth() ||
         Boolean(process.env.XAI_API_KEY?.trim()) ||
         Boolean(process.env.GROK_API_KEY?.trim());
+
+      const notAuthedError =
+        "Grok is installed but not signed in. Run `grok login` (or set XAI_API_KEY).";
 
       try {
         const cmd = resolveCliCommand(this);
         const version = await execCli(cmd, ["--version"], { timeout: 5000 });
-
-        if (hasKey) {
-          return {
-            available: true,
-            authenticated: true,
-            version: version ? `Grok CLI ${version}` : "Grok CLI installed",
-          };
-        }
-
         return {
           available: true,
-          authenticated: false,
-          error:
-            "Grok CLI is installed but XAI_API_KEY (or GROK_API_KEY) is not set in the environment.",
-          version: version ? `Grok CLI ${version}` : undefined,
+          authenticated: authed,
+          version: version ? `Grok CLI ${version}` : "Grok CLI installed",
+          error: authed ? undefined : notAuthedError,
         };
       } catch {
         return {
           available: true,
-          authenticated: hasKey,
-          error: hasKey
-            ? undefined
-            : "Grok CLI is installed but XAI_API_KEY is not set.",
+          authenticated: authed,
+          error: authed ? undefined : notAuthedError,
         };
       }
     } catch (error) {
