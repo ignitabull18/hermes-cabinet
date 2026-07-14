@@ -95,6 +95,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
+          draft: true
           files: |
             ${{ steps.package.outputs.bundle_name }}
             ${{ steps.package.outputs.bundle_name }}.sha256

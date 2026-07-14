@@ -6,9 +6,9 @@ All notable changes to Cabinet.
 
 ---
 
-## v0.5.2 · 2026-07-14
+## v0.5.3 · 2026-07-14
 
-Cabinet v0.5.2 brings the complete desktop delivery and provider-setup work prepared for v0.5.1, plus a clearer Slack setup flow and Google Ads integration. The unpublished v0.5.1 candidate was superseded after its npm authorization gate failed.
+Cabinet v0.5.3 brings the complete desktop delivery and provider-setup work prepared for v0.5.1, plus a clearer Slack setup flow and Google Ads integration. The unpublished v0.5.1 and v0.5.2 candidates were superseded after their release gates caught npm authorization and early-publication failures.
 
 ### 🟢 New
 - 🟢 **Guided provider setup:** install, sign in, and verify supported agent CLIs from one self-advancing dialog, with browser and interactive terminal login flows handled in-app.
@@ -23,14 +23,14 @@ Cabinet v0.5.2 brings the complete desktop delivery and provider-setup work prep
 - 🔵 **Viewer and supervision:** documents gain a full-screen focus mode, and supervised desktop installs gain one-click backend restart.
 
 ### 🟡 Fixed
-- 🟡 **Release publishing:** npm publication now uses the repository's granular `NPM_TOKEN`, and the `cabinetai` executable path remains valid in the published package.
+- 🟡 **Release publishing:** npm publication now uses the repository's granular `NPM_TOKEN`, the `cabinetai` executable path remains valid, and every artifact uploader preserves the draft until final approval.
 - 🟡 **Security:** integration verification is restricted to the selected MCP server's tools; rich HTML is sanitized at the final render boundary.
 - 🟡 **Reliability:** packaged-app smoke tests prove the app can reach its daemon; provider connection failures now explain the underlying rejection.
 - 🟡 **Layout state:** temporarily opening the sidebar or AI panel now restores its prior collapsed state instead of leaving it forced open.
 
 ### Windows signing status
 
-Windows signing is intentionally optional for v0.5.2. The pipeline still installs, launches, health-checks, and uninstalls the unsigned application before upload. Users may see an “Unknown publisher” label or Microsoft Defender SmartScreen warning until production signing is added.
+Windows signing is intentionally optional for v0.5.3. The pipeline still installs, launches, health-checks, and uninstalls the unsigned application before upload. Users may see an “Unknown publisher” label or Microsoft Defender SmartScreen warning until production signing is added.
 
 ---
 

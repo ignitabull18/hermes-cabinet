@@ -24,7 +24,7 @@ interface ReleaseEntry {
 
 const RELEASE_HIGHLIGHTS: ReleaseEntry[] = [
   {
-    version: "0.5.2",
+    version: "0.5.3",
     date: "2026-07-14",
     headline: "Desktop delivery and guided integration setup",
     bullets: [
