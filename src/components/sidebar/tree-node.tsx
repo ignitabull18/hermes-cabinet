@@ -534,7 +534,7 @@ function TreeNodeImpl({
   const cloud = useIsCloud();
   const {
     importFiles,
-    importFilesList,
+    importDataTransfer,
     importing,
     importFolder,
     importingFolder,
@@ -634,8 +634,8 @@ function TreeNodeImpl({
       const zone = computeZone(e);
       setDragOver(null);
 
-      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-        void importFilesList(importTargetPath, e.dataTransfer.files);
+      if (e.dataTransfer.types.includes("Files")) {
+        void importDataTransfer(importTargetPath, e.dataTransfer);
         return;
       }
 
@@ -685,7 +685,7 @@ function TreeNodeImpl({
       setDragOver,
       computeZone,
       siblings,
-      importFilesList,
+      importDataTransfer,
       importTargetPath,
     ]
   );

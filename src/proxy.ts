@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createRemoteJWKSet, jwtVerify } from "jose";
+import { isAuthEnabled } from "@/lib/auth/kb-auth";
 import {
-  KB_AUTH_COOKIE,
-  expectedToken,
-  isAuthEnabled,
-  timingSafeEqualHex,
-} from "@/lib/auth/kb-auth";
+  cloudGateActive,
+  cloudUserSub,
+  hasValidKbAuthCookie,
+} from "@/lib/auth/request-gate";
 
 // ---------------------------------------------------------------------------
 // Cabinet Cloud gate (CABINET_CLOUD=1)
@@ -21,48 +20,8 @@ import {
 // and only runs when CABINET_CLOUD === "1"; every other deployment keeps the
 // existing behavior untouched.
 
-/** Cookie the panel sets on `.runcabinet.com` (Supabase ES256 access token). */
-const CABINET_JWT_COOKIE = "cabinet_jwt";
-
-// A remote JWK set caches keys and rate-limits refetches internally, so build
-// it ONCE per JWKS URL and reuse it across requests (rebuilding per request
-// would defeat jose's caching and hammer the auth server). Memoized on the URL
-// so an env change (e.g. in tests) still rebuilds.
-let jwksMemo: {
-  url: string;
-  jwks: ReturnType<typeof createRemoteJWKSet>;
-} | null = null;
-
-function getJwks(url: string): ReturnType<typeof createRemoteJWKSet> {
-  if (jwksMemo && jwksMemo.url === url) return jwksMemo.jwks;
-  const jwks = createRemoteJWKSet(new URL(url));
-  jwksMemo = { url, jwks };
-  return jwks;
-}
-
-/**
- * Verify the `cabinet_jwt` cookie and return the token subject (the Supabase
- * user id), or null when the token is missing/invalid/expired or the gate is
- * misconfigured (no JWKS URL). Pinning `algorithms: ["ES256"]` blocks
- * algorithm-confusion attacks (`alg: none`, HS256-with-public-key). jose also
- * enforces `exp`/`nbf`, so expired sessions fail closed here.
- */
-async function cloudUserSub(req: NextRequest): Promise<string | null> {
-  const jwksUrl = process.env.CABINET_JWT_JWKS_URL;
-  if (!jwksUrl) return null; // Not configured -> deny (fail closed).
-
-  const token = req.cookies.get(CABINET_JWT_COOKIE)?.value;
-  if (!token) return null;
-
-  try {
-    const { payload } = await jwtVerify(token, getJwks(jwksUrl), {
-      algorithms: ["ES256"],
-    });
-    return typeof payload.sub === "string" && payload.sub ? payload.sub : null;
-  } catch {
-    return null;
-  }
-}
+// The JWT verification itself lives in @/lib/auth/request-gate so routes
+// excluded from the matcher below (/api/upload) can apply the identical gate.
 
 async function cloudProxy(req: NextRequest): Promise<NextResponse> {
   const { pathname } = req.nextUrl;
@@ -105,7 +64,7 @@ export async function proxy(req: NextRequest) {
   // the in-app gate a deliberate, verifiable choice (the host agent already gates
   // at the edge) — a cloud tenant with CABINET_CLOUD=1 but no JWKS URL configured
   // must NOT fail closed and lock itself out.
-  if (process.env.CABINET_CLOUD === "1" && process.env.CABINET_JWT_JWKS_URL) {
+  if (cloudGateActive()) {
     return cloudProxy(req);
   }
 
@@ -128,10 +87,7 @@ export async function proxy(req: NextRequest) {
 
   // Check auth cookie (constant-time; expected token is memoized so this is
   // O(1) per request — PBKDF2 runs once per process, not per request).
-  const token = req.cookies.get(KB_AUTH_COOKIE)?.value ?? "";
-  const expected = await expectedToken();
-
-  if (!timingSafeEqualHex(token, expected)) {
+  if (!(await hasValidKbAuthCookie(req))) {
     // API routes return 401
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -145,7 +101,12 @@ export async function proxy(req: NextRequest) {
 
 export const config = {
   matcher: [
-    // Protect all routes except static files and Next.js internals
-    "/((?!_next/static|_next/image|favicon.ico).*)",
+    // Protect all routes except static files and Next.js internals.
+    // /api/upload is excluded on purpose: matched requests get their body
+    // cloned into memory by Next (and silently truncated at 10MB —
+    // proxyClientMaxBodySize), which breaks and bloats large streaming
+    // uploads. That route enforces the identical gate itself via
+    // requireApiAuth() from @/lib/auth/request-gate.
+    "/((?!_next/static|_next/image|favicon.ico|api/upload).*)",
   ],
 };

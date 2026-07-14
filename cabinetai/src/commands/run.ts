@@ -3,7 +3,7 @@ import path from "path";
 import fs from "fs";
 import os from "os";
 import { log, success, error, warning } from "../lib/log.js";
-import { ensureApp } from "../lib/app-manager.js";
+import { ensureApp, latestInstalledVersion, compareSemver } from "../lib/app-manager.js";
 import { openBrowser, spawnChild } from "../lib/process.js";
 import {
   bootstrapCabinetAt,
@@ -246,7 +246,22 @@ async function runCabinet(opts: {
     success(`Bootstrapped "${name}" at ${cabinetDir}`);
   }
 
-  const version = opts.appVersion || VERSION;
+  // #97: `cabinetai update` downloads a newer app bundle but doesn't touch the
+  // CLI's compile-time VERSION. Without this, `run` would boot the older app
+  // forever — or, worse, retry a broken half-installed source tree from the
+  // stale version. Prefer whichever fully-installed version is newest.
+  // `--app-version` still wins so an explicit pin overrides the auto-pick.
+  const installedLatest = latestInstalledVersion();
+  const version =
+    opts.appVersion ||
+    (installedLatest && compareSemver(installedLatest, VERSION) > 0
+      ? installedLatest
+      : VERSION);
+  if (!opts.appVersion && installedLatest && installedLatest !== VERSION) {
+    if (compareSemver(installedLatest, VERSION) > 0) {
+      log(`Using installed app v${installedLatest} (CLI is v${VERSION} — re-install cabinetai to update the CLI too).`);
+    }
+  }
 
   console.log(`
   ┌─────────────────────────────┐

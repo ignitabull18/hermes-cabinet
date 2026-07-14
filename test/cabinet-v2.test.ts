@@ -49,6 +49,31 @@ async function writeAgentPersona(rel: string, slug: string, name: string): Promi
 }
 
 before(async () => {
+  // The overview's parent lookup walks up to DATA_DIR and only finds the
+  // root cabinet if a root `.cabinet` manifest exists. On a fresh checkout
+  // (CI) data/ starts empty and the manifest only appears if some other
+  // test file happens to bootstrap first — an ordering hazard (test files
+  // run concurrently). Provision it here so this file is self-contained;
+  // intentionally not removed in after() since other test files may rely
+  // on it the same way.
+  const rootManifest = path.join(DATA_DIR, ".cabinet");
+  try {
+    await fs.access(rootManifest);
+  } catch {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fs.writeFile(
+      rootManifest,
+      [
+        "schemaVersion: 1",
+        "id: home",
+        "name: Test Home",
+        "kind: home",
+        "entry: index.md",
+        "",
+      ].join("\n"),
+      "utf8"
+    );
+  }
   await writeCabinetManifest(FIX, "Test Co");
   for (const slug of ["ceo", "cfo", "coo", "cto"]) {
     await writeAgentPersona(FIX, slug, slug.toUpperCase());

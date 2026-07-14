@@ -16,6 +16,10 @@
  * the UI without verification). `cabinet` = a first-party server we build and
  * maintain (e.g. Discord) — first-party but NOT vendor-official, so it gets its
  * own label rather than borrowing "official" or hiding under "community".
+ * `vendor` = published by the vendor themselves (their domain, their OAuth) but
+ * NOT listed in the Official MCP Registry, so the `official` badge can't be
+ * verified and would be a claim we can't back. Calling it `community` would be
+ * the opposite lie. It gets its own honest label.
  *
  * Auth backends are deployment-aware (see `deployment-mode.ts`):
  *   - `cli-pkce`  — official remote HTTP server; the CLI performs PKCE
@@ -30,7 +34,7 @@
 
 import { buildSlackCreateUrl, buildSlackManifestJson } from "./slack-manifest";
 
-export type TrustTier = "official" | "registry" | "cabinet" | "community";
+export type TrustTier = "official" | "registry" | "vendor" | "cabinet" | "community";
 
 export type AuthBackend = "cli-pkce" | "user-app" | "token" | "cabinet-broker";
 
@@ -90,6 +94,8 @@ export interface CatalogEntry {
   registryId?: string;
   /** Declared tier; the UI shows the *verified* tier, falling back to this offline. */
   trustTier: TrustTier;
+  /** Display name of the publisher for the `vendor` tier — e.g. "Meta". */
+  vendorName?: string;
   /**
    * Cannot be connected on Cabinet Cloud — sign-in needs a local terminal / desktop app on the
    * user's own machine (e.g. a CLI `login`, the Figma desktop app's local MCP server, `sf org
@@ -892,6 +898,213 @@ const LINKEDIN: CatalogEntry = {
   ],
 };
 
+/**
+ * Meta's official hosted ads connector (beta, launched 2026-04-29).
+ *
+ * Public-client PKCE — `token_endpoint_auth_method: "none"`, so there is no
+ * secret anywhere and nothing for the user to paste. Meta's DCR is allowlisted
+ * by `client_name`: the Claude Code CLI registers fine under its own true name,
+ * which is why this works. Gemini/Codex are refused by Meta — the entry ships
+ * ungated anyway (see the spec), so connect succeeds via Claude Code but the
+ * server won't work for those agents at runtime.
+ *
+ * No `registryId`: Meta never listed this in the Official MCP Registry, and a
+ * generic id would substring-match a third party's listing and mint a false
+ * Official badge. Hence `trustTier: "vendor"`.
+ */
+const META_ADS: CatalogEntry = {
+  id: "meta-ads",
+  label: "Meta Ads",
+  blurb: "Report on, create, and manage Facebook & Instagram ad campaigns.",
+  iconSlug: "meta-ads",
+  bgImage: "/integrations/meta-ads-bg.webp",
+  logo: "/logos/facebook.svg",
+  sourceUrl: "https://www.facebook.com/business/news/meta-ads-ai-connectors",
+  trustTier: "vendor",
+  vendorName: "Meta",
+  authBackend: "cli-pkce",
+  transport: "http",
+  mcpServerName: "cabinet-meta-ads",
+  url: "https://mcp.facebook.com/ads",
+  credentials: [],
+  actions: [
+    "Pull insights, benchmarks & performance trends",
+    "Create campaigns, ad sets, ads & creatives",
+    "Activate campaigns and boost posts (spends budget)",
+    "Manage catalogs, product feeds & pixels",
+    "Build & update custom audiences",
+  ],
+  setupSteps: [
+    {
+      title: "Requires the Claude Code provider",
+      body: "Meta's connector only admits the Claude Code CLI. Agents running on Gemini or Codex can't authenticate with it, so switch the agent's provider to Claude Code before connecting.",
+    },
+    {
+      title: "Sign in with Meta",
+      body: "Click Connect & sign in: your agent's CLI opens Meta in the browser to authorize your ad account. No developer app, no App Review, nothing to paste.",
+    },
+    {
+      title: "This grants write access, including spend",
+      body: "The connector exposes 82 tools, ~30 of which change things. An agent can create AND activate campaigns and boost Instagram posts, which spends real budget. Connect the ad account you actually intend an agent to act on.",
+      href: "https://www.facebook.com/business/news/meta-ads-ai-connectors",
+    },
+  ],
+};
+
+const GOOGLE_ADS: CatalogEntry = {
+  id: "google-ads",
+  label: "Google Ads",
+  blurb: "Read campaigns, ad groups, and reporting data from Google Ads.",
+  iconSlug: "google-ads",
+  bgImage: "/integrations/google-ads-bg.webp",
+  logo: "/logos/google-ads.svg",
+  sourceUrl: "https://github.com/googleads/google-ads-mcp",
+  trustTier: "vendor",
+  vendorName: "Google",
+  authBackend: "token",
+  transport: "stdio",
+  mcpServerName: "cabinet-google-ads",
+  command: "pipx",
+  args: [
+    "run",
+    "--spec",
+    "git+https://github.com/googleads/google-ads-mcp.git",
+    "google-ads-mcp",
+  ],
+  serverEnv: {
+    GOOGLE_APPLICATION_CREDENTIALS: "${GOOGLE_ADS_APPLICATION_CREDENTIALS}",
+    GOOGLE_PROJECT_ID: "${GOOGLE_ADS_PROJECT_ID}",
+    GOOGLE_ADS_DEVELOPER_TOKEN: "${GOOGLE_ADS_DEVELOPER_TOKEN}",
+    GOOGLE_ADS_LOGIN_CUSTOMER_ID: "${GOOGLE_ADS_LOGIN_CUSTOMER_ID}",
+  },
+  credentials: [
+    {
+      envKey: "GOOGLE_ADS_APPLICATION_CREDENTIALS",
+      label: "Application credentials JSON path",
+      kind: "filepath",
+      required: true,
+      placeholder: "/path/to/credentials.json",
+      hint: "Path to the Google Cloud Application Default Credentials JSON file. Run `gcloud auth application-default login` with the Google Ads API scope to create it.",
+    },
+    {
+      envKey: "GOOGLE_ADS_PROJECT_ID",
+      label: "Google Cloud Project ID",
+      kind: "plain",
+      required: true,
+      placeholder: "my-gcp-project",
+      hint: "The Google Cloud project with the Google Ads API enabled.",
+    },
+    {
+      envKey: "GOOGLE_ADS_DEVELOPER_TOKEN",
+      label: "Developer token",
+      kind: "secret",
+      required: true,
+      placeholder: "aBcDeFgHiJkLmNoPqR",
+      hint: "From the Google Ads API Center. Needs at least Explorer access. Stored in .cabinet.env (0600).",
+    },
+    {
+      envKey: "GOOGLE_ADS_LOGIN_CUSTOMER_ID",
+      label: "Manager account ID (optional)",
+      kind: "plain",
+      required: false,
+      placeholder: "123-456-7890",
+      hint: "Required only if accessing accounts through a manager (MCC) account.",
+    },
+  ],
+  actions: [
+    "Query campaigns, ad groups & ads",
+    "Pull performance metrics & reporting",
+    "Manage customer lists & audiences",
+    "Run raw GAQL queries",
+  ],
+  setupSteps: [
+    {
+      title: "Install pipx (one-time)",
+      body: "The server runs locally through pipx, a Python tool runner. macOS: `brew install pipx`. Linux: `sudo apt install pipx` or `pip install --user pipx`. Windows: `pip install --user pipx`.",
+      href: "https://pipx.pypa.io/stable/#install-pipx",
+    },
+    {
+      title: "Enable the Google Ads API",
+      body: "In Google Cloud Console, enable the Google Ads API for your project.",
+      href: "https://console.cloud.google.com/apis/library/googleads.googleapis.com",
+    },
+    {
+      title: "Get a developer token",
+      body: "In Google Ads, go to Tools & Settings → API Center. New tokens may automatically receive Explorer access; if not, request it.",
+      href: "https://ads.google.com/aw/apicenter",
+    },
+    {
+      title: "Create Application Default Credentials",
+      body: "Run the gcloud command below in a terminal. It opens a browser to authorize, then saves a credentials JSON file — paste its path into the field below.",
+      copy: "gcloud auth application-default login --scopes https://www.googleapis.com/auth/adwords,https://www.googleapis.com/auth/cloud-platform",
+    },
+    {
+      title: "Paste your credentials below",
+      body: "Enter the credentials file path, project ID, and developer token. They're stored in .cabinet.env (0600) and injected at runtime.",
+    },
+  ],
+};
+
+const STACKADAPT: CatalogEntry = {
+  id: "stackadapt",
+  label: "StackAdapt",
+  blurb: "Read programmatic campaign delivery and reporting from StackAdapt.",
+  iconSlug: "stackadapt",
+  bgImage: "/integrations/stackadapt-bg.webp",
+  logo: "/logos/stackadapt.svg",
+  sourceUrl: "https://github.com/cabinetai/cabinet/tree/main/mcps/mcp-stackadapt",
+  trustTier: "cabinet",
+  authBackend: "token",
+  transport: "stdio",
+  mcpServerName: "cabinet-stackadapt",
+  command: "npx",
+  args: ["-y", "cabinet-mcp-stackadapt@0.1.0"],
+  localBuild: "mcps/mcp-stackadapt/dist/index.js",
+  serverEnv: {
+    STACKADAPT_API_TOKEN: "${STACKADAPT_API_TOKEN}",
+    STACKADAPT_API_URL: "${STACKADAPT_API_URL}",
+  },
+  credentials: [
+    {
+      envKey: "STACKADAPT_API_TOKEN",
+      label: "API token",
+      kind: "secret",
+      required: true,
+      placeholder: "sa_...",
+      hint: "A StackAdapt Public API token. Stored in .cabinet.env, never written literally into CLI config.",
+    },
+    {
+      envKey: "STACKADAPT_API_URL",
+      label: "GraphQL endpoint",
+      kind: "plain",
+      required: false,
+      placeholder: "https://api.stackadapt.com/graphql",
+      hint: "Optional. Leave blank for StackAdapt's production GraphQL endpoint.",
+    },
+  ],
+  actions: [
+    "Read campaign delivery",
+    "Summarize spend, impressions, clicks and conversions",
+    "Compare ROAS and efficiency metrics",
+    "Run advanced read-only GraphQL reports",
+  ],
+  setupSteps: [
+    {
+      title: "Create a StackAdapt Public API token",
+      body: "Create or copy a StackAdapt Public API token with access to the advertisers and campaigns you want agents to analyze.",
+      href: "https://docs.stackadapt.com/",
+    },
+    {
+      title: "Paste the token",
+      body: "Paste the token below. Cabinet stores it locally and injects it into the MCP server process at runtime.",
+    },
+    {
+      title: "Connect",
+      body: "Cabinet registers a read-only StackAdapt MCP server in your selected agent CLI configs. The server exposes queries only; mutations are rejected before they are sent.",
+    },
+  ],
+};
+
 /** Official public remote (HTTP + the CLI's PKCE OAuth). Nothing to paste. */
 function officialRemote(o: {
   id: string;
@@ -1210,6 +1423,9 @@ export const MCP_CATALOG: CatalogEntry[] = [
   DISCORD,
   TELEGRAM,
   LINKEDIN,
+  META_ADS,
+  GOOGLE_ADS,
+  STACKADAPT,
   ...EXTENDED,
 ];
 

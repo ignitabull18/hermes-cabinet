@@ -1422,9 +1422,13 @@ export function SettingsPage() {
                               >
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-3">
-                                    {/* Provider logo + a status dot (ready/installed/none). */}
-                                    <div className="relative shrink-0 text-foreground/80">
-                                      <ProviderGlyph icon={provider.icon} asset={provider.iconAsset} className="h-7 w-7" />
+                                    {/* Plain logo on light themes; on dark themes a
+                                        borderless light tile so monochrome marks stay
+                                        legible. + status dot. */}
+                                    <div className="relative shrink-0">
+                                      <div className="flex items-center justify-center rounded-lg dark:bg-white dark:p-1.5">
+                                        <ProviderGlyph icon={provider.icon} asset={provider.iconAsset} className="h-7 w-7" />
+                                      </div>
                                       <span className={cn(
                                         "absolute -bottom-0.5 -end-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-card",
                                         isReady ? "bg-green-500" : isInstalled ? "bg-amber-500" : "bg-muted-foreground/40",

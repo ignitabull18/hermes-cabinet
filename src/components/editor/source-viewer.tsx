@@ -16,6 +16,7 @@ import {
   setHtmlViewMode,
   type HtmlViewModeDetail,
 } from "@/lib/ui/html-view-mode";
+import { SafeHtml } from "@/components/ui/safe-html";
 
 interface SourceViewerProps {
   path: string;
@@ -158,6 +159,7 @@ export function SourceViewer({ path }: SourceViewerProps) {
           <ToolbarButton
             icon={WrapText}
             label="Wrap"
+            iconOnly
             active={wrap}
             onClick={() => setWrap((v) => !v)}
             title={wrap ? "Disable line wrap" : "Enable line wrap"}
@@ -167,6 +169,7 @@ export function SourceViewer({ path }: SourceViewerProps) {
           <ToolbarButton
             icon={copied ? Check : Copy}
             label={copied ? "Copied" : "Copy"}
+            iconOnly
             onClick={copyToClipboard}
             title={t("sourceViewer:copyContents")}
           />
@@ -174,6 +177,7 @@ export function SourceViewer({ path }: SourceViewerProps) {
         <ToolbarButton
           icon={Download}
           label="Download"
+          iconOnly
           title={t("sourceViewer:downloadFile")}
           onClick={() => {
             const a = document.createElement("a");
@@ -185,6 +189,7 @@ export function SourceViewer({ path }: SourceViewerProps) {
         <ToolbarButton
           icon={ExternalLink}
           label="Raw"
+          iconOnly
           onClick={() => window.open(assetUrl, "_blank")}
         />
         </ViewerToolbar>
@@ -211,9 +216,11 @@ export function SourceViewer({ path }: SourceViewerProps) {
                   <td className="w-12 pr-4 text-right text-[#858585] select-none align-top sticky left-0 bg-[#1e1e1e]">
                     {i + 1}
                   </td>
-                  <td
+                  <SafeHtml
+                    as="td"
+                    html={lineHtml || " "}
+                    profile="code"
                     className={`text-[#d4d4d4] pl-2 ${wrap ? "whitespace-pre-wrap break-all" : "whitespace-pre"}`}
-                    dangerouslySetInnerHTML={{ __html: lineHtml || " " }}
                   />
                 </tr>
               ))}

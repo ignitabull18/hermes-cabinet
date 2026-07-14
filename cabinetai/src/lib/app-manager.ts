@@ -335,7 +335,8 @@ async function cloneFallback(version: string, appDir: string, tempDir: string): 
 }
 
 /**
- * List installed app versions.
+ * List installed app versions (any `~/.cabinet/app/vX.Y.Z/` directory,
+ * including partial or broken installs).
  */
 export function listInstalledVersions(): string[] {
   const appParent = path.join(CABINET_HOME, "app");
@@ -346,4 +347,38 @@ export function listInstalledVersions(): string[] {
     .filter((e) => e.isDirectory() && e.name.startsWith("v"))
     .map((e) => e.name.slice(1))
     .sort();
+}
+
+/**
+ * Compare two semver-shaped strings numerically.
+ * Returns a negative number if `a < b`, positive if `a > b`, zero if equal.
+ * Ignores pre-release suffixes — we only care about ordering release lines.
+ */
+export function compareSemver(a: string, b: string): number {
+  const partsA = a.replace(/^v/, "").split("-")[0].split(".").map(Number);
+  const partsB = b.replace(/^v/, "").split("-")[0].split(".").map(Number);
+  for (let i = 0; i < 3; i++) {
+    const diff = (partsA[i] || 0) - (partsB[i] || 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+/**
+ * Highest fully-installed app version under `~/.cabinet/app/`, or `null`
+ * when none is installed.
+ *
+ * Callers use this to survive the case in #97: `cabinetai update` downloads
+ * a newer app bundle, but the CLI's compile-time `VERSION` is still the old
+ * one — so `cabinetai run` would keep booting the older install (possibly a
+ * broken half-installed source tree) instead of the just-downloaded app.
+ * Preferring the newest fully-installed version breaks that stuck state.
+ *
+ * Half-installed directories (created but never populated with a runnable
+ * bundle / node_modules) are filtered out via `isAppInstalled`.
+ */
+export function latestInstalledVersion(): string | null {
+  const versions = listInstalledVersions().filter(isAppInstalled);
+  if (versions.length === 0) return null;
+  return versions.sort(compareSemver).at(-1) ?? null;
 }
