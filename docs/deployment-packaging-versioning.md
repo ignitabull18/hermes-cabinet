@@ -92,6 +92,20 @@ artifacts and runtime logs are retained for inspection even when the smoke test
 fails. Tagged runs perform the same runtime smoke test after signing and
 notarization, before the release job is considered successful.
 
+The Windows job performs the equivalent installed-package check: it runs the
+generated Squirrel `Setup.exe`, launches the installed `Cabinet.exe`, verifies
+the app and daemon health routes, and uninstalls the test copy. Windows signing
+is enabled automatically for tagged builds after these GitHub Actions secrets
+are configured:
+
+- `WINDOWS_CERTIFICATE_BASE64` — base64-encoded Authenticode `.pfx`
+- `WINDOWS_CERTIFICATE_PASSWORD` — password for that certificate
+
+Branch validation remains unsigned so certificates are never exposed to branch
+builds. When signing is configured, tagged builds also require both the
+installer and installed executable to report a valid Authenticode signature
+before release artifacts are uploaded.
+
 A separate `publish-app-bundles` job (in `release.yml`) builds the zero-install standalone bundles per platform (`darwin-arm64`, `darwin-x64`, `linux-arm64`, `linux-x64`; Windows `win32-x64` pending PR #192) with `npm run build && npm run electron:prep`, then uploads each `cabinet-app-<key>-vX.Y.Z.tgz` + `.sha256` to the Release. The release manifest records these under `appBundles`, and `cabinetai run` consumes them (see docs/CABINETAI.md → `ensureApp`).
 
 ### Desktop data location
