@@ -136,6 +136,27 @@ function parseAuthorizeUrl(text: string): string | undefined {
 }
 
 /**
+ * Vendor OAuth errors that are meaningless on their own, mapped to copy that
+ * names the cause and the fix. Returns null when nothing matches — we never
+ * mask an error we don't actually understand.
+ *
+ * The DCR-refusal string this checks for is stock OAuth vocabulary, not
+ * Meta-specific: any auth server can phrase a dynamic-registration refusal
+ * this way. So the mapping is gated on `serverName` too — only Meta's ads
+ * connector gets Meta-specific copy. An unrecognized server keeps returning
+ * null so we never mask an error we don't understand.
+ */
+export function friendlyLoginError(output: string, serverName: string): string | null {
+  if (
+    serverName === "cabinet-meta-ads" &&
+    /Dynamic registration is not available for this client/i.test(output)
+  ) {
+    return "Meta's ads connector refused this client. Meta only admits the Claude Code CLI, so make sure Claude Code is installed and up to date.";
+  }
+  return null;
+}
+
+/**
  * Read the server's connection status from a *separate* process, which only
  * succeeds once Claude Code has persisted the OAuth token to disk. Resolves:
  *   - "authenticated": connected / no longer needs auth
@@ -334,7 +355,8 @@ export async function startMcpLogin(serverName: string): Promise<McpLoginStartRe
       // to error when a fresh auth-state read says it isn't authenticated.
       if (!settled) {
         fail(
-          session.error ??
+          friendlyLoginError(session.output, serverName) ??
+            session.error ??
             (exitCode === 0
               ? "Sign-in ended before an authorization URL was issued"
               : `Sign-in process exited (code ${exitCode}) before an authorization URL`),

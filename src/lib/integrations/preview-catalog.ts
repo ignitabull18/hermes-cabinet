@@ -189,6 +189,20 @@ const RAW_INTEGRATIONS: IntegrationItem[] = [
     implemented: false,
     actions: ["Search posts & mentions", "Summarise threads", "Draft posts"],
   },
+  {
+    id: "meta-ads",
+    name: "Meta Ads",
+    category: "social",
+    logo: L("facebook.svg"),
+    blurb: "Report on, create, and manage Facebook & Instagram ad campaigns.",
+    brand: "#0668E1",
+    implemented: false,
+    actions: [
+      "Pull insights, benchmarks & performance trends",
+      "Create and manage campaigns, ad sets & creatives",
+      "Activate campaigns and boost posts (spends budget)",
+    ],
+  },
 
   // ── Knowledge ───────────────────────────────────────────────────
   {
@@ -728,6 +742,7 @@ const LAUNCHED = new Set([
   "notion",
   "slack",
   "snowflake",
+  "meta-ads",
 ]);
 
 export const PREVIEW_INTEGRATIONS: IntegrationItem[] = RAW_INTEGRATIONS.map((i) => {
