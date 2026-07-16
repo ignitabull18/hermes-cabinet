@@ -1,6 +1,6 @@
 "use client";
 
-import { Home, Users, ListChecks, Blocks, Sparkles, Menu } from "lucide-react";
+import { Home, Users, ListChecks, Blocks, Asterisk, Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/stores/app-store";
 import { ROOT_CABINET_PATH } from "@/lib/cabinets/paths";
@@ -18,7 +18,7 @@ const TABS: TabSpec[] = [
   { id: "agents", icon: Users },
   { id: "tasks", icon: ListChecks },
   { id: "integrations", icon: Blocks },
-  { id: "ai", icon: Sparkles },
+  { id: "ai", icon: Asterisk },
   { id: "menu", icon: Menu },
 ];
 
