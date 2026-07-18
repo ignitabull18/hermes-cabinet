@@ -20,6 +20,7 @@ import { useLocale } from "@/i18n/use-locale";
 import { useUserProfile } from "@/hooks/use-user-profile";
 import { useVisibleInterval } from "@/hooks/use-visible-interval";
 import type { TFunction } from "i18next";
+import { HermesConnectionStatus } from "@/components/layout/hermes-connection-status";
 
 const DISCORD_SUPPORT_URL = "https://discord.gg/hJa5TRTbTH";
 const GITHUB_REPO_URL = "https://github.com/cabinetai/cabinet";
@@ -435,6 +436,7 @@ export function StatusBar() {
       className="@container relative flex items-center justify-between px-3 py-1 text-[11px] text-muted-foreground bg-transparent"
     >
       <div className="flex min-w-0 items-center gap-3">
+        <HermesConnectionStatus />
         <div className="relative">
           <button
             onClick={() => {
