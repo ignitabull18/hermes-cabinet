@@ -1,4 +1,5 @@
 import type { ConversationErrorKind } from "@/types/conversations";
+import type { AdapterRuntimeEvent } from "./adapters/types";
 import { getDaemonUrl, getOrCreateDaemonToken } from "./daemon-auth";
 import { assertAiAllowed } from "@/lib/cloud/tier";
 
@@ -36,6 +37,7 @@ interface DaemonSessionOutput {
   adapterErrorKind?: ConversationErrorKind | null;
   adapterErrorHint?: string | null;
   adapterErrorRetryAfterSec?: number | null;
+  adapterEvents?: AdapterRuntimeEvent[];
 }
 
 async function daemonFetch(path: string, init?: RequestInit): Promise<Response> {
@@ -78,6 +80,7 @@ export async function pollDaemonSessionUntilDone(
   sessionId: string,
   options: {
     onPartial?: (output: string) => void;
+    onEvent?: (event: AdapterRuntimeEvent) => void;
     intervalMs?: number;
     deadlineMs?: number;
   } = {}
@@ -85,6 +88,7 @@ export async function pollDaemonSessionUntilDone(
   const interval = options.intervalMs ?? 700;
   const deadline = Date.now() + (options.deadlineMs ?? 15 * 60 * 1000);
   let lastOutput = "";
+  let deliveredEvents = 0;
 
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, interval));
@@ -97,6 +101,12 @@ export async function pollDaemonSessionUntilDone(
         } catch {
           // swallow; partial-callback errors must not stop polling
         }
+      }
+      if (options.onEvent && Array.isArray(data.adapterEvents)) {
+        for (const event of data.adapterEvents.slice(deliveredEvents)) {
+          options.onEvent(event);
+        }
+        deliveredEvents = data.adapterEvents.length;
       }
       if (data.status !== "running") {
         return data;

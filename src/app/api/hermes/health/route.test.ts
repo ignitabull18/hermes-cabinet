@@ -12,6 +12,8 @@ const managedEnv = [
   "CABINET_HERMES_API_URL",
   "CABINET_HERMES_API_KEY",
   "CABINET_HERMES_MANAGEMENT_URL",
+  "CABINET_HERMES_GATEWAY_URL",
+  "CABINET_HERMES_GATEWAY_TOKEN",
   "CABINET_HERMES_PROFILE",
 ] as const;
 const originalEnv = Object.fromEntries(
@@ -38,6 +40,8 @@ function configureHermes() {
   process.env.CABINET_HERMES_API_URL = "http://hermes.test:8642";
   process.env.CABINET_HERMES_API_KEY = "route-secret";
   process.env.CABINET_HERMES_MANAGEMENT_URL = "http://hermes.test:56314";
+  process.env.CABINET_HERMES_GATEWAY_URL = "http://hermes.test:8645";
+  process.env.CABINET_HERMES_GATEWAY_TOKEN = "gateway-secret";
   process.env.CABINET_HERMES_PROFILE = "operator-os";
 }
 

@@ -2,6 +2,7 @@ import {
   defaultAdapterTypeForProvider,
   LEGACY_ADAPTER_BY_PROVIDER_ID,
 } from "@/lib/agents/adapters";
+import { getCabinetRuntimeMode } from "@/lib/runtime/runtime-config";
 
 /**
  * Shape of the per-request runtime override posted by the various composers
@@ -80,6 +81,20 @@ export function normalizeRuntimeOverride(
       ? requested.effort.trim()
       : undefined;
   const isTerminal = requested.runtimeMode === "terminal";
+
+  if (getCabinetRuntimeMode() === "hermes" && !isTerminal) {
+    const adapterConfig = {
+      ...(fallback.adapterConfig ?? {}),
+      ...(requested.model?.trim() ? { model: requested.model.trim() } : {}),
+      ...(requested.effort?.trim() ? { effort: requested.effort.trim() } : {}),
+    };
+    return {
+      providerId: "hermes",
+      adapterType: "hermes_runtime",
+      adapterConfig: Object.keys(adapterConfig).length ? adapterConfig : undefined,
+      isTerminal: false,
+    };
+  }
 
   const providerId = requestedProviderId ?? fallback.providerId;
 

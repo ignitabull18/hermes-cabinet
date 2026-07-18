@@ -104,8 +104,26 @@ export async function PATCH(
   const { action } = body;
 
   if (action === "stop") {
+    const beforeStop = await readConversationMeta(id, cabinetPath);
     await stopDaemonSession(id);
-    await finalizeConversation(id, { status: "failed", exitCode: 1 }, cabinetPath);
+    const stopped = await finalizeConversation(
+      id,
+      {
+        status: beforeStop?.adapterType === "hermes_runtime" ? "cancelled" : "failed",
+        exitCode: beforeStop?.adapterType === "hermes_runtime" ? 130 : 1,
+      },
+      cabinetPath
+    );
+    if (stopped?.hermes) {
+      await writeConversationMeta({
+        ...stopped,
+        hermes: {
+          ...stopped.hermes,
+          status: "interrupted",
+          updatedAt: new Date().toISOString(),
+        },
+      });
+    }
     publishConversationEvent({
       type: "task.updated",
       taskId: id,

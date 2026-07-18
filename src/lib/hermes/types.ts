@@ -28,3 +28,32 @@ export type HermesApiHealth = {
 export type HermesManagementStatus = {
   profiles?: unknown;
 };
+
+export type HermesGatewayEvent = {
+  type: string;
+  session_id?: string;
+  payload?: Record<string, unknown>;
+};
+
+export type HermesConversationStatus =
+  | "idle"
+  | "streaming"
+  | "completed"
+  | "interrupted"
+  | "failed";
+
+/**
+ * Cabinet's rebuildable pointer into Hermes-owned conversation state.
+ * Hermes remains authoritative for transcript and execution history.
+ */
+export type HermesConversationReference = {
+  profile: string;
+  sessionId: string;
+  liveSessionId?: string;
+  runId?: string;
+  parentRunId?: string;
+  eventSequence: number;
+  status: HermesConversationStatus;
+  artifactPaths: string[];
+  updatedAt: string;
+};

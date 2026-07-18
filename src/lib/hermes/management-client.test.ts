@@ -8,6 +8,8 @@ const config: HermesServerConfig = {
   apiBaseUrl: "http://hermes.test:8642",
   apiKey: secret,
   managementBaseUrl: "http://hermes.test:56314",
+  gatewayBaseUrl: "http://hermes.test:8645",
+  gatewayToken: "gateway-secret",
   profile: "operator-os",
   timeoutMs: 1_000,
 };

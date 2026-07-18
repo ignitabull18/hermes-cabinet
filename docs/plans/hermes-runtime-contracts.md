@@ -9,8 +9,9 @@ This record supports the Hermes-first Cabinet implementation plan. It is not a c
 - Hermes Agent: `0.18.2` (`2026.7.7.2`), upstream revision `862b1b37`
 - Local Hermes source revision: `594308d4bbe95548c9fe418bb10c449099426f93`
 - Local install: `/Users/ignitabull/.hermes/hermes-agent`
-- Default gateway: `127.0.0.1:8642`
+- Default authenticated API server: `127.0.0.1:8642`
 - Hermes management server observed at discovery time: `127.0.0.1:56314`
+- Dedicated headless TUI gateway used for interactive acceptance: `127.0.0.1:8645`
 - The local source checkout reported that it was behind the available upstream. It was not updated because changing the operator's Hermes installation is outside this repository task and M0 remains operator-owned.
 
 Live probes established:
@@ -19,6 +20,7 @@ Live probes established:
 - `GET /health/detailed` and `GET /v1/capabilities` returned HTTP 401 without a bearer key, confirming that detailed health and capability discovery are protected.
 - `GET /api/status` on the management server returned HTTP 200 and reported the available profiles without returning secret values.
 - The management server's gateway status is scoped to that management process. It did not reflect the separately supervised gateway process, so it must not be treated as the only machine-wide liveness signal.
+- The API server bearer key and the TUI gateway session token are distinct credentials. Reusing one as the other fails authentication. Cabinet therefore configures them independently as `CABINET_HERMES_API_KEY` and `CABINET_HERMES_GATEWAY_TOKEN`.
 
 No API keys, session tokens, secret values, or sudo values were copied into this repository or this report.
 
@@ -26,7 +28,7 @@ No API keys, session tokens, secret values, or sudo values were copied into this
 
 ### `HermesGatewayClient`
 
-Use the TUI Gateway JSON-RPC protocol over a server-side WebSocket or stdio bridge for interactive conversations.
+Use the TUI Gateway JSON-RPC protocol over a server-side WebSocket or stdio bridge for interactive conversations. Its endpoint is configured independently with `CABINET_HERMES_GATEWAY_URL`; the stable HTTP API endpoint remains `CABINET_HERMES_API_URL`.
 
 Verified operations include:
 
@@ -90,4 +92,4 @@ Browser code must never receive a Hermes bearer key, dashboard session token, se
 
 `CABINET_RUNTIME_MODE=hermes` selects the Hermes implementation path. The default remains `cabinet` so checking out this branch cannot silently convert an existing installation. This variable is server-only and must never use a `NEXT_PUBLIC_` prefix.
 
-Runtime credentials and endpoints will be added only to server-side configuration as their clients are implemented. They must remain in ignored local environment files or the existing secure Cabinet environment store, never committed source.
+Runtime credentials and endpoints are server-side configuration only. They must remain in ignored local environment files or the existing secure Cabinet environment store, never committed source. Interactive and management configuration currently uses `CABINET_HERMES_API_URL`, `CABINET_HERMES_API_KEY`, `CABINET_HERMES_MANAGEMENT_URL`, `CABINET_HERMES_GATEWAY_URL`, `CABINET_HERMES_GATEWAY_TOKEN`, and `CABINET_HERMES_PROFILE`.

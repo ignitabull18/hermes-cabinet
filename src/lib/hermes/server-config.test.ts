@@ -9,6 +9,8 @@ const valid = {
   CABINET_HERMES_API_URL: "http://127.0.0.1:8642/",
   CABINET_HERMES_API_KEY: "server-secret",
   CABINET_HERMES_MANAGEMENT_URL: "http://127.0.0.1:56314/",
+  CABINET_HERMES_GATEWAY_URL: "http://127.0.0.1:8645/",
+  CABINET_HERMES_GATEWAY_TOKEN: "gateway-secret",
   CABINET_HERMES_PROFILE: "operator-os",
 };
 
@@ -17,6 +19,8 @@ test("Hermes server configuration validates and normalizes the complete contract
     apiBaseUrl: "http://127.0.0.1:8642",
     apiKey: "server-secret",
     managementBaseUrl: "http://127.0.0.1:56314",
+    gatewayBaseUrl: "http://127.0.0.1:8645",
+    gatewayToken: "gateway-secret",
     profile: "operator-os",
     timeoutMs: 3_000,
   });
@@ -27,6 +31,8 @@ test("Hermes server configuration fails clearly without echoing secret values", 
     "CABINET_HERMES_API_URL",
     "CABINET_HERMES_API_KEY",
     "CABINET_HERMES_MANAGEMENT_URL",
+    "CABINET_HERMES_GATEWAY_URL",
+    "CABINET_HERMES_GATEWAY_TOKEN",
     "CABINET_HERMES_PROFILE",
   ] as const) {
     const env = { ...valid, [name]: "" };

@@ -2,9 +2,24 @@ export type HermesServerConfig = {
   apiBaseUrl: string;
   apiKey: string;
   managementBaseUrl: string;
+  gatewayBaseUrl: string;
+  gatewayToken: string;
   profile: string;
   timeoutMs: number;
 };
+
+export function hermesGatewayWebSocketUrl(config: HermesServerConfig): string {
+  const url = new URL(config.gatewayBaseUrl);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  url.pathname = "/api/ws";
+  url.search = "";
+  url.hash = "";
+  // Hermes loopback gateways authenticate WebSocket upgrades with the same
+  // server credential in a query parameter. This URL must never cross the
+  // server/browser boundary or be logged.
+  url.searchParams.set("token", config.gatewayToken);
+  return url.toString();
+}
 
 export class HermesConfigurationError extends Error {
   readonly code = "HERMES_MISCONFIGURED";
@@ -64,6 +79,14 @@ export function readHermesServerConfig(
     managementBaseUrl: baseUrl(
       "CABINET_HERMES_MANAGEMENT_URL",
       env.CABINET_HERMES_MANAGEMENT_URL
+    ),
+    gatewayBaseUrl: baseUrl(
+      "CABINET_HERMES_GATEWAY_URL",
+      env.CABINET_HERMES_GATEWAY_URL
+    ),
+    gatewayToken: required(
+      "CABINET_HERMES_GATEWAY_TOKEN",
+      env.CABINET_HERMES_GATEWAY_TOKEN
     ),
     profile: required("CABINET_HERMES_PROFILE", env.CABINET_HERMES_PROFILE),
     timeoutMs: timeout(env.CABINET_HERMES_TIMEOUT_MS),
