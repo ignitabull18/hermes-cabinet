@@ -133,3 +133,19 @@ test("preserves structured diffs and evidence references for the activity UI", (
   assert.equal(snapshot.tools[0].durationSeconds, 0.25);
   assert.equal(snapshot.tools[0].summary, "Updated one file");
 });
+
+test("derives the verified 120 second sudo expiry when Hermes omits expires_at", () => {
+  const snapshot = normalizeHermesActivity([
+    {
+      seq: 10,
+      ts: "2026-07-18T20:00:00.000Z",
+      type: "runtime.event",
+      runtimeType: "sudo.request",
+      runId: "run-sudo",
+      sessionId: "session-sudo",
+      payload: { request_id: "sudo-1" },
+    },
+  ]);
+
+  assert.equal(snapshot.decisions[0].expiresAt, "2026-07-18T20:02:00.000Z");
+});

@@ -146,9 +146,10 @@ test("sends governed responses with exact Hermes request identity", async () => 
   socket.respond(2, { status: "ok" });
   assert.deepEqual(await secret, { status: "ok" });
 
-  const sudo = client.respondSudo("sudo-1", "never-persist-this-either");
+  const sudo = client.respondSudo("sudo-1", "");
   socket.respond(3, { status: "expired" });
   assert.deepEqual(await sudo, { status: "expired" });
+  assert.deepEqual(socket.sent[3].params, { request_id: "sudo-1", password: "" });
 
   assert.deepEqual(socket.sent.slice(1).map((frame) => frame.method), [
     "approval.respond",

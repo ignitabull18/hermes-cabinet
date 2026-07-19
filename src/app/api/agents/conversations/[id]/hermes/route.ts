@@ -141,12 +141,17 @@ export async function POST(
       status = result.status === "expired" ? "expired" : "resolved";
       decision = result.status === "expired" ? "expired" : "provided";
     } else if (body.kind === "sudo") {
-      if (!body.requestId || typeof body.value !== "string" || !body.value) {
-        throw new Error("A sudo value and request ID are required.");
+      if (!body.requestId) {
+        throw new Error("A sudo request ID is required.");
       }
-      const result = await client.respondSudo(body.requestId, body.value);
+      const rejecting = action === "reject";
+      if (!rejecting && (typeof body.value !== "string" || !body.value)) {
+        throw new Error("A sudo value is required when approving.");
+      }
+      // Hermes 0.18.2 defines an empty sudo password as an explicit rejection.
+      const result = await client.respondSudo(body.requestId, rejecting ? "" : body.value!);
       status = result.status === "expired" ? "expired" : "resolved";
-      decision = result.status === "expired" ? "expired" : "approved";
+      decision = result.status === "expired" ? "expired" : rejecting ? "rejected" : "approved";
     }
 
     await appendEventLog(

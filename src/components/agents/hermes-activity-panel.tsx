@@ -304,8 +304,18 @@ function DecisionCard({
                   placeholder={request.kind === "sudo" ? "Sudo password" : "Secret value"}
                 />
                 <Button size="sm" disabled={busy || !value} onClick={() => void submitValue()}>
-                  Submit once
+                  {request.kind === "sudo" ? "Approve once" : "Submit once"}
                 </Button>
+                {request.kind === "sudo" ? (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={busy}
+                    onClick={() => void onSubmit(request, { action: "reject" })}
+                  >
+                    Reject
+                  </Button>
+                ) : null}
               </div>
             </div>
           ) : null}

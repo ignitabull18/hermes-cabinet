@@ -69,6 +69,15 @@ function seq(event: EventLine): number {
   return typeof event.seq === "number" ? event.seq : 0;
 }
 
+function sudoExpiry(event: EventLine, payload: Record<string, unknown>): string | null {
+  const explicit = text(payload.expires_at);
+  if (explicit) return explicit;
+  const occurredAt = text(event.occurredAt) || text(event.ts);
+  if (!occurredAt) return null;
+  const timestamp = Date.parse(occurredAt);
+  return Number.isFinite(timestamp) ? new Date(timestamp + 120_000).toISOString() : null;
+}
+
 function decisionKind(runtimeType: string): HermesDecisionKind | null {
   if (runtimeType === "clarify.request") return "clarification";
   if (runtimeType === "approval.request") return "approval";
@@ -226,7 +235,7 @@ export function normalizeHermesActivity(events: EventLine[]): HermesActivitySnap
               : kind === "approval"
                 ? "Consequential action"
                 : "Input required",
-        expiresAt: text(payload.expires_at),
+        expiresAt: kind === "sudo" ? sudoExpiry(event, payload) : text(payload.expires_at),
         decision: null,
       });
       continue;

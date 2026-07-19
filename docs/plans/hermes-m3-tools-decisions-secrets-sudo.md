@@ -10,7 +10,7 @@ This is the implementation and acceptance record for the M3 governed Hermes inte
 - Failed operations offer a direct retry only for an exact allowlist of read-only tools. Potentially consequential failures offer investigation without replaying the action.
 - Clarification, approval, secret, and sudo requests render as explicit decision cards with session, run, request, and event identity wherever Hermes supplies it.
 - Clarifications support defined choices and free text. Approval requests support one-time or session approval, rejection, and comments that steer Hermes without resolving the request.
-- Secret and sudo values travel from a masked, non-autocompleting field to an exact server-side Hermes request. Cabinet disables copy, cut, and paste for the field, clears it after success, and never writes the value to browser storage.
+- Secret and sudo values travel from a masked, non-autocompleting field to an exact server-side Hermes request. Cabinet disables copy, cut, and paste for the field, clears it after success, and never writes the value to browser storage. Sudo also exposes explicit Reject and Cancel controls.
 - Server-side response handling re-reads the current event log, matches the exact pending request, enforces Hermes expiry, and atomically claims a one-time decision marker before sending a response.
 - Decision markers contain only the request identity, action, and claim time. They are created with mode `0600`; no clarification answer, comment, secret, or sudo value is written to them.
 - Secret and sudo flows switch the adapter into sensitive mode. Subsequent message, reasoning, tool, completion, and error payload values are replaced before any transcript, event, or telemetry persistence.
@@ -39,6 +39,7 @@ All flows were exercised against Hermes Agent 0.18.2 using the clean `operator-o
 - Conversation `2026-07-18T23-53-08-154Z-3a52ce78-editor-manual` emitted a real `secret.request` for a temporary acceptance variable. A random one-use canary resolved it. Replaying the resolved request returned HTTP 409.
 - The temporary profile skill and environment entry used to trigger that request were removed immediately after the test. The key is absent from both profile environment locations.
 - Conversation `2026-07-18T23-56-12-741Z-3a52ce78-editor-manual` ran the harmless command `sudo true`, received sudo request `da01b597` at event 41, and submitted a random fake password. The first response returned HTTP 200, the duplicate returned HTTP 409, and the run completed without a privileged side effect.
+- Conversation `2026-07-19T00-08-13-371Z-3a52ce78-editor-manual` exercised the distinct sudo rejection contract from the browser. The card showed the exact `sudo true` action, privileged risk, requesting identity, derived current-contract expiry, Approve once, Reject, and Cancel controls. Clicking Reject sent Hermes's defined empty-password rejection, changed the request to resolved with decision `rejected`, and completed without privilege.
 - Exact canary scans of the Cabinet conversation projection and Hermes logs found no sudo canary. The persisted decision marker contained only `action`, `claimedAt`, `kind`, `requestEventSeq`, and `requestId`.
 - Persisted post-secret and post-sudo output contains redaction placeholders rather than model text, tool values, reasoning, or credential material.
 
