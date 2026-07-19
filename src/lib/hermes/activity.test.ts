@@ -105,3 +105,31 @@ test("only marks failed read-only tools as directly retryable", () => {
   assert.equal(snapshot.tools[1].retryable, false);
   assert.equal(snapshot.tools[2].retryable, false);
 });
+
+test("preserves structured diffs and evidence references for the activity UI", () => {
+  const snapshot = normalizeHermesActivity([
+    {
+      seq: 8,
+      type: "runtime.event",
+      runtimeType: "tool.complete",
+      runId: "run-evidence",
+      payload: {
+        tool_id: "edit-1",
+        name: "apply_patch",
+        duration_s: 0.25,
+        inline_diff: "-before\n+after",
+        artifacts: ["/api/assets/report.pdf"],
+        screenshots: ["https://example.test/evidence.png"],
+        links: ["https://example.test/result"],
+        result: { summary: "Updated one file" },
+      },
+    },
+  ]);
+
+  assert.deepEqual(snapshot.tools[0].artifacts, ["/api/assets/report.pdf"]);
+  assert.deepEqual(snapshot.tools[0].screenshots, ["https://example.test/evidence.png"]);
+  assert.deepEqual(snapshot.tools[0].links, ["https://example.test/result"]);
+  assert.equal(snapshot.tools[0].inlineDiff, "-before\n+after");
+  assert.equal(snapshot.tools[0].durationSeconds, 0.25);
+  assert.equal(snapshot.tools[0].summary, "Updated one file");
+});
