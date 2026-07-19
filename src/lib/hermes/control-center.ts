@@ -69,7 +69,8 @@ function statusFor(
 export async function getHermesControlCenterSnapshot(): Promise<HermesControlCenterSnapshot> {
   const config = readHermesServerConfig();
   const client = new HermesManagementClient(config);
-  const [health, management] = await Promise.all([client.health(), client.snapshot()]);
+  const health = await client.health();
+  const management = await client.snapshot(health);
   const statusInput = {
     online: health.status === "online",
     gateway: health.gatewayState ?? "unknown",

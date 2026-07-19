@@ -124,7 +124,7 @@ export class HermesManagementClient {
     }
   }
 
-  async snapshot(): Promise<HermesManagementSnapshot> {
+  async snapshot(healthOverride?: HermesHealthSnapshot): Promise<HermesManagementSnapshot> {
     const diagnostics: HermesManagementSnapshot["diagnostics"] = [];
     const read = async (area: string, path: string, fallback: unknown) => {
       try {
@@ -140,7 +140,7 @@ export class HermesManagementClient {
     };
     const [health, profilesRaw, manifestRaw, skillsRaw, jobsRaw, memoryRaw, mcpRaw, toolsetsRaw, pluginsRaw, openCli] =
       await Promise.all([
-        this.health(),
+        healthOverride ?? this.health(),
         read("profiles", "/api/profiles", { profiles: [] }),
         read("agent manifest", `/api/profiles/${encodeURIComponent(this.config.profile)}/soul`, { exists: false, content: "" }),
         read("skills", this.profilePath("/api/skills"), []),
