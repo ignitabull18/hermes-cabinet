@@ -179,7 +179,24 @@ function CapabilityPanel({ snapshot, records, busy, promote }: { snapshot: Herme
   </Section>;
 }
 
-function DiagnosticsPanel({ snapshot }: { snapshot: HermesManagementSnapshot }) { return <Section title="Management diagnostics" description={`Version-pinned adapter ${snapshot.compatibility.adapter}, checked ${new Date(snapshot.checkedAt).toLocaleString()}.`}><Rows>{snapshot.diagnostics.map((item, index) => <Row key={`${item.area}-${index}`} title={item.area} detail={item.message} badge={item.status} />)}</Rows></Section>; }
+function DiagnosticsPanel({ snapshot }: { snapshot: HermesManagementSnapshot }) {
+  const [opening, setOpening] = useState(false); const [escapeStatus, setEscapeStatus] = useState<string | null>(null);
+  const openDesktop = async () => {
+    if (!window.confirm("Open Hermes Desktop for diagnostics or emergency recovery? Do not use it as a competing daily execution interface.")) return;
+    setOpening(true); setEscapeStatus(null);
+    try {
+      const response = await fetch("/api/hermes/desktop", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirmed: true, purpose: "diagnostic" }) });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "Hermes Desktop could not be opened.");
+      setEscapeStatus("Hermes Desktop opened for diagnostics. Cabinet and Hermes histories were not changed.");
+    } catch (error) { setEscapeStatus(error instanceof Error ? error.message : "Hermes Desktop could not be opened."); }
+    finally { setOpening(false); }
+  };
+  return <Section title="Management diagnostics" description={`Version-pinned adapter ${snapshot.compatibility.adapter}, checked ${new Date(snapshot.checkedAt).toLocaleString()}.`}>
+    <Rows>{snapshot.diagnostics.map((item, index) => <Row key={`${item.area}-${index}`} title={item.area} detail={item.message} badge={item.status} />)}</Rows>
+    <div className="mt-4 rounded-md border border-amber-500/25 bg-amber-500/5 p-3"><p className="text-xs font-medium">Hermes Desktop diagnostic escape hatch</p><p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">Use only when Cabinet diagnostics are insufficient or emergency recovery requires the native Hermes surface. Opening it does not start work, copy state, or create a competing Cabinet history.</p><Button className="mt-2" size="sm" variant="outline" disabled={opening} onClick={() => void openDesktop()}>{opening ? "Opening…" : "Open Hermes Desktop diagnostics"}</Button>{escapeStatus ? <p className="mt-2 text-[11px] text-muted-foreground" role="status">{escapeStatus}</p> : null}</div>
+  </Section>;
+}
 
 function RunEvidencePanel({ runs }: { runs: HermesRunProjection[] }) {
   return <Section title="Run history and performance evidence" description="This is a bounded, rebuildable projection of Hermes-owned runs tied to their originating Cabinet context."><Rows>{runs.length ? runs.map((run) => {

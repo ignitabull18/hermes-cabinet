@@ -11,6 +11,11 @@ test.afterAll(async () => { await cabinet?.close(); });
 
 test("management workspace projects Hermes-owned state and confirms writes", async ({ page }) => {
   const posts: Record<string, unknown>[] = [];
+  let desktopDiagnostic: Record<string, unknown> | null = null;
+  await page.route("**/api/hermes/desktop", async (route) => {
+    desktopDiagnostic = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({ json: { ok: true, purpose: "diagnostic", application: "/Applications/Hermes.app" } });
+  });
   await page.route("**/api/hermes/management", async (route) => {
     if (route.request().method() === "POST") {
       posts.push(route.request().postDataJSON() as Record<string, unknown>);
@@ -73,4 +78,9 @@ test("management workspace projects Hermes-owned state and confirms writes", asy
     schedule: "every day at 9am",
     skills: ["research", "summarize"],
   });
+
+  await page.getByRole("button", { name: "Open Hermes Desktop diagnostics" }).click();
+  await expect.poll(() => desktopDiagnostic).not.toBeNull();
+  expect(desktopDiagnostic).toEqual({ confirmed: true, purpose: "diagnostic" });
+  await expect(page.getByText("Hermes Desktop opened for diagnostics.", { exact: false })).toBeVisible();
 });
