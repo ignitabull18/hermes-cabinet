@@ -59,6 +59,8 @@ A real background run was started through Cabinet with idempotency key and conte
 
 The active profile uses Hermes manual approvals. Harmless commands were correctly allowed without a prompt; Hermes only pauses commands its danger policy classifies as consequential. Mocked contract acceptance proves pending approval projection and stale-decision rejection. Earlier M3 live gateway acceptance remains the evidence for interactive approval, secret, and sudo flows. M6 does not broaden that claim.
 
+A second live background run, `run_88b9db486a79426091427844a69f2c2f`, executed the governed-decision path against a disposable mode-0600 file. Hermes classified `chmod 777` as world/other-writable, paused in `waiting_for_approval`, and exposed stable request ID `run_88b9db486a79426091427844a69f2c2f:approval:2` with once, session, always, and deny choices. Cabinet submitted an explicit denial. The run emitted `approval.request` and `approval.responded`, completed with the denial result, and the file remained mode 0600 before the disposable canary was removed.
+
 ## Verification
 
 - Focused M6 contract tests: 11 passed
