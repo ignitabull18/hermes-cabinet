@@ -128,6 +128,48 @@ test("Today orients the owner and keeps governed action results in the inspector
   expect({ consoleIssues, responseIssues }).toEqual({ consoleIssues: [], responseIssues: [] });
 });
 
+test("meaningful completion contracts the queue and advances Momentum", async ({ page }) => {
+  const queuedCard = {
+    ...card,
+    id: "decision-2",
+    title: "Confirm missing business facts",
+    sourceId: "gmail:notice-2",
+    missingFacts: ["Current balance"],
+  };
+  const initialCockpit = { ...cockpit, cards: [card, queuedCard] };
+  const completedCockpit = {
+    ...initialCockpit,
+    cards: [card],
+    history: [{
+      id: "history-1",
+      action: "investigate",
+      cardId: queuedCard.id,
+      actor: "Jeremy",
+      at: new Date().toISOString(),
+      outcome: "completed",
+      detail: "Verified evidence and confirmed the missing facts.",
+    }],
+  };
+  let completed = false;
+  await page.route("**/api/hermes/cockpit", async (route) => {
+    if (route.request().method() === "POST") return route.fulfill({ json: { ok: true } });
+    return route.fulfill({ json: completed ? completedCockpit : initialCockpit });
+  });
+  await page.route("**/api/hermes/cockpit/actions", async (route) => {
+    completed = true;
+    await route.fulfill({ json: { ok: true, runId: "run_cockpit_2" } });
+  });
+
+  await enterCockpit(page);
+  const root = page.getByTestId("daily-business-cockpit");
+  const row = root.getByTestId("cockpit-queue-row-decision-2");
+  await row.getByRole("button", { name: "Investigate" }).click();
+  await expect(row).toHaveClass(/cockpit-queue-exit/);
+  await expect(row).toBeHidden();
+  await expect(root.getByRole("status")).toContainText("Confirm missing business facts cleared.");
+  await expect(root.getByText("1 of 2 clear")).toBeVisible();
+});
+
 test("390px Today has no horizontal overflow and uses a full-height detail sheet", async ({ page }) => {
   const consoleIssues: string[] = [];
   page.on("console", (message) => {
@@ -143,6 +185,9 @@ test("390px Today has no horizontal overflow and uses a full-height detail sheet
 
   const root = page.getByTestId("daily-business-cockpit");
   await expect(root.getByRole("navigation", { name: "Cockpit mobile" })).toBeVisible();
+  const firstViewItems = root.locator(".cockpit-first-view > *");
+  expect(await firstViewItems.count()).toBeGreaterThan(0);
+  expect(await firstViewItems.first().evaluate((element) => getComputedStyle(element).animationName)).toBe("none");
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   await root.getByRole("button", { name: "Open details" }).click();
   const inspector = page.getByTestId("cockpit-inspector");
