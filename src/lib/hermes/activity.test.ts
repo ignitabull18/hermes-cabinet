@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeHermesActivity } from "./activity";
+import { hermesDisplayStatus, normalizeHermesActivity } from "./activity";
 
 test("normalizes tools and stable governed requests without sensitive response values", () => {
   const snapshot = normalizeHermesActivity([
@@ -148,4 +148,30 @@ test("derives the verified 120 second sudo expiry when Hermes omits expires_at",
   ]);
 
   assert.equal(snapshot.decisions[0].expiresAt, "2026-07-18T20:02:00.000Z");
+});
+
+test("maps pending governed requests onto explicit run status labels", () => {
+  const base = {
+    id: "request",
+    requestId: "request",
+    runId: "run",
+    sessionId: "session",
+    eventSeq: 1,
+    status: "pending" as const,
+    question: null,
+    choices: [],
+    command: null,
+    description: null,
+    envVar: null,
+    prompt: null,
+    risk: "test",
+    expiresAt: null,
+    decision: null,
+  };
+  assert.equal(hermesDisplayStatus("running", [{ ...base, kind: "approval" }]), "awaiting approval");
+  assert.equal(hermesDisplayStatus("running", [{ ...base, kind: "clarification" }]), "awaiting input");
+  assert.equal(hermesDisplayStatus("running", [{ ...base, kind: "secret" }]), "awaiting secret");
+  assert.equal(hermesDisplayStatus("completed", []), "completed");
+  assert.equal(hermesDisplayStatus("streaming", []), "running");
+  assert.equal(hermesDisplayStatus("interrupted", []), "cancelled");
 });

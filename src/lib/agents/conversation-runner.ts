@@ -829,6 +829,7 @@ export async function waitForConversationCompletion(
                 ? data.adapterSessionParams.profile
                 : process.env.CABINET_HERMES_PROFILE || "",
             sessionId: data.adapterSessionId,
+            parentSessionId: finalMeta.hermes?.parentSessionId,
             liveSessionId:
               typeof data.adapterSessionParams?.liveSessionId === "string"
                 ? data.adapterSessionParams.liveSessionId
@@ -1853,6 +1854,7 @@ export async function continueConversationRun(
     try {
       await createDaemonSession({
         id: runId,
+        persistConversation: false,
         prompt: effectivePrompt,
         providerId: adapter.providerId ?? meta.providerId,
         adapterType: adapter.type,
@@ -2083,12 +2085,16 @@ export async function continueConversationRun(
                     ? result.adapterSessionParams.profile
                     : metaNow.hermes?.profile || process.env.CABINET_HERMES_PROFILE || "",
                 sessionId: result.adapterSessionId,
+                parentSessionId: metaNow.hermes?.parentSessionId,
                 liveSessionId:
                   typeof result.adapterSessionParams?.liveSessionId === "string"
                     ? result.adapterSessionParams.liveSessionId
                     : undefined,
                 runId: result.runId,
-                parentRunId: metaNow.hermes?.runId,
+                parentRunId:
+                  metaNow.hermes?.runId && metaNow.hermes.runId !== result.runId
+                    ? metaNow.hermes.runId
+                    : metaNow.hermes?.parentRunId,
                 eventSequence: persistedEventSequence,
                 status: failed ? "failed" : "completed",
                 artifactPaths: finalized?.artifactPaths ?? metaNow.artifactPaths,

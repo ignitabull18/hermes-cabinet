@@ -23,10 +23,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   normalizeHermesActivity,
+  hermesDisplayStatus,
   type HermesDecisionRequest,
   type HermesToolActivity,
 } from "@/lib/hermes/activity";
 import { cn } from "@/lib/utils";
+import { HermesSessionManager } from "@/components/agents/hermes-session-manager";
 
 type EventLine = Record<string, unknown>;
 
@@ -347,6 +349,7 @@ export function HermesActivityPanel({
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const snapshot = useMemo(() => normalizeHermesActivity(events), [events]);
+  const displayedStatus = hermesDisplayStatus(status, snapshot.decisions);
 
   const query = useMemo(() => {
     const params = new URLSearchParams();
@@ -383,7 +386,7 @@ export function HermesActivityPanel({
     return () => source.close();
   }, [conversationId, query, refresh]);
 
-  if (!loading && snapshot.tools.length === 0 && snapshot.decisions.length === 0) return null;
+  const hasActivity = snapshot.tools.length > 0 || snapshot.decisions.length > 0;
 
   const submitDecision = async (
     request: HermesDecisionRequest,
@@ -474,16 +477,24 @@ export function HermesActivityPanel({
           <div>
             <h4 className="text-[13px] font-semibold">Hermes activity and decisions</h4>
             <p className="text-[10.5px] text-muted-foreground">
-              Structured runtime evidence for this conversation. Status: {status}.
+              Structured runtime evidence for this conversation. Status: {displayedStatus}.
             </p>
           </div>
         </div>
-        {loading ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : null}
+        <div className="flex items-center gap-2">
+          <HermesSessionManager />
+          {loading ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : null}
+        </div>
       </div>
       {error ? (
         <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-2 text-[11px] text-destructive">
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0" /> {error}
         </div>
+      ) : null}
+      {!loading && !hasActivity ? (
+        <p className="rounded-md bg-muted/40 p-3 text-[11px] text-muted-foreground">
+          No structured tool or decision events in this session yet.
+        </p>
       ) : null}
       {snapshot.decisions.map((request) => (
         <DecisionCard

@@ -2380,11 +2380,35 @@ export async function appendRuntimeEvent(
     const cp = meta.cabinetPath || cabinetPath;
     if (meta.adapterType === "hermes_runtime" && event.sessionId) {
       const priorRunId = meta.hermes?.runId;
+      const payloadStatus =
+        typeof event.payload?.status === "string" ? event.payload.status : "";
+      const terminalEventStatus =
+        event.type === "message.complete"
+          ? payloadStatus === "interrupted"
+            ? "interrupted"
+            : payloadStatus === "error"
+              ? "failed"
+              : "completed"
+          : event.type === "error"
+            ? "failed"
+            : null;
+      // Runtime event persistence is intentionally asynchronous relative to
+      // adapter completion. A late message.delta must never overwrite the
+      // terminal status written by the runner after a restart or reconnect.
+      const hermesStatus =
+        terminalEventStatus ??
+        (meta.status !== "running" &&
+        (meta.hermes?.status === "completed" ||
+          meta.hermes?.status === "failed" ||
+          meta.hermes?.status === "interrupted")
+          ? meta.hermes.status
+          : "streaming");
       const nextMeta: ConversationMeta = {
         ...meta,
         hermes: {
           profile: meta.hermes?.profile || process.env.CABINET_HERMES_PROFILE || "",
           sessionId: event.sessionId,
+          parentSessionId: meta.hermes?.parentSessionId,
           liveSessionId: event.liveSessionId || meta.hermes?.liveSessionId || undefined,
           runId: event.runId,
           parentRunId:
@@ -2392,7 +2416,7 @@ export async function appendRuntimeEvent(
               ? priorRunId
               : meta.hermes?.parentRunId,
           eventSequence: seq,
-          status: "streaming",
+          status: hermesStatus,
           artifactPaths: meta.artifactPaths,
           updatedAt: new Date().toISOString(),
         },

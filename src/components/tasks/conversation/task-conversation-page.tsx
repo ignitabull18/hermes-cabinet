@@ -2098,7 +2098,7 @@ export function TaskConversationPage({
                 <HermesActivityPanel
                   conversationId={taskId}
                   cabinetPath={task.meta.cabinetPath}
-                  status={task.meta.status}
+                  status={task.meta.hermes?.status || task.meta.status}
                   onChanged={async () => {
                     try {
                       const fresh = await fetchTask(taskId, task.meta.cabinetPath);

@@ -55,6 +55,22 @@ export type HermesGatewaySession = {
 
 export type HermesSensitiveResponseStatus = "ok" | "expired";
 
+export type HermesStoredSession = {
+  id: string;
+  title: string;
+  preview: string;
+  startedAt: number;
+  messageCount: number;
+  source: string;
+};
+
+export type HermesActiveSession = {
+  liveSessionId: string;
+  sessionId: string;
+  status: string;
+  running: boolean;
+};
+
 export class HermesGatewayClient {
   private socket: Socket | null = null;
   private nextId = 0;
@@ -130,6 +146,40 @@ export class HermesGatewayClient {
       sessionId: String(result.session_key || result.resumed || sessionId),
       messages: Array.isArray(result.messages) ? result.messages : [],
     };
+  }
+
+  async listSessions(limit = 200): Promise<HermesStoredSession[]> {
+    const result = await this.request<Record<string, unknown>>("session.list", { limit });
+    const rows = Array.isArray(result.sessions) ? result.sessions : [];
+    return rows.map((value) => {
+      const row = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+      return {
+        id: String(row.id || ""),
+        title: String(row.title || ""),
+        preview: String(row.preview || ""),
+        startedAt: typeof row.started_at === "number" ? row.started_at : 0,
+        messageCount: typeof row.message_count === "number" ? row.message_count : 0,
+        source: String(row.source || ""),
+      };
+    }).filter((row) => row.id);
+  }
+
+  async listActiveSessions(): Promise<HermesActiveSession[]> {
+    const result = await this.request<Record<string, unknown>>("session.active_list", {});
+    const rows = Array.isArray(result.sessions) ? result.sessions : [];
+    return rows.map((value) => {
+      const row = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+      return {
+        liveSessionId: String(row.session_id || row.id || ""),
+        sessionId: String(row.session_key || row.stored_session_id || ""),
+        status: String(row.status || (row.running ? "running" : "idle")),
+        running: row.running === true,
+      };
+    }).filter((row) => row.liveSessionId);
+  }
+
+  async renameSession(liveSessionId: string, title: string): Promise<void> {
+    await this.request("session.title", { session_id: liveSessionId, title }, 30_000);
   }
 
   async submitPrompt(liveSessionId: string, text: string): Promise<void> {

@@ -158,3 +158,38 @@ test("sends governed responses with exact Hermes request identity", async () => 
   ]);
   client.close();
 });
+
+test("normalizes canonical stored and active Hermes session management", async () => {
+  const socket = new FakeSocket();
+  const client = new HermesGatewayClient(
+    config,
+    (() => {
+      queueMicrotask(() => socket.open());
+      return socket;
+    }) as never
+  );
+  await client.connect();
+
+  const stored = client.listSessions();
+  socket.respond(0, {
+    sessions: [{ id: "stored-1", title: "Daily work", preview: "Hello", started_at: 10, message_count: 4, source: "cabinet" }],
+  });
+  assert.deepEqual(await stored, [{ id: "stored-1", title: "Daily work", preview: "Hello", startedAt: 10, messageCount: 4, source: "cabinet" }]);
+
+  const active = client.listActiveSessions();
+  socket.respond(1, {
+    sessions: [{ session_id: "live-1", session_key: "stored-1", status: "streaming", running: true }],
+  });
+  assert.deepEqual(await active, [{ liveSessionId: "live-1", sessionId: "stored-1", status: "streaming", running: true }]);
+
+  const rename = client.renameSession("live-1", "Renamed");
+  socket.respond(2, { title: "Renamed", session_key: "stored-1" });
+  await rename;
+  assert.deepEqual(socket.sent.slice(0, 3).map((frame) => frame.method), [
+    "session.list",
+    "session.active_list",
+    "session.title",
+  ]);
+  assert.deepEqual(socket.sent[2].params, { session_id: "live-1", title: "Renamed" });
+  client.close();
+});

@@ -48,6 +48,23 @@ export type HermesActivitySnapshot = {
   decisions: HermesDecisionRequest[];
 };
 
+export function hermesDisplayStatus(
+  status: string,
+  decisions: HermesDecisionRequest[]
+): string {
+  const waiting = decisions.find(
+    (item) => item.status === "pending" || item.status === "commented"
+  );
+  if (!waiting) {
+    if (status === "streaming") return "running";
+    if (status === "interrupted") return "cancelled";
+    return status;
+  }
+  if (waiting.kind === "approval") return "awaiting approval";
+  if (waiting.kind === "clarification") return "awaiting input";
+  return `awaiting ${waiting.kind}`;
+}
+
 type EventLine = Record<string, unknown>;
 
 function record(value: unknown): Record<string, unknown> {

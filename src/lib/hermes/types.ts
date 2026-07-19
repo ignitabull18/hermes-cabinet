@@ -49,6 +49,7 @@ export type HermesConversationStatus =
 export type HermesConversationReference = {
   profile: string;
   sessionId: string;
+  parentSessionId?: string;
   liveSessionId?: string;
   runId?: string;
   parentRunId?: string;

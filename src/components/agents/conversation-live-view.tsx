@@ -170,7 +170,7 @@ export function ConversationLiveView({
           <HermesActivityPanel
             conversationId={detail.meta.id}
             cabinetPath={detail.meta.cabinetPath}
-            status={detail.meta.status}
+            status={detail.meta.hermes?.status || detail.meta.status}
             onChanged={onRefresh}
           />
         ) : null}

@@ -325,6 +325,7 @@ const enrichedPath = getRuntimePath();
 
 interface StructuredSession extends BaseSession {
   kind: "structured";
+  persistConversation: boolean;
   timeoutHandle?: NodeJS.Timeout;
   pid?: number;
   processGroupId?: number | null;
@@ -822,6 +823,7 @@ function createStructuredSession(input: {
    * native shape (e.g. Cursor sessionId + cwd, Codex threadId).
    */
   adapterSessionParams?: Record<string, unknown> | null;
+  persistConversation?: boolean;
 }): StructuredSession {
   const adapter = agentAdapterRegistry.get(input.adapterType);
   if (!adapter) {
@@ -844,6 +846,7 @@ function createStructuredSession(input: {
     kind: "structured",
     providerId: adapter.providerId || input.providerId || "unknown",
     adapterType: input.adapterType,
+    persistConversation: input.persistConversation !== false,
     ws: null,
     createdAt: new Date(),
     output: [],
@@ -962,12 +965,14 @@ function createStructuredSession(input: {
         adapterErrorRetryAfterSec: session.adapterErrorRetryAfterSec ?? null,
         adapterEvents: session.adapterEvents ?? [],
       });
-      await finalizeSessionConversation(session).catch((err) => {
-        console.warn(
-          `[cabinet-daemon] finalizeSessionConversation failed for ${input.sessionId}:`,
-          err
-        );
-      });
+      if (session.persistConversation) {
+        await finalizeSessionConversation(session).catch((err) => {
+          console.warn(
+            `[cabinet-daemon] finalizeSessionConversation failed for ${input.sessionId}:`,
+            err
+          );
+        });
+      }
 
       // Persist the adapter's resume handle + codec blob to the conversation
       // directory so future continues can resume. This only works when the
@@ -1040,12 +1045,14 @@ function createStructuredSession(input: {
         adapterErrorRetryAfterSec: session.adapterErrorRetryAfterSec ?? null,
         adapterEvents: session.adapterEvents ?? [],
       });
-      await finalizeSessionConversation(session).catch((err) => {
-        console.warn(
-          `[cabinet-daemon] finalizeSessionConversation failed for ${input.sessionId}:`,
-          err
-        );
-      });
+      if (session.persistConversation) {
+        await finalizeSessionConversation(session).catch((err) => {
+          console.warn(
+            `[cabinet-daemon] finalizeSessionConversation failed for ${input.sessionId}:`,
+            err
+          );
+        });
+      }
 
       if (session.ws && session.ws.readyState === WebSocket.OPEN) {
         sessions.delete(input.sessionId);
@@ -1085,6 +1092,7 @@ function createSession(input: {
   launchMode?: "session" | "one-shot";
   adapterSessionId?: string | null;
   adapterSessionParams?: Record<string, unknown> | null;
+  persistConversation?: boolean;
   /**
    * Meta trigger (manual/job/heartbeat/agent). Manual PTY sessions opt
    * out of the 1.2s claude idle auto-exit and instead stay alive as
@@ -1117,6 +1125,7 @@ function createSession(input: {
       onData: input.onData,
       adapterSessionId: input.adapterSessionId ?? null,
       adapterSessionParams: input.adapterSessionParams ?? null,
+      persistConversation: input.persistConversation,
     });
   }
 
@@ -1684,6 +1693,7 @@ const server = http.createServer(async (req, res) => {
           timeoutSeconds,
           adapterSessionId,
           adapterSessionParams,
+          persistConversation,
         } = JSON.parse(body) as {
           id: string;
           providerId?: string;
@@ -1694,6 +1704,7 @@ const server = http.createServer(async (req, res) => {
           timeoutSeconds?: number;
           adapterSessionId?: string | null;
           adapterSessionParams?: Record<string, unknown> | null;
+          persistConversation?: boolean;
         };
         const sessionId = id || `session-${Date.now()}`;
 
@@ -1738,6 +1749,7 @@ const server = http.createServer(async (req, res) => {
             launchMode,
             adapterSessionId: adapterSessionId ?? null,
             adapterSessionParams: adapterSessionParams ?? null,
+            persistConversation,
             trigger,
           });
         } catch (err: unknown) {

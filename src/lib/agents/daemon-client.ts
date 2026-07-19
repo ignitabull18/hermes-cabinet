@@ -22,6 +22,11 @@ interface CreateDaemonSessionInput {
    * resumes in its native shape without knowing about the session.json layout.
    */
   adapterSessionParams?: Record<string, unknown> | null;
+  /**
+   * Whether the daemon owns conversation persistence for this run ID.
+   * Continuations use a synthetic turn run ID and are finalized by the app.
+   */
+  persistConversation?: boolean;
 }
 
 interface DaemonSessionOutput {
