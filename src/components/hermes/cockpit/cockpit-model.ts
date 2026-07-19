@@ -64,7 +64,7 @@ export function cardConsequence(card: CockpitCard): string {
 }
 
 export function primaryAction(card: CockpitCard): CockpitAction {
-  return card.approval.state === "pending" ? "approve" : "investigate";
+  return card.approval.state === "pending" ? "approve" : card.recommendedAction;
 }
 
 export function associatedRun(card: CockpitCard, runs: CockpitRunSummary[]): CockpitRunSummary | undefined {
@@ -84,36 +84,16 @@ export function radarCategory(item: CockpitPotentialMiss): "stale" | "owner" | "
   return "low-confidence";
 }
 
-function isToday(value: string, now: Date): boolean {
-  const date = new Date(value);
-  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate();
-}
-
-function meaningfulCategory(record: CockpitActionRecord): "decide" | "protect" | "verify" | null {
-  if (!isToday(record.at, new Date()) || (record.outcome !== "completed" && record.outcome !== "recorded")) return null;
-  if (record.action === "approve" || record.action === "reject") return "decide";
-  if (record.action === "risk_resolved") return "protect";
-  if (record.action === "investigate" && /confirm|clarif|verified|evidence/i.test(record.detail)) return "verify";
-  return null;
-}
-
 export function momentum(cockpit: DailyBusinessCockpit) {
   const completed = { decide: 0, protect: 0, verify: 0 };
-  for (const record of cockpit.history) {
-    const category = meaningfulCategory(record);
-    if (category) completed[category] += 1;
+  const selected = { decide: 0, protect: 0, verify: 0 };
+  for (const loop of cockpit.momentumPlan?.loops ?? []) {
+    selected[loop.category] += 1;
+    if (loop.status === "completed") completed[loop.category] += 1;
   }
-  const openDecisions = cockpit.cards.filter((card) => card.kind === "needs_jeremy").length;
-  const openRisks = cockpit.cards.filter((card) => card.kind === "business_risk").length;
-  const openVerifications = cockpit.cards.filter((card) => card.missingFacts?.length).length;
-  const selected = {
-    decide: Math.min(4, openDecisions) + completed.decide,
-    protect: Math.min(2, openRisks) + completed.protect,
-    verify: Math.min(2, openVerifications) + completed.verify,
-  };
   const done = completed.decide + completed.protect + completed.verify;
-  const total = Math.max(1, selected.decide + selected.protect + selected.verify);
-  return { completed, selected, done, total, percent: Math.min(100, Math.round((done / total) * 100)) };
+  const total = selected.decide + selected.protect + selected.verify;
+  return { completed, selected, done, total, percent: total ? Math.min(100, Math.round((done / total) * 100)) : 0 };
 }
 
 export function historyLabel(record: CockpitActionRecord): string {

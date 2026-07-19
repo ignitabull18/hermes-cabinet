@@ -25,6 +25,15 @@ import {
   sourceLabel,
 } from "./cockpit-model";
 
+function governedResultText(result: string): string {
+  try {
+    const parsed = JSON.parse(result) as Record<string, unknown>;
+    return typeof parsed.summary === "string" && parsed.summary.trim() ? parsed.summary.trim() : result;
+  } catch {
+    return result;
+  }
+}
+
 type LoadingState = { key: string; label: string } | null;
 
 function AuditSection({ title, children }: { title: string; children: React.ReactNode }) {
@@ -127,7 +136,7 @@ export function CockpitInspector({
                       <CircleCheck className="size-4 text-success" />
                       Hermes {run.status.replaceAll("_", " ")}
                     </div>
-                    {run.result ? <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{run.result}</p> : null}
+                    {run.result ? <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{governedResultText(run.result)}</p> : null}
                     {run.error ? <p className="mt-2 text-sm text-destructive">{run.error}</p> : null}
                   </section>
                 ) : null}

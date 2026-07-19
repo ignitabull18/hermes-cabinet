@@ -1,12 +1,15 @@
 import { createHash } from "node:crypto";
 import {
+  COCKPIT_ACTIONS,
   COCKPIT_CARD_KINDS,
+  type CockpitAction,
   type CockpitApprovalState,
   type CockpitCard,
   type CockpitCardKind,
   type CockpitEvidence,
   type CockpitIntakeSnapshot,
   type CockpitManualRisk,
+  type CockpitMomentumCategory,
   type CockpitPotentialMiss,
   type CockpitSourceCoverage,
   type CockpitSourceKind,
@@ -19,6 +22,7 @@ const SOURCE_KINDS = new Set<CockpitSourceKind>(["gmail", "calendar", "hermes_jo
 const SOURCE_STATUSES = new Set<CockpitSourceStatus>(["connected", "connected_empty", "partial", "unavailable", "error"]);
 const URGENCIES = new Set<CockpitUrgency>(["critical", "high", "normal", "low"]);
 const APPROVALS = new Set<CockpitApprovalState>(["not_required", "pending", "approved", "rejected"]);
+const ACTIONS = new Set<CockpitAction>(COCKPIT_ACTIONS);
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -97,6 +101,7 @@ function card(value: unknown, generatedAt: string): CockpitCard | null {
   const approvalSource = record(source.approval);
   const approvalState = text(approvalSource.state, "not_required") as CockpitApprovalState;
   const urgency = text(source.urgency, "normal") as CockpitUrgency;
+  const recommendedAction = text(source.recommendedAction ?? source.recommended_action, "investigate") as CockpitAction;
   return {
     id: stableId(kind, sourceType, sourceId),
     kind,
@@ -104,6 +109,7 @@ function card(value: unknown, generatedAt: string): CockpitCard | null {
     summary: text(source.summary, title),
     whyItMatters: text(source.whyItMatters ?? source.why_it_matters, "Review the attached evidence before deciding."),
     recommendedNextStep: text(source.recommendedNextStep ?? source.recommended_next_step, "Review and choose the next action."),
+    recommendedAction: ACTIONS.has(recommendedAction) ? recommendedAction : "investigate",
     urgency: URGENCIES.has(urgency) ? urgency : "normal",
     sourceType,
     sourceId,
@@ -165,6 +171,25 @@ export function parseCockpitIntake(output: string, runId: string, now = new Date
   };
 }
 
+export function parseCockpitActionOutcome(action: CockpitAction, output: string | null): {
+  detail: string;
+  momentumCategory: CockpitMomentumCategory | null;
+  meaningfulLoopClosed: boolean;
+} {
+  if (!output?.trim()) return { detail: "Hermes run completed without a structured outcome.", momentumCategory: null, meaningfulLoopClosed: false };
+  try {
+    const parsed = JSON.parse(output.trim()) as Record<string, unknown>;
+    const detail = text(parsed.summary, "Hermes run completed.").replace(/\s+/g, " ");
+    const category = parsed.momentumCategory === "decide" || parsed.momentumCategory === "protect" || parsed.momentumCategory === "verify"
+      ? parsed.momentumCategory
+      : null;
+    const closureAllowed = parsed.meaningfulLoopClosed === true && category === "verify" && (action === "investigate" || action === "ask_why");
+    return { detail, momentumCategory: closureAllowed ? category : null, meaningfulLoopClosed: closureAllowed };
+  } catch {
+    return { detail: "Hermes run completed without a valid structured loop-closure outcome.", momentumCategory: null, meaningfulLoopClosed: false };
+  }
+}
+
 export function buildIntakePrompt(input: {
   now: string;
   timezone: string;
@@ -191,6 +216,8 @@ Every open manual risk must remain a business_risk card until explicitly resolve
 
 For every promoted card, provide rankingRationale explaining briefly why it outranked other unread or time-sensitive items. Put reviewed but unpromoted candidates in potentiallyMissed so shadow-mode ranking failures remain visible.
 
+For every promoted card, set recommendedAction to exactly one existing governed cockpit action: investigate, draft_response, approve, reject, comment, snooze, schedule, or ask_why. Choose from the evidence and business state, never by embedding an ungoverned action in prose. A pending approval may use approve; approval, scheduling, and every consequential path still require Cabinet's existing confirmation and identity checks.
+
 Manual risks:
 ${JSON.stringify(input.manualRisks)}
 
@@ -204,5 +231,5 @@ Open owner-reported potentially missed items. A live source check must either pr
 ${JSON.stringify(input.ownerPotentialMisses ?? [])}
 
 Return exactly one syntactically valid JSON object and no prose before or after it. Before responding, verify that every object and array closes with the matching delimiter and that the full response parses as JSON. Use this schema:
-{"generatedAt":"ISO-8601","sourceCoverage":{"gmail":{"status":"connected|connected_empty|partial|unavailable|error","message":"...","evidenceCount":0},"calendar":{"status":"...","message":"...","evidenceCount":0},"hermesJobs":{"status":"...","message":"...","evidenceCount":0},"manualRisks":{"status":"...","message":"...","evidenceCount":0},"supermemory":{"status":"...","message":"...","evidenceCount":0}},"cards":[{"kind":"needs_jeremy|business_risk|todays_mission|recent_win","title":"...","summary":"...","whyItMatters":"...","recommendedNextStep":"...","urgency":"critical|high|normal|low","sourceType":"gmail|calendar|hermes_job|manual_risk|hermes_run|memory","sourceId":"stable grouped source identity","createdAt":"ISO-8601","relatedItemCount":1,"relatedItemDates":["ISO-8601"],"missingFacts":["fact absent from source"],"contextNotes":["recurrence or grouping context"],"rankingRationale":"why this outranked other reviewed items","evidence":[{"source":"gmail|calendar|hermes_job|manual_risk|hermes_run|memory","label":"...","reference":"non-secret source reference","occurredAt":"ISO-8601 or null"}],"approval":{"state":"not_required|pending|approved|rejected","runId":null,"requestId":null}}],"potentiallyMissed":[{"title":"reviewed candidate","sourceType":"gmail|calendar|hermes_job|manual_risk|hermes_run|memory","sourceId":"stable source identity","whyPotentiallyMissed":"why it was not promoted or why evidence is stale","reviewQuestion":"what Jeremy should verify","createdAt":"ISO-8601","evidence":[]}]}`;
+{"generatedAt":"ISO-8601","sourceCoverage":{"gmail":{"status":"connected|connected_empty|partial|unavailable|error","message":"...","evidenceCount":0},"calendar":{"status":"...","message":"...","evidenceCount":0},"hermesJobs":{"status":"...","message":"...","evidenceCount":0},"manualRisks":{"status":"...","message":"...","evidenceCount":0},"supermemory":{"status":"...","message":"...","evidenceCount":0}},"cards":[{"kind":"needs_jeremy|business_risk|todays_mission|recent_win","title":"...","summary":"...","whyItMatters":"...","recommendedNextStep":"...","recommendedAction":"investigate|draft_response|approve|reject|comment|snooze|schedule|ask_why","urgency":"critical|high|normal|low","sourceType":"gmail|calendar|hermes_job|manual_risk|hermes_run|memory","sourceId":"stable grouped source identity","createdAt":"ISO-8601","relatedItemCount":1,"relatedItemDates":["ISO-8601"],"missingFacts":["fact absent from source"],"contextNotes":["recurrence or grouping context"],"rankingRationale":"why this outranked other reviewed items","evidence":[{"source":"gmail|calendar|hermes_job|manual_risk|hermes_run|memory","label":"...","reference":"non-secret source reference","occurredAt":"ISO-8601 or null"}],"approval":{"state":"not_required|pending|approved|rejected","runId":null,"requestId":null}}],"potentiallyMissed":[{"title":"reviewed candidate","sourceType":"gmail|calendar|hermes_job|manual_risk|hermes_run|memory","sourceId":"stable source identity","whyPotentiallyMissed":"why it was not promoted or why evidence is stale","reviewQuestion":"what Jeremy should verify","createdAt":"ISO-8601","evidence":[]}]}`;
 }

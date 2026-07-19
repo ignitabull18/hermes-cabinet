@@ -19,6 +19,7 @@ const card = {
   summary: "Hermes found a notice that needs operator judgment.",
   whyItMatters: "Only Jeremy can decide the business response.",
   recommendedNextStep: "Investigate the evidence before responding.",
+  recommendedAction: "investigate",
   urgency: "high",
   sourceType: "gmail",
   sourceId: "gmail:notice-1",
@@ -42,6 +43,13 @@ const cockpit = {
   ownerReview: { classifications: { "decision-1": { classification: "correct", note: "Verified", actor: "Jeremy", reviewedAt: "2026-07-18T20:00:00.000Z" } }, potentialMisses: [], friction: [] },
   runs: [],
   history: [],
+  momentumPlan: {
+    localDate: "2026-07-19",
+    intakeRunId: "run_intake_1",
+    acceptedAt: "2026-07-19T08:00:00.000Z",
+    loops: [{ id: "decide:decision-1", cardId: "decision-1", sourceId: "gmail:notice-1", title: card.title, category: "decide", status: "open", completedAt: null, completionActionId: null }],
+    proposal: null,
+  },
   telemetry: { cockpitViews: 1, actionsStarted: 0, actionsCompleted: 0, sourceSystemsCovered: 5, estimatedToolSwitchesAvoided: 4, lastIntakeAt: "2026-07-18T20:00:00.000Z" },
 };
 
@@ -137,23 +145,40 @@ test("meaningful completion contracts the queue and advances Momentum", async ({
     missingFacts: ["Current balance"],
   };
   const initialCockpit = { ...cockpit, cards: [card, queuedCard] };
+  const completionActionId = "history-1";
+  const initialMomentumPlan = {
+    ...cockpit.momentumPlan,
+    loops: [
+      cockpit.momentumPlan.loops[0],
+      { id: "verify:decision-2", cardId: queuedCard.id, sourceId: queuedCard.sourceId, title: queuedCard.title, category: "verify", status: "open", completedAt: null, completionActionId: null },
+    ],
+  };
   const completedCockpit = {
     ...initialCockpit,
     cards: [card],
+    momentumPlan: {
+      ...initialMomentumPlan,
+      loops: [
+        initialMomentumPlan.loops[0],
+        { ...initialMomentumPlan.loops[1], status: "completed", completedAt: new Date().toISOString(), completionActionId },
+      ],
+    },
     history: [{
-      id: "history-1",
+      id: completionActionId,
       action: "investigate",
       cardId: queuedCard.id,
       actor: "Jeremy",
       at: new Date().toISOString(),
       outcome: "completed",
       detail: "Verified evidence and confirmed the missing facts.",
+      momentumCategory: "verify",
+      meaningfulLoopClosed: true,
     }],
   };
   let completed = false;
   await page.route("**/api/hermes/cockpit", async (route) => {
     if (route.request().method() === "POST") return route.fulfill({ json: { ok: true } });
-    return route.fulfill({ json: completed ? completedCockpit : initialCockpit });
+    return route.fulfill({ json: completed ? completedCockpit : { ...initialCockpit, momentumPlan: initialMomentumPlan } });
   });
   await page.route("**/api/hermes/cockpit/actions", async (route) => {
     completed = true;

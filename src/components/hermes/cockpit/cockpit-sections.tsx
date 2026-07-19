@@ -119,13 +119,16 @@ export function CockpitNavigation({ view, onChange }: { view: CockpitView; onCha
 
 export function DailyMomentum({ cockpit }: { cockpit: DailyBusinessCockpit }) {
   const value = momentum(cockpit);
+  const hasProposal = Boolean(cockpit.momentumPlan?.proposal);
   return (
     <section className="flex min-h-0 flex-col justify-between rounded-2xl bg-card p-3 shadow-sm ring-1 ring-card-edge sm:min-h-40 sm:p-4" data-testid="cockpit-momentum">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-command">Daily Momentum</p>
           <p className="mt-1 text-xl font-semibold tracking-tight sm:mt-1.5 sm:text-2xl">{value.done} of {value.total} clear</p>
-          <p className="mt-1 hidden text-xs text-muted-foreground sm:block">Meaningful loops, not clicks.</p>
+          <p className={cn("mt-1 hidden text-xs sm:block", hasProposal ? "text-warning" : "text-muted-foreground")}>
+            {hasProposal ? "Frozen for today · New intake proposal held" : "Frozen from the accepted intake."}
+          </p>
         </div>
         <div className="grid size-11 place-items-center rounded-full bg-command/10 text-sm font-semibold text-command ring-1 ring-command/20 sm:size-14 sm:text-base">
           {value.percent}%
@@ -134,6 +137,7 @@ export function DailyMomentum({ cockpit }: { cockpit: DailyBusinessCockpit }) {
       <div className="mt-2 sm:hidden">
         <div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-command transition-[width] duration-200 motion-reduce:transition-none" style={{ width: `${value.percent}%` }} /></div>
         <p className="mt-1.5 text-[11px] text-muted-foreground">Decide {value.completed.decide}/{value.selected.decide} · Protect {value.completed.protect}/{value.selected.protect} · Verify {value.completed.verify}/{value.selected.verify}</p>
+        {hasProposal ? <p className="mt-1 text-[11px] text-warning">New intake proposal held</p> : null}
       </div>
       <div className="mt-3 hidden flex-col gap-2 sm:flex">
         <Progress value={value.selected.decide ? (value.completed.decide / value.selected.decide) * 100 : 0}>

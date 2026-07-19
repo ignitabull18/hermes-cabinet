@@ -26,9 +26,9 @@ Status: implemented for Jeremy's live owner review; not yet owner-approved.
 - Radar, Risks, Systems, and History secondary views
 - Interruption-resume banner backed by versioned, minimal session storage
 
-### Data reuse and additive field
+### Data reuse and additive fields
 
-All existing business fields are reused. The only additive cockpit response field is `history`, a bounded reverse projection of the already-canonical cockpit action records. It does not create a new source of truth or change any write boundary.
+All existing business fields are reused. Additive fields are `history`, the frozen local-day `momentumPlan`, structured `momentumCategory` and `meaningfulLoopClosed` action outcomes, and the governed card `recommendedAction`. The plan persists stable card/source identities; later same-day intakes create a visible proposal without changing the accepted denominator. Recommended actions remain restricted to the existing cockpit action allowlist, and all existing confirmation, approval, identity, and idempotency boundaries still apply.
 
 ## Mismatch ledger
 
@@ -39,6 +39,8 @@ All existing business fields are reused. The only additive cockpit response fiel
 | Typography | Long summaries competed at equal weight. | One title/consequence hierarchy; metadata is compact and uppercase only where scannability benefits. | Screenshot review at 1440 and 390 px. |
 | Color | Many status surfaces competed. | Neutral resting surfaces; violet command actions; amber uncertainty; emerald verified state; red only for real exceptions. | Light-theme live screenshot; no animated gradients or ambient glow. |
 | Queue anatomy | Expanded two-column cards exposed every action. | Ordered rows expose one primary action and move secondary actions to a menu. | Governed-action browser test verifies the unchanged payload and idempotency key. |
+| Momentum integrity | The target was recalculated from the changing queue and Verify completion depended on free-text keywords. | The accepted intake freezes stable Decide, Protect, and Verify loops for the local day; only an explicit structured loop-closure outcome advances the persisted plan. | Focused store/model/contract tests prove target stability, proposal isolation, and fail-closed prose handling. |
+| Primary action | Every nonapproval card defaulted to Investigate. | A validated `recommendedAction` selects from existing governed actions; pending approvals still override it with the exact approval path. | Focused model and intake-contract tests. |
 | Inspector anatomy | Evidence expanded the main page vertically. | Summary, impact, move, missing facts, context, and result are visible; audit sections are collapsed. | Desktop open/close and mobile full-height sheet tests. |
 | Mobile layout | Existing Cabinet and cockpit navigation competed; long text created intrinsic-width overflow. | Cabinet mobile nav yields to Today; modules are single-column and min-width constrained. | 390 by 844 test reports no horizontal overflow. |
 | Motion | No outcome-oriented hierarchy or completion behavior. | Explicit 220 ms hierarchy entry, one cyan refresh sweep, one critical-item entrance pulse, resolved-row contraction, Momentum transition, and one completion sweep; all disable under reduced motion. | Playwright reduced-motion run and production render without framework overlay. |
@@ -55,7 +57,8 @@ Hermes remains authoritative. Approval, confirmation, idempotency, read-only ver
 - ESLint: pass
 - `git diff --check`: pass
 - Next.js production build: pass; existing broad NFT trace warnings remain non-blocking
-- Focused production-browser coverage: 2/2 pass
+- Focused contract/model/store coverage: 12/12 pass
+- Focused production-browser coverage: 3/3 pass
 - Live 1440 by 900: no horizontal overflow, no framework overlay, all required desktop modules visible in the first viewport
 - Live 390 by 844: no horizontal overflow, single-column Today, one cockpit bottom navigation, two queued decisions, compact freshness/Radar orientation, and full-height detail sheet
 

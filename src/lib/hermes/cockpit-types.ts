@@ -33,6 +33,7 @@ export type CockpitCard = {
   summary: string;
   whyItMatters: string;
   recommendedNextStep: string;
+  recommendedAction: CockpitAction;
   urgency: CockpitUrgency;
   sourceType: CockpitSourceKind;
   sourceId: string;
@@ -105,6 +106,32 @@ export const COCKPIT_ACTIONS = [
 
 export type CockpitAction = (typeof COCKPIT_ACTIONS)[number];
 
+export const COCKPIT_MOMENTUM_CATEGORIES = ["decide", "protect", "verify"] as const;
+export type CockpitMomentumCategory = (typeof COCKPIT_MOMENTUM_CATEGORIES)[number];
+
+export type CockpitMomentumLoop = {
+  id: string;
+  cardId: string;
+  sourceId: string;
+  title: string;
+  category: CockpitMomentumCategory;
+  status: "open" | "completed";
+  completedAt: string | null;
+  completionActionId: string | null;
+};
+
+export type CockpitMomentumPlan = {
+  localDate: string;
+  intakeRunId: string;
+  acceptedAt: string;
+  loops: CockpitMomentumLoop[];
+  proposal: {
+    intakeRunId: string;
+    proposedAt: string;
+    loops: CockpitMomentumLoop[];
+  } | null;
+};
+
 export type CockpitActionRecord = {
   id: string;
   cardId: string;
@@ -115,6 +142,8 @@ export type CockpitActionRecord = {
   requestId: string | null;
   outcome: "started" | "completed" | "rejected" | "failed" | "recorded";
   detail: string;
+  momentumCategory: CockpitMomentumCategory | null;
+  meaningfulLoopClosed: boolean;
 };
 
 export type CockpitRunSummary = {
@@ -146,6 +175,7 @@ export type DailyBusinessCockpit = {
   potentiallyMissed: CockpitPotentialMiss[];
   ownerReview: CockpitOwnerReviewState;
   history: CockpitActionRecord[];
+  momentumPlan: CockpitMomentumPlan | null;
   runs: CockpitRunSummary[];
   telemetry: {
     cockpitViews: number;

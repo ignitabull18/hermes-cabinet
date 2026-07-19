@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildIntakePrompt, parseCockpitIntake } from "./cockpit-contract";
+import { buildIntakePrompt, parseCockpitActionOutcome, parseCockpitIntake } from "./cockpit-contract";
 
 test("cockpit intake normalizes decisions and source coverage from fenced Hermes JSON", () => {
   const output = `\`\`\`json
@@ -19,6 +19,7 @@ test("cockpit intake normalizes decisions and source coverage from fenced Hermes
       "summary": "A reply is due today.",
       "whyItMatters": "The client is blocked.",
       "recommendedNextStep": "Review the draft.",
+      "recommendedAction": "draft_response",
       "relatedItemCount": 2,
       "relatedItemDates": ["2026-07-17T15:30:00-07:00", "2026-07-18T15:30:00-07:00"],
       "missingFacts": ["Exact balance", "Specific due date"],
@@ -53,7 +54,28 @@ test("cockpit intake normalizes decisions and source coverage from fenced Hermes
   assert.equal(snapshot.cards[0]?.relatedItemCount, 2);
   assert.deepEqual(snapshot.cards[0]?.missingFacts, ["Exact balance", "Specific due date"]);
   assert.equal(snapshot.cards[0]?.rankingRationale, "A payment obligation requires operator action.");
+  assert.equal(snapshot.cards[0]?.recommendedAction, "draft_response");
   assert.equal(snapshot.potentiallyMissed?.[0]?.sourceId, "inventory-1");
+});
+
+test("cockpit action outcomes fail closed without structured loop closure", () => {
+  assert.deepEqual(parseCockpitActionOutcome("investigate", "Verified the balance with useful evidence."), {
+    detail: "Hermes run completed without a valid structured loop-closure outcome.",
+    momentumCategory: null,
+    meaningfulLoopClosed: false,
+  });
+  assert.deepEqual(parseCockpitActionOutcome("investigate", JSON.stringify({
+    summary: "Balance and due date confirmed.",
+    momentumCategory: "verify",
+    meaningfulLoopClosed: true,
+  })), {
+    detail: "Balance and due date confirmed.",
+    momentumCategory: "verify",
+    meaningfulLoopClosed: true,
+  });
+  assert.equal(parseCockpitActionOutcome("draft_response", JSON.stringify({
+    summary: "Draft prepared.", momentumCategory: "verify", meaningfulLoopClosed: true,
+  })).meaningfulLoopClosed, false);
 });
 
 test("cockpit intake rejects prose without a JSON contract", () => {
@@ -109,4 +131,6 @@ test("intake prompt enforces read-only behavior and explicit unavailable coverag
   assert.match(prompt, /next seven days/);
   assert.match(prompt, /Return exactly one syntactically valid JSON object/);
   assert.match(prompt, /full response parses as JSON/);
+  assert.match(prompt, /recommendedAction/);
+  assert.match(prompt, /existing confirmation and identity checks/);
 });

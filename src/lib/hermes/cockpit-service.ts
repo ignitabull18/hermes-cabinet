@@ -3,12 +3,13 @@ import { HermesManagementClient } from "./management-client";
 import { HermesRunClient } from "./run-client";
 import { getHermesRunBridge } from "./run-bridge";
 import { readHermesServerConfig } from "./server-config";
-import { buildIntakePrompt, parseCockpitIntake } from "./cockpit-contract";
+import { buildIntakePrompt, parseCockpitActionOutcome, parseCockpitIntake } from "./cockpit-contract";
 import {
   addManualRisk,
   addOwnerPotentialMiss,
   classifyCard,
   commentOnCard,
+  ensureDailyMomentumPlan,
   readCockpitState,
   recordCockpitAction,
   recordCockpitSnapshot,
@@ -68,6 +69,7 @@ function manualRiskCard(risk: CockpitManualRisk): CockpitCard {
     summary: risk.whyItMatters,
     whyItMatters: risk.whyItMatters,
     recommendedNextStep: risk.recommendedNextStep,
+    recommendedAction: "investigate",
     urgency: risk.urgency,
     sourceType: "manual_risk",
     sourceId: risk.id,
@@ -80,13 +82,16 @@ function manualRiskCard(risk: CockpitManualRisk): CockpitCard {
 }
 
 function recentWinCard(run: HermesRunProjection): CockpitCard {
+  const action = /^cockpit:card:[^:]+:(investigate|draft_response|ask_why)$/.exec(run.context)?.[1] as CockpitAction | undefined;
+  const title = action ? parseCockpitActionOutcome(action, run.result).detail : compact(run.result, "Hermes run completed");
   return {
     id: `run-win-${run.runId}`,
     kind: "recent_win",
-    title: compact(run.result, "Hermes run completed"),
+    title,
     summary: `Completed from ${run.context}.`,
     whyItMatters: "This is a verified Hermes outcome with retained run evidence.",
     recommendedNextStep: "Review the result only if it changes today's priorities.",
+    recommendedAction: "ask_why",
     urgency: "low",
     sourceType: "hermes_run",
     sourceId: run.runId,
@@ -96,6 +101,23 @@ function recentWinCard(run: HermesRunProjection): CockpitCard {
     snoozedUntil: null,
     comments: [],
   };
+}
+
+async function ingestCompletedCockpitActions(runs: HermesRunProjection[]): Promise<void> {
+  const state = await readCockpitState();
+  for (const run of runs) {
+    const match = /^cockpit:card:([^:]+):(investigate|draft_response|ask_why)$/.exec(run.context);
+    if (!match || !["completed", "failed", "cancelled"].includes(run.status)) continue;
+    const [, cardId, rawAction] = match;
+    const action = rawAction as CockpitAction;
+    if (state.actions.some((record) => record.runId === run.runId && record.outcome !== "started")) continue;
+    if (run.status === "completed") {
+      const outcome = parseCockpitActionOutcome(action, run.result);
+      await recordCockpitAction({ cardId, action, actor: "Hermes", runId: run.runId, requestId: null, outcome: "completed", ...outcome });
+    } else {
+      await recordCockpitAction({ cardId, action, actor: "Hermes", runId: run.runId, requestId: null, outcome: "failed", detail: compact(run.error, `Hermes run ${run.status}.`), momentumCategory: null, meaningfulLoopClosed: false });
+    }
+  }
 }
 
 async function ingestCompletedIntakes(runs: HermesRunProjection[]): Promise<void> {
@@ -118,8 +140,12 @@ export async function getDailyBusinessCockpit(): Promise<DailyBusinessCockpit> {
   const [health, managementSnapshot] = await Promise.all([management.health(), management.snapshot()]);
   const allRuns = bridge().list();
   await ingestCompletedIntakes(allRuns);
+  await ingestCompletedCockpitActions(allRuns);
   const state = await readCockpitState();
   const latest = state.snapshots[0] ?? null;
+  const today = new Date();
+  const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const momentumPlan = state.momentumPlans.find((plan) => plan.localDate === localDate) ?? (latest ? await ensureDailyMomentumPlan(latest) : null);
   const openRisks = state.manualRisks.filter((item) => item.status === "open");
   const projected = latest?.cards ?? [];
   const cards = [
@@ -164,6 +190,7 @@ export async function getDailyBusinessCockpit(): Promise<DailyBusinessCockpit> {
     potentiallyMissed,
     ownerReview: state.ownerReview,
     history: [...state.actions].reverse().slice(0, 100),
+    momentumPlan,
     runs: cockpitRuns.slice(0, 20).map((run) => ({
       runId: run.runId, context: run.context, capability: run.capability, status: run.status,
       startedAt: run.startedAt, updatedAt: run.updatedAt, result: run.result, error: run.error,
@@ -214,7 +241,7 @@ function actionPrompt(action: "investigate" | "draft_response" | "ask_why", card
     : action === "draft_response"
       ? "Draft a response for Jeremy to review. Do not create or send a draft in any external system."
       : "Explain why this item is in the cockpit, which evidence supports it, and what would make the recommendation change.";
-  return `${objective}\n\nCard:\n${JSON.stringify(card)}\n\nThis is read-only shadow-mode work. Do not perform external or material writes.`;
+  return `${objective}\n\nCard:\n${JSON.stringify(card)}\n\nThis is read-only shadow-mode work. Do not perform external or material writes.\n\nReturn exactly one JSON object and no prose: {"summary":"concise result","momentumCategory":"verify"|null,"meaningfulLoopClosed":true|false}. Set meaningfulLoopClosed true only when this run produced useful new evidence that actually closes the card's selected Verify loop. Opening the card, restating known facts, producing no evidence, or merely starting an investigation must return false. Drafting text never closes a Momentum loop.`;
 }
 
 export async function performCockpitAction(input: {
@@ -241,7 +268,7 @@ export async function performCockpitAction(input: {
       capability: input.action,
       idempotencyKey: input.idempotencyKey,
     });
-    await recordCockpitAction({ cardId: card.id, action: input.action, actor: input.actor, runId: run.runId, requestId: null, outcome: "started", detail: "Hermes run started." });
+    await recordCockpitAction({ cardId: card.id, action: input.action, actor: input.actor, runId: run.runId, requestId: null, outcome: "started", detail: "Hermes run started.", momentumCategory: null, meaningfulLoopClosed: false });
     return { kind: "run", run } as const;
   }
   if (input.action === "approve" || input.action === "reject") {
@@ -250,7 +277,7 @@ export async function performCockpitAction(input: {
       throw new Error("The exact pending run and request identity are required.");
     }
     const result = await bridge().approve(input.runId, input.requestId, input.action === "approve" ? "once" : "deny");
-    await recordCockpitAction({ cardId: card.id, action: input.action, actor: input.actor, runId: input.runId, requestId: input.requestId, outcome: input.action === "approve" ? "completed" : "rejected", detail: `Hermes decision ${input.action} recorded.` });
+    await recordCockpitAction({ cardId: card.id, action: input.action, actor: input.actor, runId: input.runId, requestId: input.requestId, outcome: input.action === "approve" ? "completed" : "rejected", detail: `Hermes decision ${input.action} recorded.`, momentumCategory: "decide", meaningfulLoopClosed: true });
     return { kind: "decision", result } as const;
   }
   if (input.action === "comment") {
@@ -297,7 +324,7 @@ export async function createManualRisk(input: { title: string; whyItMatters: str
 
 export async function closeManualRisk(id: string, actor: string) {
   const risk = await resolveManualRisk(id);
-  await recordCockpitAction({ cardId: `manual-risk-${risk.id}`, action: "risk_resolved", actor, runId: null, requestId: null, outcome: "recorded", detail: risk.title });
+  await recordCockpitAction({ cardId: `manual-risk-${risk.id}`, action: "risk_resolved", actor, runId: null, requestId: null, outcome: "completed", detail: risk.title, momentumCategory: "protect", meaningfulLoopClosed: true });
   return risk;
 }
 
