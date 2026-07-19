@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { getManagedDataDir } from "@/lib/runtime/runtime-config";
-import type { CockpitActionRecord, CockpitIntakeSnapshot, CockpitManualRisk, CockpitUrgency } from "./cockpit-types";
+import type { CockpitActionRecord, CockpitIntakeSnapshot, CockpitManualRisk, CockpitOwnerReviewState, CockpitPotentialMiss, CockpitReviewClassification, CockpitSourceKind, CockpitUrgency } from "./cockpit-types";
 
 type CardState = Record<string, { snoozedUntil: string | null; comments: Array<{ id: string; body: string; actor: string; createdAt: string }> }>;
 type FileShape = {
@@ -11,9 +11,11 @@ type FileShape = {
   snapshots: CockpitIntakeSnapshot[];
   cardState: CardState;
   actions: CockpitActionRecord[];
+  ownerReview: CockpitOwnerReviewState;
 };
 
-const EMPTY: FileShape = { schemaVersion: 1, manualRisks: [], snapshots: [], cardState: {}, actions: [] };
+const EMPTY_OWNER_REVIEW: CockpitOwnerReviewState = { classifications: {}, potentialMisses: [], friction: [] };
+const EMPTY: FileShape = { schemaVersion: 1, manualRisks: [], snapshots: [], cardState: {}, actions: [], ownerReview: EMPTY_OWNER_REVIEW };
 let writeQueue: Promise<unknown> = Promise.resolve();
 
 function statePath() { return path.join(getManagedDataDir(), ".cabinet-state", "hermes-daily-intake.json"); }
@@ -27,6 +29,11 @@ export async function readCockpitState(): Promise<FileShape> {
       snapshots: Array.isArray(parsed.snapshots) ? parsed.snapshots : [],
       cardState: parsed.cardState && typeof parsed.cardState === "object" ? parsed.cardState : {},
       actions: Array.isArray(parsed.actions) ? parsed.actions : [],
+      ownerReview: parsed.ownerReview && typeof parsed.ownerReview === "object" ? {
+        classifications: parsed.ownerReview.classifications && typeof parsed.ownerReview.classifications === "object" ? parsed.ownerReview.classifications : {},
+        potentialMisses: Array.isArray(parsed.ownerReview.potentialMisses) ? parsed.ownerReview.potentialMisses : [],
+        friction: Array.isArray(parsed.ownerReview.friction) ? parsed.ownerReview.friction : [],
+      } : structuredClone(EMPTY_OWNER_REVIEW),
     };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return structuredClone(EMPTY);
@@ -48,6 +55,8 @@ async function mutate<T>(operation: (state: FileShape) => T | Promise<T>): Promi
     const value = await operation(state);
     state.snapshots = state.snapshots.sort((a, b) => b.generatedAt.localeCompare(a.generatedAt)).slice(0, 30);
     state.actions = state.actions.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 1_000);
+    state.ownerReview.potentialMisses = state.ownerReview.potentialMisses.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 100);
+    state.ownerReview.friction = state.ownerReview.friction.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 200);
     await write(state);
     return value;
   });
@@ -103,5 +112,37 @@ export async function snoozeCard(cardId: string, until: string) {
     const item = state.cardState[cardId] ??= { snoozedUntil: null, comments: [] };
     item.snoozedUntil = until;
     return item;
+  });
+}
+
+export async function classifyCard(cardId: string, classification: CockpitReviewClassification, note: string, actor: string) {
+  return mutate((state) => {
+    const value = { classification, note, actor, reviewedAt: new Date().toISOString() };
+    state.ownerReview.classifications[cardId] = value;
+    return value;
+  });
+}
+
+export async function addOwnerPotentialMiss(input: { title: string; sourceType: CockpitSourceKind; sourceId: string; whyPotentiallyMissed: string; reviewQuestion: string; actor: string }): Promise<CockpitPotentialMiss> {
+  return mutate((state) => {
+    const createdAt = new Date().toISOString();
+    const value: CockpitPotentialMiss = {
+      id: randomUUID(), title: input.title, sourceType: input.sourceType, sourceId: input.sourceId,
+      whyPotentiallyMissed: `Owner reported: ${input.whyPotentiallyMissed}`,
+      reviewQuestion: input.reviewQuestion,
+      evidence: [{ source: input.sourceType, label: `Owner review by ${input.actor}`, reference: input.sourceId, occurredAt: createdAt }],
+      createdAt,
+    };
+    const existing = state.ownerReview.potentialMisses.findIndex((item) => item.sourceId === input.sourceId);
+    if (existing >= 0) state.ownerReview.potentialMisses[existing] = value; else state.ownerReview.potentialMisses.push(value);
+    return value;
+  });
+}
+
+export async function recordOwnerFriction(body: string, actor: string) {
+  return mutate((state) => {
+    const value = { id: randomUUID(), body, actor, createdAt: new Date().toISOString() };
+    state.ownerReview.friction.push(value);
+    return value;
   });
 }

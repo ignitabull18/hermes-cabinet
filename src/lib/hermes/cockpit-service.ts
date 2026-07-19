@@ -6,11 +6,14 @@ import { readHermesServerConfig } from "./server-config";
 import { buildIntakePrompt, parseCockpitIntake } from "./cockpit-contract";
 import {
   addManualRisk,
+  addOwnerPotentialMiss,
+  classifyCard,
   commentOnCard,
   readCockpitState,
   recordCockpitAction,
   recordCockpitSnapshot,
   resolveManualRisk,
+  recordOwnerFriction,
   snoozeCard,
 } from "./cockpit-store";
 import {
@@ -18,6 +21,9 @@ import {
   type CockpitAction,
   type CockpitCard,
   type CockpitManualRisk,
+  type CockpitPotentialMiss,
+  type CockpitReviewClassification,
+  type CockpitSourceKind,
   type CockpitSourceCoverage,
   type CockpitUrgency,
   type DailyBusinessCockpit,
@@ -44,8 +50,8 @@ function sourceDefaults(management: HermesManagementSnapshot, manualRiskCount: n
   return {
     gmail: { status: "unavailable", message: "No completed intake has verified Gmail access yet.", evidenceCount: 0 },
     calendar: { status: "unavailable", message: "No completed intake has verified Calendar access yet.", evidenceCount: 0 },
-    hermesJobs: { status: "connected", message: `${management.jobs.length} canonical Hermes jobs inspected.`, evidenceCount: management.jobs.length },
-    manualRisks: { status: "connected", message: `${manualRiskCount} open manual risks inspected.`, evidenceCount: manualRiskCount },
+    hermesJobs: { status: management.jobs.length ? "connected" : "connected_empty", message: `${management.jobs.length} canonical Hermes jobs inspected.`, evidenceCount: management.jobs.length },
+    manualRisks: { status: manualRiskCount ? "connected" : "connected_empty", message: `${manualRiskCount} open manual risks inspected.`, evidenceCount: manualRiskCount },
     supermemory: {
       status: memoryHealthy ? "connected" : "partial",
       message: `${management.memory.namespace}; capture ${management.memory.captureState}; recall ${management.memory.recallHealth}.`,
@@ -138,7 +144,9 @@ export async function getDailyBusinessCockpit(): Promise<DailyBusinessCockpit> {
   const views = state.actions.filter((item) => item.action === "viewed").length;
   const actionsStarted = state.actions.filter((item) => item.outcome === "started").length;
   const actionsCompleted = state.actions.filter((item) => item.outcome === "completed").length;
-  const sourceSystemsCovered = Object.values(sourceCoverage).filter((item) => item.status === "connected" || item.status === "partial").length;
+  const sourceSystemsCovered = Object.values(sourceCoverage).filter((item) => item.status === "connected" || item.status === "connected_empty" || item.status === "partial").length;
+  const generatedMisses = latest?.potentiallyMissed ?? [];
+  const potentiallyMissed = [...generatedMisses, ...state.ownerReview.potentialMisses.filter((owner) => !generatedMisses.some((item) => item.sourceId === owner.sourceId))];
   return {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
@@ -153,6 +161,8 @@ export async function getDailyBusinessCockpit(): Promise<DailyBusinessCockpit> {
     },
     sourceCoverage,
     cards,
+    potentiallyMissed,
+    ownerReview: state.ownerReview,
     runs: cockpitRuns.slice(0, 20).map((run) => ({
       runId: run.runId, context: run.context, capability: run.capability, status: run.status,
       startedAt: run.startedAt, updatedAt: run.updatedAt, result: run.result, error: run.error,
@@ -184,6 +194,7 @@ export async function startDailyIntake(idempotencyKey: string, timezone: string)
       startedAt: run.startedAt, updatedAt: run.updatedAt, result: run.result, error: run.error,
       pendingDecision: run.pendingDecision,
     })),
+    ownerPotentialMisses: state.ownerReview.potentialMisses,
   });
   const run = await bridge().start({
     input: prompt,
@@ -291,6 +302,18 @@ export async function closeManualRisk(id: string, actor: string) {
 
 export async function recordCockpitView(actor = "Jeremy") {
   return recordCockpitAction({ cardId: "cockpit", action: "viewed", actor, runId: null, requestId: null, outcome: "recorded", detail: "Daily Business Intake viewed." });
+}
+
+export async function recordOwnerClassification(input: { cardId: string; classification: CockpitReviewClassification; note: string; actor: string }) {
+  return classifyCard(input.cardId, input.classification, input.note, input.actor);
+}
+
+export async function recordOwnerPotentialMiss(input: { title: string; sourceType: CockpitSourceKind; sourceId: string; whyPotentiallyMissed: string; reviewQuestion: string; actor: string }): Promise<CockpitPotentialMiss> {
+  return addOwnerPotentialMiss(input);
+}
+
+export async function recordCockpitFriction(body: string, actor: string) {
+  return recordOwnerFriction(body, actor);
 }
 
 export function newCockpitIdempotencyKey(prefix: string, value: string): string {

@@ -9,7 +9,7 @@ export const COCKPIT_CARD_KINDS = [
 
 export type CockpitCardKind = (typeof COCKPIT_CARD_KINDS)[number];
 export type CockpitSourceKind = "gmail" | "calendar" | "hermes_job" | "manual_risk" | "hermes_run" | "memory";
-export type CockpitSourceStatus = "connected" | "partial" | "unavailable" | "error";
+export type CockpitSourceStatus = "connected" | "connected_empty" | "partial" | "unavailable" | "error";
 export type CockpitUrgency = "critical" | "high" | "normal" | "low";
 export type CockpitApprovalState = "not_required" | "pending" | "approved" | "rejected";
 
@@ -41,6 +41,22 @@ export type CockpitCard = {
   createdAt: string;
   snoozedUntil: string | null;
   comments: Array<{ id: string; body: string; actor: string; createdAt: string }>;
+  relatedItemCount?: number;
+  relatedItemDates?: string[];
+  missingFacts?: string[];
+  contextNotes?: string[];
+  rankingRationale?: string;
+};
+
+export type CockpitPotentialMiss = {
+  id: string;
+  title: string;
+  sourceType: CockpitSourceKind;
+  sourceId: string;
+  whyPotentiallyMissed: string;
+  reviewQuestion: string;
+  evidence: CockpitEvidence[];
+  createdAt: string;
 };
 
 export type CockpitSourceCoverage = Record<
@@ -54,6 +70,7 @@ export type CockpitIntakeSnapshot = {
   generatedAt: string;
   sourceCoverage: CockpitSourceCoverage;
   cards: CockpitCard[];
+  potentiallyMissed?: CockpitPotentialMiss[];
 };
 
 export type CockpitManualRisk = {
@@ -65,6 +82,14 @@ export type CockpitManualRisk = {
   status: "open" | "resolved";
   createdAt: string;
   updatedAt: string;
+};
+
+export const COCKPIT_REVIEW_CLASSIFICATIONS = ["correct", "false_positive", "missing_context", "not_important", "wrong_recommendation"] as const;
+export type CockpitReviewClassification = (typeof COCKPIT_REVIEW_CLASSIFICATIONS)[number];
+export type CockpitOwnerReviewState = {
+  classifications: Record<string, { classification: CockpitReviewClassification; note: string; actor: string; reviewedAt: string }>;
+  potentialMisses: CockpitPotentialMiss[];
+  friction: Array<{ id: string; body: string; actor: string; createdAt: string }>;
 };
 
 export const COCKPIT_ACTIONS = [
@@ -118,6 +143,8 @@ export type DailyBusinessCockpit = {
   };
   sourceCoverage: CockpitSourceCoverage;
   cards: CockpitCard[];
+  potentiallyMissed: CockpitPotentialMiss[];
+  ownerReview: CockpitOwnerReviewState;
   runs: CockpitRunSummary[];
   telemetry: {
     cockpitViews: number;

@@ -37,6 +37,8 @@ const cockpit = {
   memory: { namespace: "operator-os:supermemory", provider: "supermemory", captureState: "active", recallHealth: "healthy" },
   sourceCoverage: coverage,
   cards: [card],
+  potentiallyMissed: [{ id: "miss-1", title: "Inventory alert needs context", sourceType: "gmail", sourceId: "gmail:inventory-1", whyPotentiallyMissed: "The affected inventory may no longer be active.", reviewQuestion: "Is the inventory still active?", evidence: [], createdAt: "2026-07-18T18:00:00.000Z" }],
+  ownerReview: { classifications: { "decision-1": { classification: "correct", note: "Verified", actor: "Jeremy", reviewedAt: "2026-07-18T20:00:00.000Z" } }, potentialMisses: [], friction: [] },
   runs: [],
   telemetry: { cockpitViews: 1, actionsStarted: 0, actionsCompleted: 0, sourceSystemsCovered: 5, estimatedToolSwitchesAvoided: 4, lastIntakeAt: "2026-07-18T20:00:00.000Z" },
 };
@@ -83,6 +85,9 @@ test("daily intake renders decision cards and keeps governed action results in c
   await expect(root.getByRole("heading", { name: "Needs Jeremy" })).toBeVisible();
   await expect(root.getByText("Review a time-sensitive account notice")).toBeVisible();
   await expect(root.getByText("gmail read-only evidence connected.")).toBeVisible();
+  await expect(root.getByRole("heading", { name: "Potentially missed" })).toBeVisible();
+  await expect(root.getByText("Inventory alert needs context")).toBeVisible();
+  await expect(root.getByText("Owner review: correct")).toBeVisible();
 
   await root.getByRole("button", { name: "Track risk" }).click();
   await expect(root.getByRole("heading", { name: "Track a manual business risk" })).toBeVisible();

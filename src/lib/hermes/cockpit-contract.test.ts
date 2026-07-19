@@ -19,12 +19,26 @@ test("cockpit intake normalizes decisions and source coverage from fenced Hermes
       "summary": "A reply is due today.",
       "whyItMatters": "The client is blocked.",
       "recommendedNextStep": "Review the draft.",
+      "relatedItemCount": 2,
+      "relatedItemDates": ["2026-07-17T15:30:00-07:00", "2026-07-18T15:30:00-07:00"],
+      "missingFacts": ["Exact balance", "Specific due date"],
+      "contextNotes": ["Two reminders were grouped"],
+      "rankingRationale": "A payment obligation requires operator action.",
       "urgency": "high",
       "sourceType": "gmail",
       "sourceId": "message-123",
       "createdAt": "2026-07-18T15:30:00-07:00",
       "evidence": [{ "source": "gmail", "label": "Important email", "reference": "message-123", "occurredAt": "2026-07-18T15:30:00-07:00" }],
       "approval": { "state": "not_required", "runId": null, "requestId": null }
+    }],
+    "potentiallyMissed": [{
+      "title": "Inventory alert",
+      "sourceType": "gmail",
+      "sourceId": "inventory-1",
+      "whyPotentiallyMissed": "Activity status is unknown.",
+      "reviewQuestion": "Is this inventory still active?",
+      "createdAt": "2026-07-18T15:00:00-07:00",
+      "evidence": []
     }]
   }
   \`\`\``;
@@ -36,6 +50,10 @@ test("cockpit intake normalizes decisions and source coverage from fenced Hermes
   assert.equal(snapshot.cards[0]?.kind, "needs_jeremy");
   assert.equal(snapshot.cards[0]?.sourceId, "message-123");
   assert.equal(snapshot.cards[0]?.evidence[0]?.reference, "message-123");
+  assert.equal(snapshot.cards[0]?.relatedItemCount, 2);
+  assert.deepEqual(snapshot.cards[0]?.missingFacts, ["Exact balance", "Specific due date"]);
+  assert.equal(snapshot.cards[0]?.rankingRationale, "A payment obligation requires operator action.");
+  assert.equal(snapshot.potentiallyMissed?.[0]?.sourceId, "inventory-1");
 });
 
 test("cockpit intake rejects prose without a JSON contract", () => {
@@ -45,8 +63,13 @@ test("cockpit intake rejects prose without a JSON contract", () => {
 test("intake prompt enforces read-only behavior and explicit unavailable coverage", () => {
   const prompt = buildIntakePrompt({ now: "2026-07-18T16:00:00-07:00", timezone: "America/Vancouver", manualRisks: [], jobs: [], recentRuns: [] });
   assert.match(prompt, /Do not send, modify, schedule, approve, reject/);
-  assert.match(prompt, /If Gmail or Calendar is unavailable/);
+  assert.match(prompt, /If a live operation fails authentication/);
   assert.match(prompt, /gws gmail users messages list\/get/);
   assert.match(prompt, /Never use send, modify, insert, update, delete/);
+  assert.match(prompt, /Freshness is mandatory/);
+  assert.match(prompt, /Never inspect credential files/);
+  assert.match(prompt, /connected_empty/);
+  assert.match(prompt, /potentiallyMissed/);
+  assert.match(prompt, /next seven days/);
   assert.match(prompt, /Return exactly one JSON object/);
 });
