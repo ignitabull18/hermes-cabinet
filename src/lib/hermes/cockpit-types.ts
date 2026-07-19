@@ -145,6 +145,7 @@ export type DailyBusinessCockpit = {
   cards: CockpitCard[];
   potentiallyMissed: CockpitPotentialMiss[];
   ownerReview: CockpitOwnerReviewState;
+  history: CockpitActionRecord[];
   runs: CockpitRunSummary[];
   telemetry: {
     cockpitViews: number;

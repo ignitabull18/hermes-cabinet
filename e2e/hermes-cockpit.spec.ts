@@ -41,6 +41,7 @@ const cockpit = {
   potentiallyMissed: [{ id: "miss-1", title: "Inventory alert needs context", sourceType: "gmail", sourceId: "gmail:inventory-1", whyPotentiallyMissed: "STALE-EVIDENCE WARNING: The affected inventory may no longer be active.", reviewQuestion: "Is the inventory still active?", evidence: [], createdAt: "2026-07-18T18:00:00.000Z" }],
   ownerReview: { classifications: { "decision-1": { classification: "correct", note: "Verified", actor: "Jeremy", reviewedAt: "2026-07-18T20:00:00.000Z" } }, potentialMisses: [], friction: [] },
   runs: [],
+  history: [],
   telemetry: { cockpitViews: 1, actionsStarted: 0, actionsCompleted: 0, sourceSystemsCovered: 5, estimatedToolSwitchesAvoided: 4, lastIntakeAt: "2026-07-18T20:00:00.000Z" },
 };
 
@@ -50,7 +51,27 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => { await cabinet?.close(); });
 
-test("daily intake renders decision cards and keeps governed action results in context", async ({ page }) => {
+async function enterCockpit(page: import("@playwright/test").Page) {
+  await page.route("**/api/hermes/health", async (route) => route.fulfill({ json: cockpit.health }));
+  await page.goto(`${cabinet.appUrl}/cockpit`);
+  const useDefault = page.getByRole("button", { name: "Use default" });
+  if (await useDefault.waitFor({ state: "visible", timeout: 5_000 }).then(() => true).catch(() => false)) {
+    await useDefault.click();
+    await page.goto(`${cabinet.appUrl}/cockpit`);
+  }
+  const skipTour = page.getByRole("button", { name: "Skip tour" });
+  if (await skipTour.waitFor({ state: "visible", timeout: 3_000 }).then(() => true).catch(() => false)) await skipTour.click();
+}
+
+test("Today orients the owner and keeps governed action results in the inspector", async ({ page }) => {
+  const consoleIssues: string[] = [];
+  const responseIssues: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "warning" || message.type() === "error") consoleIssues.push(`${message.type()}: ${message.text()}`);
+  });
+  page.on("response", (response) => {
+    if (response.status() >= 500) responseIssues.push(`${response.status()} ${response.url()}`);
+  });
   const actions: Record<string, unknown>[] = [];
   let actionStarted = false;
   await page.route("**/api/hermes/cockpit", async (route) => {
@@ -70,37 +91,67 @@ test("daily intake renders decision cards and keeps governed action results in c
     await route.fulfill({ json: { ok: true, runId: "run_cockpit_1" } });
   });
 
-  await page.goto(`${cabinet.appUrl}/cockpit`);
-  const useDefault = page.getByRole("button", { name: "Use default" });
-  if (await useDefault.waitFor({ state: "visible", timeout: 5_000 }).then(() => true).catch(() => false)) {
-    await useDefault.click();
-    await page.goto(`${cabinet.appUrl}/cockpit`);
-  }
-  const skipTour = page.getByRole("button", { name: "Skip tour" });
-  if (await skipTour.waitFor({ state: "visible", timeout: 3_000 }).then(() => true).catch(() => false)) await skipTour.click();
+  await enterCockpit(page);
 
   const root = page.getByTestId("daily-business-cockpit");
   await expect(root).toBeVisible();
   await expect(page).toHaveURL(/\/cockpit$/);
-  await expect(root.getByText("operator-os:supermemory")).toBeVisible();
-  await expect(root.getByRole("heading", { name: "Needs Jeremy" })).toBeVisible();
+  await expect(root.getByRole("heading", { name: "Today" })).toBeVisible();
+  await expect(root.getByText("Daily Momentum")).toBeVisible();
+  await expect(root.getByText("Next Best Move")).toBeVisible();
   await expect(root.getByText("Review a time-sensitive account notice")).toBeVisible();
-  await expect(root.getByText("Live Gmail check failed with invalid_grant.")).toBeVisible();
-  await expect(root.getByRole("button", { name: "Reauthenticate Google Workspace" })).toBeVisible();
-  await expect(root.getByText("Current live check failed", { exact: false }).first()).toBeVisible();
-  await expect(root.getByRole("heading", { name: "Potentially missed" })).toBeVisible();
-  await expect(root.getByText("Inventory alert needs context")).toBeVisible();
-  await expect(root.getByText("stale retained evidence")).toBeVisible();
-  await expect(root.getByText("Owner review: correct")).toBeVisible();
+  await expect(root.getByText("2 system exceptions")).toBeVisible();
+  await expect(root.getByRole("button", { name: "Reauthenticate" })).toBeVisible();
+  await expect(root.getByText("0 may deserve promotion")).toBeVisible();
+  await expect(root.getByTestId("cockpit-systems-strip")).toContainText("Jobs empty");
 
+  await root.getByRole("button", { name: "Radar", exact: true }).click();
+  await expect(root.getByTestId("cockpit-radar-view")).toContainText("Inventory alert needs context");
+  await root.getByRole("button", { name: "Today", exact: true }).click();
+
+  await root.getByRole("button", { name: "More", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Risks" }).click();
   await root.getByRole("button", { name: "Track risk" }).click();
   await expect(root.getByRole("heading", { name: "Track a manual business risk" })).toBeVisible();
   await root.getByRole("button", { name: "Cancel" }).click();
   await expect(root.getByRole("heading", { name: "Track a manual business risk" })).toBeHidden();
+  await root.getByRole("button", { name: "Today", exact: true }).click();
 
-  await root.getByRole("button", { name: "Investigate" }).click();
+  await root.getByTestId("cockpit-next-best-move").getByRole("button", { name: "Investigate" }).click();
   await expect.poll(() => actions.length).toBe(1);
   expect(actions[0]).toMatchObject({ action: "investigate", cardId: "decision-1", actor: "Jeremy", confirmed: false });
   expect(typeof actions[0]?.idempotencyKey).toBe("string");
-  await expect(root.getByTestId("cockpit-action-result")).toContainText("Read-only evidence review completed.");
+  await expect(page.getByTestId("cockpit-inspector")).toBeVisible();
+  await expect(page.getByTestId("cockpit-action-result")).toContainText("Read-only evidence review completed.");
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("cockpit-inspector")).toBeHidden();
+  expect({ consoleIssues, responseIssues }).toEqual({ consoleIssues: [], responseIssues: [] });
+});
+
+test("390px Today has no horizontal overflow and uses a full-height detail sheet", async ({ page }) => {
+  const consoleIssues: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "warning" || message.type() === "error") consoleIssues.push(`${message.type()}: ${message.text()}`);
+  });
+  await page.route("**/api/hermes/cockpit", async (route) => {
+    if (route.request().method() === "POST") return route.fulfill({ json: { ok: true } });
+    return route.fulfill({ json: cockpit });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await enterCockpit(page);
+
+  const root = page.getByTestId("daily-business-cockpit");
+  await expect(root.getByRole("navigation", { name: "Cockpit mobile" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await root.getByRole("button", { name: "Open details" }).click();
+  const inspector = page.getByTestId("cockpit-inspector");
+  await expect(inspector).toBeVisible();
+  const box = await inspector.boundingBox();
+  expect(box?.width).toBeGreaterThanOrEqual(280);
+  expect(box?.width).toBeLessThanOrEqual(390);
+  expect(box?.height).toBe(844);
+  await page.keyboard.press("Escape");
+  await expect(inspector).toBeHidden();
+  expect(consoleIssues).toEqual([]);
 });

@@ -163,6 +163,7 @@ export async function getDailyBusinessCockpit(): Promise<DailyBusinessCockpit> {
     cards,
     potentiallyMissed,
     ownerReview: state.ownerReview,
+    history: [...state.actions].reverse().slice(0, 100),
     runs: cockpitRuns.slice(0, 20).map((run) => ({
       runId: run.runId, context: run.context, capability: run.capability, status: run.status,
       startedAt: run.startedAt, updatedAt: run.updatedAt, result: run.result, error: run.error,

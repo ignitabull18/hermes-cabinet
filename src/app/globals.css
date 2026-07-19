@@ -47,6 +47,10 @@
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: var(--primary);
+  --color-command: var(--cockpit-command);
+  --color-live: var(--cockpit-live);
+  --color-success: var(--cockpit-success);
+  --color-warning: var(--cockpit-warning);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
@@ -79,6 +83,10 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.4 0 0);
+  --cockpit-command: oklch(0.58 0.22 285);
+  --cockpit-live: oklch(0.67 0.16 220);
+  --cockpit-success: oklch(0.62 0.16 155);
+  --cockpit-warning: oklch(0.7 0.15 75);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -153,6 +161,10 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
+  --cockpit-command: oklch(0.72 0.19 290);
+  --cockpit-live: oklch(0.76 0.14 215);
+  --cockpit-success: oklch(0.72 0.15 155);
+  --cockpit-warning: oklch(0.78 0.14 78);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);

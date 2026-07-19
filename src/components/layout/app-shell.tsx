@@ -826,6 +826,13 @@ export function AppShell() {
     prevIsApp.current = !!isApp;
   }, [isApp, setSidebarCollapsed, setAiPanelCollapsed]);
 
+  // Today owns the four-item mobile navigation required for cockpit work.
+  // Collapse Cabinet's drawer on entry so it cannot cover the mission or
+  // compete with that focused navigation surface.
+  useEffect(() => {
+    if (isMobile && section.type === "cockpit") setSidebarCollapsed(true);
+  }, [isMobile, section.type, setSidebarCollapsed]);
+
   const handleExitApp = () => {
     setSidebarCollapsed(preAppSidebarCollapsed.current);
     setAiPanelCollapsed(preAppAiPanelCollapsed.current);
@@ -1191,7 +1198,7 @@ export function AppShell() {
           </div>
         )}
       </div>
-      {!focusMode && <MobileBottomNav />}
+      {!focusMode && section.type !== "cockpit" ? <MobileBottomNav /> : null}
       {terminalOpen && terminalPosition === "right" && <TerminalTabs />}
       {!isMobile && (
         <div className={focusMode ? "hidden" : "contents"}>
