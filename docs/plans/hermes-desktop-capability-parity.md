@@ -15,7 +15,7 @@ This audit compares the installed Hermes Desktop 0.17.0 build at commit `311a5b0
 
 ## Current parity
 
-- Operator: **74%**
+- Operator: **71%**
 - Management: **60%**
 - Developer: **78%**
 
@@ -65,7 +65,7 @@ The percentage is deliberately weighted so visibility is not confused with full 
 | Keyboard shortcuts | Desktop keybind panel | Desktop-local | Desktop local keybind store | [Cabinet keyboard shortcuts](/help) | `mapped` | low | Developer | List Hermes-only keybindings diagnostically when safe source is available. | Hermes Desktop 0.17.0 source at 311a5b0a552be78f5c58807e2be1db02e3badcb0 |
 | Layout controls | Pane shell layouts | Desktop-local | Desktop local pane store | [Cabinet layout controls](/hermes?mode=developer) | `mapped` | low | Developer | No cross-application layout synchronization. | Hermes Desktop 0.17.0 source at 311a5b0a552be78f5c58807e2be1db02e3badcb0 |
 | Approvals and pending input | Chat tool approvals | Supported | Gateway decision events and run approval endpoint | [Cabinet Hermes conversations](/agents) | `first_class` | consequential | Operator | Existing confirmation, owner identity, and idempotency behavior is unchanged. | Cabinet Hermes gateway and run contract tests |
-| Browser and OpenCLI | Hermes Terminal toolset | OpenCLI 1.8.5 connected externally | opencli doctor and browser bridge CLI | [Hermes Tools](/hermes?capability=browser-opencli) | `first_class` | consequential | Operator | Keep external OpenCLI connection distinct from Hermes-native skills. | OpenCLI doctor plus local read-only acceptance |
+| Browser and OpenCLI | Hermes Terminal toolset | OpenCLI 1.8.5 connected externally | opencli doctor and browser bridge CLI | [Hermes Tools](/hermes?capability=browser-opencli) | `visible_read_only` | consequential | Operator | Add a reviewed repair/reconnect action and keep external OpenCLI distinct from Hermes-native skills. | OpenCLI doctor plus local read-only acceptance |
 | Executor | Hermes terminal/code execution | Supported | Toolsets, runtime tool events, terminal backend | [Hermes Tools](/hermes?section=tools) | `visible_read_only` | consequential | Operator | Show backend and active action without creating a second executor. | Hermes Agent 0.18.2 live OpenAPI and management response |
 | Raw logs | Command Center maintenance | Supported | /api/logs | [Hermes Developer](/hermes?mode=developer) | `diagnostic_only` | secret | Developer | Redact secrets and bound log output before browser exposure. | Hermes Agent 0.18.2 live OpenAPI and management response |
 | Low-level gateway diagnostics | Gateway settings and logs | Supported | Gateway health, logs, drain, restart | [Hermes Developer](/hermes?mode=developer) | `diagnostic_only` | secret | Developer | Display URL identity without query tokens or authorization material. | Hermes Agent 0.18.2 live OpenAPI and management response |
