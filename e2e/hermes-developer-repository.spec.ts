@@ -72,8 +72,10 @@ test("desktop repository context and all inspectors stay bounded", async ({ page
 
   await select(page, "projects");
   await expect(page.getByTestId("hermes-capability-inspector")).toContainText("no associated repository");
-  const projectViewport = page.getByTestId("hermes-capability-inspector").locator('[data-radix-scroll-area-viewport]');
-  await projectViewport.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  await page.getByTestId("hermes-capability-inspector").evaluate((inspector) => {
+    const viewport = inspector.querySelector<HTMLElement>('[data-radix-scroll-area-viewport]');
+    if (viewport) viewport.scrollTop = viewport.scrollHeight;
+  });
   await page.screenshot({ path: path.join(evidenceDir, "connected-empty-project-state.png"), fullPage: true });
 });
 

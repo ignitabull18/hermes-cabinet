@@ -4,6 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import { buildHermesRepositoryFixtureProjection } from "./control-center-repository-fixture";
 import { hermesProjectionMatrixRows } from "./control-center-projection";
+import { sanitizeHermesBrowserModel } from "./control-center-sanitizer";
 import { normalizeProjectObservation, normalizeReviewObservation, normalizeWorktreeObservation, safePathIdentity, safeRepositoryIdentity } from "./developer-repository";
 
 const observedAt = "2026-07-19T20:00:00.000Z";
@@ -43,6 +44,28 @@ test("keeps connected-empty, unknown, and clean distinct", () => {
   assert.equal(normalizeReviewObservation({}, {}, "/tmp/project", observedAt).clean, null);
   const clean = normalizeReviewObservation({ branch: "main", detached: false, staged: 0, unstaged: 0, untracked: 0, conflicted: 0 }, { files: [] }, "/tmp/project", observedAt);
   assert.deepEqual({ state: clean.state, clean: clean.clean, reviewAvailable: clean.reviewAvailable, reviewCount: clean.reviewCount }, { state: "success", clean: true, reviewAvailable: true, reviewCount: 0 });
+});
+
+test("normalization plus the recursive browser boundary blocks local identity and credential egress", () => {
+  const project = normalizeProjectObservation({ sessions: [{
+    id: "session\u0000-id",
+    profile: "operator-os",
+    project_name: `\u001b[31moauth_code=oauth-secret ${"x".repeat(300)}`,
+    cwd: "/Users/local-user/.config/credentials.json",
+    git_repo_root: "https://local-user:api-key-secret@example.test/org/safe-repo.git?token=query-secret",
+  }] }, "operator-os", observedAt);
+  const worktrees = normalizeWorktreeObservation([{ path: "C:\\Users\\local-user\\worktrees\\safe-tree", branch: `feature\u0007-${"b".repeat(300)}`, current: true }], "C:\\Users\\local-user\\worktrees\\safe-tree", observedAt);
+  const sanitized = sanitizeHermesBrowserModel({
+    project,
+    worktrees,
+    nested: { authorization: "Bearer authorization-secret", apiKey: "api-key-secret", error: "https://example.test/path?client_secret=query-secret" },
+  });
+  const serialized = JSON.stringify(sanitized);
+  for (const forbidden of ["local-user", "oauth-secret", "api-key-secret", "query-secret", "authorization-secret", "/Users/", "C:\\\\Users\\\\", "\u001b", "\u0007"]) assert.equal(serialized.includes(forbidden), false);
+  assert.equal(project.repository, "safe-repo");
+  assert.equal(worktrees.current?.identity, "safe-tree");
+  assert.equal((project.project?.length ?? 0) <= 96, true);
+  assert.equal((worktrees.current?.branch?.length ?? 0) <= 96, true);
 });
 
 test("keeps exact-fixture paths from earning live credits and emits no sensitive material", () => {

@@ -5,7 +5,7 @@ import { HERMES_EVIDENCE_CATALOG_ID, HERMES_RAW_PROJECTION_SCHEMA_VERSION } from
 import { normalizeProjectObservation, normalizeReviewObservation, normalizeWorktreeObservation } from "./developer-repository";
 
 export const HERMES_REPOSITORY_FIXTURE_ID = "hermes-phase-2b-repository-visibility-v1";
-export const HERMES_REPOSITORY_FIXTURE_CAPTURED_AT = "2026-07-19T20:00:00.000Z";
+export const HERMES_REPOSITORY_FIXTURE_CAPTURED_AT = "2026-07-19T22:15:00.000Z";
 
 type Options = { implementationRevision?: string | null; artifactGeneratedAt?: string | null };
 
