@@ -7,6 +7,7 @@ import {
   assembleRawProjectionEnvelope,
   formatHermesMatrixRows,
   renderHermesParitySummary,
+  loadExplicitProjection,
   validateLiveProjection,
   validateRawProjectionEnvelope,
 } from "../../../scripts/generate-hermes-parity-evidence";
@@ -16,6 +17,8 @@ import {
   buildHermesAcceptanceFixtureProjection,
   HERMES_ACCEPTANCE_FIXTURE_OBSERVATIONS,
 } from "./control-center-acceptance-fixture";
+import { assertValidHermesEvidenceCatalog, validateHermesEvidenceAuthority } from "./control-center-authority";
+import { HERMES_CAPABILITY_EVIDENCE_CATALOG } from "./capability-evidence-catalog";
 import { buildHermesControlCenterProjection, hermesProjectionMatrixRows } from "./control-center-projection";
 import { gatewayEvidenceState, messagingHealth } from "./control-center";
 import type { HermesCapabilityObservation, HermesControlCenterProjectionInput } from "./control-center-types";
@@ -77,11 +80,122 @@ test("the full acceptance fixture uses one assembler for all 48 rows, totals, an
 });
 
 test("matrix rows and committed machine evidence equal the shared fixture projection", () => {
-  const fixture = buildHermesAcceptanceFixtureProjection();
   const machine = JSON.parse(readFileSync(path.resolve("docs/evidence/hermes-truth-state/acceptance-fixture-projection.json"), "utf8"));
+  const fixture = buildHermesAcceptanceFixtureProjection({
+    implementationRevision: machine.evidenceProvenance?.implementationRevision ?? null,
+    artifactGeneratedAt: machine.evidenceProvenance?.artifactGeneratedAt ?? null,
+  });
   assert.deepEqual(machine, JSON.parse(JSON.stringify(fixture)));
   assert.deepEqual(hermesProjectionMatrixRows(machine), hermesProjectionMatrixRows(fixture));
   assert.deepEqual(machine.parity, fixture.parity);
+});
+
+test("proof authority validator enforces complete origin, provenance, kind, and scope tuples", () => {
+  const valid = [
+    ["raw_observation", "live_runtime", "live", "live_runtime_operation"],
+    ["raw_observation", "live_runtime", "live", "cabinet_local_surface"],
+    ["raw_observation", "acceptance_fixture", "exact_fixture", "exact_fixture_path"],
+    ["raw_observation", "acceptance_fixture", "exact_fixture", "cabinet_local_surface"],
+    ["approved_evidence_catalog", "live_runtime", "historical_audit", "source_audit"],
+    ["approved_evidence_catalog", "acceptance_fixture", "historical_audit", "historical_live_acceptance"],
+    ["derived_reconciliation", "live_runtime", "live", "live_runtime_operation"],
+    ["derived_reconciliation", "acceptance_fixture", "exact_fixture", "exact_fixture_path"],
+  ] as const;
+  for (const [origin, provenanceKind, proofKind, proofScope] of valid) {
+    assert.equal(validateHermesEvidenceAuthority({ origin, provenanceKind, proofKind, proofScope }).valid, true);
+  }
+  const invalid = [
+    ["raw_observation", "acceptance_fixture", "live", "live_runtime_operation"],
+    ["raw_observation", "live_runtime", "exact_fixture", "exact_fixture_path"],
+    ["raw_observation", "acceptance_fixture", "exact_fixture", "live_runtime_operation"],
+    ["raw_observation", "live_runtime", "live", "exact_fixture_path"],
+    ["raw_observation", "live_runtime", "historical_audit", "source_audit"],
+    ["raw_observation", "live_runtime", "historical_audit", "historical_live_acceptance"],
+    ["approved_evidence_catalog", "live_runtime", "live", "live_runtime_operation"],
+  ] as const;
+  for (const [origin, provenanceKind, proofKind, proofScope] of invalid) {
+    assert.equal(validateHermesEvidenceAuthority({ origin, provenanceKind, proofKind, proofScope }).valid, false);
+  }
+});
+
+test("invalid direct raw authority is inert for health, exceptions, and every evidence credit", () => {
+  const snapshot = buildWith((input) => replaceObservation(input, "profiles", [
+    observed("profiles", "success"),
+    observed("profiles", "failure", { source: "invalid authority", proofKind: "live", proofScope: "live_runtime_operation" }),
+  ]));
+  const profiles = capability(snapshot, "profiles");
+  assert.equal(profiles.operationalHealth, "healthy");
+  assert.equal(profiles.evidence.some((item) => item.source === "invalid authority"), false);
+  assert.equal(snapshot.exceptions.some((item) => item.capabilityId === "profiles"), false);
+  assert.equal(profiles.credit.liveVisibility, false);
+  assert.equal(profiles.credit.liveProven, false);
+  assert.equal(profiles.credit.governedManagement, false);
+});
+
+test("provenance mismatches cannot earn current, live-proven, or fixture-path credit", () => {
+  const fixture = buildWith((input) => replaceObservation(input, "profiles", [
+    observed("profiles", "success"),
+    observed("profiles", "success", { source: "pretend live", proofKind: "live", proofScope: "live_runtime_operation" }),
+  ]));
+  assert.equal(capability(fixture, "profiles").operationalHealth, "healthy");
+  assert.equal(capability(fixture, "profiles").credit.liveVisibility, false);
+  assert.equal(capability(fixture, "profiles").credit.liveProven, false);
+
+  const live = buildWith((input) => {
+    input.installedRuntime.provenance = { kind: "live_runtime", label: "Live runtime projection", capturedAt: NOW, fixtureId: null };
+    replaceObservation(input, "profiles", [observed("profiles", "success", { proofKind: "exact_fixture", proofScope: "exact_fixture_path" })]);
+  });
+  assert.equal(capability(live, "profiles").pathProof.proven, false);
+  assert.equal(capability(live, "profiles").operationalHealth, "unknown");
+});
+
+test("raw historical scopes are rejected while source audits stay visible and non-operational", () => {
+  for (const proofScope of ["source_audit", "historical_live_acceptance"] as const) {
+    const envelope = structuredClone(buildHermesAcceptanceFixtureEnvelope());
+    envelope.observations = [{ ...envelope.observations[0]!, proofKind: "historical_audit", proofScope }, ...envelope.observations.slice(1)];
+    assert.throws(() => validateRawProjectionEnvelope(envelope), /invalid evidence-authority tuple/);
+  }
+  const row = capability(buildHermesAcceptanceFixtureProjection(), "agents-subagents");
+  assert.equal(row.evidence.some((item) => item.origin === "approved_evidence_catalog" && item.proofScope === "source_audit"), true);
+  assert.equal(row.credit.liveProven, false);
+});
+
+test("Cabinet-local evidence never earns Hermes live parity", () => {
+  const fixture = capability(buildHermesAcceptanceFixtureProjection(), "notifications");
+  assert.equal(fixture.operationalHealth, "healthy");
+  assert.equal(fixture.credit.liveVisibility, false);
+  assert.equal(fixture.credit.liveProven, false);
+  const live = capability(buildWith((input) => {
+    input.installedRuntime.provenance = { kind: "live_runtime", label: "Live runtime projection", capturedAt: NOW, fixtureId: null };
+    replaceObservation(input, "notifications", [observed("notifications", "success", { proofKind: "live", proofScope: "cabinet_local_surface" })]);
+  }), "notifications");
+  assert.equal(live.credit.liveVisibility, false);
+  assert.equal(live.credit.liveProven, false);
+});
+
+test("approved historical acceptance requires a valid time, reference, interface, source, and backend identity", () => {
+  assert.doesNotThrow(() => assertValidHermesEvidenceCatalog(HERMES_CAPABILITY_EVIDENCE_CATALOG));
+  for (const mutation of [
+    { observedAt: "not-a-time" },
+    { evidenceReference: "" },
+    { interface: "" },
+    { source: "" },
+    { installedBackendVersion: null, installedBackendCommit: null },
+  ]) {
+    const snapshot = buildWith((input) => {
+      const historical = input.evidenceCatalog.approvals!.historical!;
+      input.evidenceCatalog.approvals!.historical = historical.map((proof) => proof.proofScope === "historical_live_acceptance" ? { ...proof, ...mutation } : proof);
+    });
+    assert.equal(capability(snapshot, "approvals").credit.liveProven, false);
+  }
+  assert.equal(capability(buildHermesAcceptanceFixtureProjection(), "approvals").credit.liveProven, true);
+});
+
+test("approved evidence-catalog validation rejects nonhistorical authority", () => {
+  const catalog = structuredClone(HERMES_CAPABILITY_EVIDENCE_CATALOG);
+  const proof = catalog.approvals!.historical![0]!;
+  catalog.approvals!.historical![0] = { ...proof, proofKind: "live" as never, proofScope: "live_runtime_operation" as never };
+  assert.throws(() => assertValidHermesEvidenceCatalog(catalog), /invalid authority/);
 });
 
 test("Cabinet surface state remains registry-only in every evidence condition", () => {
@@ -172,6 +286,51 @@ test("Gateway deduplicates source/interface using the newest valid observation",
     observed("gateway", "success", { source: "B", interface: "/other", facts: { state: "running" } }),
   ])), "gateway");
   assert.notEqual(gateway.operationalHealth, "conflicting_evidence");
+});
+
+test("Gateway ignores a future-invalid newest record without shadowing the older valid source record", () => {
+  const gateway = capability(buildWith((input) => replaceObservation(input, "gateway", [
+    observed("gateway", "success", { source: "A", interface: "/same", observedAt: "2026-07-19T22:14:00Z", facts: { state: "running" } }),
+    observed("gateway", "success", { source: "A", interface: "/same", observedAt: "2026-07-20T22:15:00Z", facts: { state: "stopped" } }),
+    observed("gateway", "success", { source: "B", interface: "/other", observedAt: "2026-07-19T22:14:30Z", facts: { state: "stopped" } }),
+  ])), "gateway");
+  assert.equal(gateway.operationalHealth, "conflicting_evidence");
+  assert.match(gateway.operationalDetail, /A observed running.*B observed stopped/);
+});
+
+test("Gateway missing and unparseable timestamps cannot displace valid records", () => {
+  for (const observedAt of [null, "not-a-time"]) {
+    const gateway = capability(buildWith((input) => replaceObservation(input, "gateway", [
+      observed("gateway", "success", { source: "A", interface: "/same", observedAt: "2026-07-19T22:14:00Z", facts: { state: "running" } }),
+      observed("gateway", "success", { source: "A", interface: "/same", observedAt, facts: { state: "stopped" } }),
+      observed("gateway", "success", { source: "B", interface: "/other", facts: { state: "stopped" } }),
+    ])), "gateway");
+    assert.equal(gateway.operationalHealth, "conflicting_evidence");
+  }
+});
+
+test("Gateway equal-time reconciliation is deterministic and same-source identical states collapse", () => {
+  const records = [
+    observed("gateway", "success", { source: "A", interface: "/same", summary: "z", facts: { state: "running" } }),
+    observed("gateway", "success", { source: "A", interface: "/same", summary: "a", facts: { state: "running" } }),
+    observed("gateway", "success", { source: "B", interface: "/other", facts: { state: "running" } }),
+  ];
+  const forward = capability(buildWith((input) => replaceObservation(input, "gateway", records)), "gateway");
+  const reverse = capability(buildWith((input) => replaceObservation(input, "gateway", [...records].reverse())), "gateway");
+  assert.equal(forward.operationalHealth, "healthy");
+  assert.equal(reverse.operationalHealth, "healthy");
+  assert.equal(forward.operationalDetail, reverse.operationalDetail);
+});
+
+test("Gateway equal-time opposing states from one source are source-ambiguous, not cross-source conflict", () => {
+  const gateway = capability(buildWith((input) => replaceObservation(input, "gateway", [
+    observed("gateway", "success", { source: "A", interface: "/same", facts: { state: "running" } }),
+    observed("gateway", "success", { source: "A", interface: "/same", facts: { state: "stopped" } }),
+    observed("gateway", "success", { source: "B", interface: "/other", facts: { state: "running" } }),
+  ])), "gateway");
+  assert.equal(gateway.operationalHealth, "unknown");
+  assert.match(gateway.operationalDetail, /source is ambiguous/i);
+  assert.equal(gateway.operationalDetail.includes("observed running"), false);
 });
 
 test("Gateway ignores unknown, unavailable, stale, and invalid-time disagreements", () => {
@@ -278,19 +437,30 @@ test("fixture and live summaries use provenance-specific wording", () => {
   assert.doesNotMatch(renderHermesParitySummary(live), /Acceptance-fixture/);
 });
 
-test("generatedAt remains separate from observation and fixture capture times", () => {
-  const snapshot = buildHermesAcceptanceFixtureProjection();
+test("artifact generation provenance remains separate from observation, fixture, and simulated installation metadata", async () => {
+  const revision = "1234567890abcdef1234567890abcdef12345678";
+  const generatedAt = "2026-07-19T23:30:00.000Z";
+  const snapshot = await loadExplicitProjection({
+    fixtureId: "hermes-phase-2a2-proof-integrity-v1",
+    implementationRevision: revision,
+    artifactGeneratedAt: generatedAt,
+  });
   assert.equal(snapshot.checkedAt, NOW);
   assert.equal(snapshot.provenance.capturedAt, NOW);
   assert.equal(capability(snapshot, "messaging").evidence[0]?.observedAt, NOW);
-  assert.equal("generatedAt" in snapshot, false);
+  assert.equal(snapshot.evidenceProvenance.implementationRevision, revision);
+  assert.equal(snapshot.evidenceProvenance.fixtureId, "hermes-phase-2a2-proof-integrity-v1");
+  assert.equal(snapshot.evidenceProvenance.fixtureCapturedAt, NOW);
+  assert.equal(snapshot.evidenceProvenance.artifactGeneratedAt, generatedAt);
+  assert.equal(snapshot.installed.cabinetCommit, null);
+  assert.notEqual(snapshot.installed.cabinetCommit, snapshot.evidenceProvenance.implementationRevision);
 });
 
 test("the generator fails closed for no source, multiple sources, legacy input, and unknown fixture", () => {
   const cli = path.resolve("node_modules/tsx/dist/cli.mjs");
   const script = path.resolve("scripts/generate-hermes-parity-evidence.ts");
   const run = (...args: string[]) => spawnSync(process.execPath, [cli, script, ...args], { encoding: "utf8" });
-  for (const args of [[], ["--fixture", "unknown"], ["--input", "projection.json"], ["--fixture", "hermes-phase-2a2-proof-integrity-v1", "--url", "http://127.0.0.1:1"]]) {
+  for (const args of [[], ["--fixture", "unknown"], ["--fixture", "hermes-phase-2a2-proof-integrity-v1"], ["--fixture", "hermes-phase-2a2-proof-integrity-v1", "--implementation-revision", "short"], ["--input", "projection.json"], ["--fixture", "hermes-phase-2a2-proof-integrity-v1", "--url", "http://127.0.0.1:1"]]) {
     const result = run(...args);
     assert.notEqual(result.status, 0, args.join(" "));
   }

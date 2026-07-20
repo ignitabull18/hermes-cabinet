@@ -7,7 +7,9 @@ import { bootCabinet, type CabinetInstance } from "../test/support/harness";
 test.describe.configure({ mode: "serial" });
 let cabinet: CabinetInstance;
 const evidenceDir = path.resolve("docs/evidence/hermes-truth-state");
-const fixture = buildHermesAcceptanceFixtureProjection();
+const implementationRevision = process.env.HERMES_EVIDENCE_IMPLEMENTATION_REVISION ?? "0".repeat(40);
+const artifactGeneratedAt = process.env.HERMES_EVIDENCE_GENERATED_AT ?? "2026-07-19T23:30:00.000Z";
+const fixture = buildHermesAcceptanceFixtureProjection({ implementationRevision, artifactGeneratedAt });
 expect(JSON.stringify(fixture)).not.toContain("fixture-secret");
 const browserErrors = new WeakMap<Page, string[]>();
 
@@ -28,9 +30,12 @@ async function prepare(page: Page) {
   const skipTour = page.getByRole("button", { name: "Skip tour" });
   if (await skipTour.waitFor({ state: "visible", timeout: 5_000 }).then(() => true).catch(() => false)) await skipTour.click();
   await page.goto(`${cabinet.appUrl}/hermes`);
+  await page.addStyleTag({ content: '[aria-label="Status bar"] { display: none !important; }' });
   await expect(page.getByTestId("hermes-control-center")).toBeVisible();
   await expect(page.getByTestId("hermes-fixture-provenance")).toContainText("Acceptance fixture — not live runtime");
   await expect(page.getByTestId("hermes-fixture-provenance")).toContainText(`Fixture ID: ${HERMES_ACCEPTANCE_FIXTURE_ID}`);
+  await expect(page.getByTestId("hermes-fixture-provenance")).toContainText(`Implementation: ${implementationRevision}`);
+  await expect(page.locator('[aria-label="Status bar"]')).toBeHidden();
   await expect(page.locator("body")).not.toContainText("fixture-secret");
 }
 
@@ -64,6 +69,8 @@ test("Messaging failure inspector shows exact fixture failure without current vi
   await expect(inspector.getByTestId("hermes-fixture-path-proof")).toContainText("Exact fixture path");
   await expect(inspector.getByTestId("hermes-fixture-path-proof")).toContainText("Proven");
   await expect(inspector).not.toContainText(/Bearer|api\.telegram\.org\/bot|Authorization:/i);
+  await expect(inspector.getByTestId("hermes-inspector-detail-surface-state")).toContainText("Surface state");
+  await expect(inspector.getByTestId("hermes-inspector-detail-cabinet-surface")).toContainText("Cabinet surface");
   await page.screenshot({ path: path.join(evidenceDir, "messaging-telegram-fatal.png"), fullPage: true });
 });
 
@@ -98,6 +105,7 @@ test("390x844 reduced-motion More sheet stays reachable without horizontal overf
   const picker = page.getByRole("dialog", { name: "Hermes sections" });
   await expect(picker).toBeVisible();
   await expect(picker.getByTestId("hermes-mobile-fixture-provenance")).toContainText(`Fixture ID: ${HERMES_ACCEPTANCE_FIXTURE_ID}`);
+  await expect(picker.getByTestId("hermes-mobile-fixture-provenance")).toContainText(`Implementation: ${implementationRevision}`);
   await expect(picker.getByRole("button", { name: "Messaging" })).toBeVisible();
   await page.screenshot({ path: path.join(evidenceDir, "mobile-more-picker.png"), fullPage: true });
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

@@ -7,6 +7,7 @@ import type {
   HermesControlCenterProjectionInput,
   HermesControlCenterSnapshot,
   HermesEvidenceOutcome,
+  HermesEvidenceOrigin,
   HermesGovernanceProof,
   HermesObservationFreshness,
   HermesOperationalHealth,
@@ -14,6 +15,7 @@ import type {
   HermesProjectionProvenance,
 } from "./control-center-types";
 import { HERMES_SNAPSHOT_SCHEMA_VERSION } from "./control-center-types";
+import { validateHermesEvidenceAuthority } from "./control-center-authority";
 import { sanitizeHermesBrowserModel, sanitizeHermesText } from "./control-center-sanitizer";
 
 const SUCCESS_OUTCOMES = new Set<HermesEvidenceOutcome>(["success", "connected_empty"]);
@@ -28,6 +30,8 @@ const SOURCE_CLASS_MAX_AGE_MS = {
 } as const;
 
 type PreparedObservation = HermesCapabilityObservation & {
+  origin: HermesEvidenceOrigin;
+  authorityValid: boolean;
   assertedFreshness: HermesObservationFreshness;
   effectiveFreshness: HermesObservationFreshness;
 };
@@ -61,12 +65,37 @@ export function effectiveHermesFreshness(
   return reference - observedAt > maxAge ? "stale" : "fresh";
 }
 
+export function hermesObservationTimeValidity(
+  observation: Pick<HermesCapabilityObservation, "observedAt" | "proofScope">,
+  now: string,
+  provenance: HermesProjectionProvenance
+): { parseable: boolean; validAgainstReference: boolean; epoch: number | null } {
+  const observedAt = epoch(observation.observedAt);
+  if (observedAt === null) return { parseable: false, validAgainstReference: false, epoch: null };
+  const referenceValue = observation.proofScope === "exact_fixture_path" ? provenance.capturedAt : now;
+  const reference = epoch(referenceValue);
+  return {
+    parseable: true,
+    validAgainstReference: reference !== null && observedAt <= reference + FUTURE_CLOCK_SKEW_MS,
+    epoch: observedAt,
+  };
+}
+
 function prepareObservation(
   observation: HermesCapabilityObservation,
-  input: Pick<HermesControlCenterProjectionInput, "now" | "installedRuntime">
+  input: Pick<HermesControlCenterProjectionInput, "now" | "installedRuntime">,
+  origin: HermesEvidenceOrigin
 ): PreparedObservation {
+  const authority = validateHermesEvidenceAuthority({
+    origin,
+    provenanceKind: input.installedRuntime.provenance.kind,
+    proofKind: observation.proofKind,
+    proofScope: observation.proofScope,
+  });
   return {
     ...observation,
+    origin,
+    authorityValid: authority.valid,
     assertedFreshness: observation.assertedFreshness ?? "unknown",
     effectiveFreshness: effectiveHermesFreshness(observation, input.now, input.installedRuntime.provenance),
   };
@@ -74,6 +103,7 @@ function prepareObservation(
 
 function evidenceFromObservation(observation: PreparedObservation): HermesCapabilityEvidence {
   return {
+    origin: observation.origin,
     source: observation.source,
     interface: observation.interface,
     observedAt: observation.observedAt,
@@ -91,6 +121,7 @@ function evidenceFromObservation(observation: PreparedObservation): HermesCapabi
 }
 
 function isOperationalScope(observation: PreparedObservation, provenance: HermesProjectionProvenance): boolean {
+  if (!observation.authorityValid || observation.origin === "approved_evidence_catalog") return false;
   if (observation.proofScope === "cabinet_local_surface") return true;
   return provenance.kind === "live_runtime"
     ? observation.proofScope === "live_runtime_operation"
@@ -107,26 +138,51 @@ function gatewayState(observation: PreparedObservation): "running" | "stopped" |
   return CONCRETE_GATEWAY_STATES.has(state) ? state as "running" | "stopped" : null;
 }
 
-function latestGatewaySources(observations: readonly PreparedObservation[], provenance: HermesProjectionProvenance) {
-  const latest = new Map<string, PreparedObservation>();
-  for (const item of observations) {
-    if (!isOperationalScope(item, provenance) || epoch(item.observedAt) === null) continue;
-    const key = `${item.source}\u0000${item.interface}`;
-    const previous = latest.get(key);
-    if (!previous || (epoch(item.observedAt) ?? 0) > (epoch(previous.observedAt) ?? 0)) latest.set(key, item);
-  }
-  return [...latest.values()].sort((left, right) =>
+function stableObservationOrder(left: PreparedObservation, right: PreparedObservation): number {
+  return (gatewayState(left) ?? "").localeCompare(gatewayState(right) ?? "") ||
+    left.outcome.localeCompare(right.outcome) ||
+    left.summary.localeCompare(right.summary) ||
     left.source.localeCompare(right.source) ||
-    left.interface.localeCompare(right.interface) ||
-    (left.observedAt ?? "").localeCompare(right.observedAt ?? "")
-  );
+    left.interface.localeCompare(right.interface);
+}
+
+function latestGatewaySources(
+  observations: readonly PreparedObservation[],
+  provenance: HermesProjectionProvenance,
+  now: string
+): { selected: PreparedObservation[]; ambiguities: Array<{ source: string; interface: string; observedAt: string }> } {
+  const groups = new Map<string, PreparedObservation[]>();
+  for (const item of observations) {
+    const time = hermesObservationTimeValidity(item, now, provenance);
+    if (!isOperationalScope(item, provenance) || !time.validAgainstReference) continue;
+    const key = `${item.source}\u0000${item.interface}`;
+    groups.set(key, [...(groups.get(key) ?? []), item]);
+  }
+  const selected: PreparedObservation[] = [];
+  const ambiguities: Array<{ source: string; interface: string; observedAt: string }> = [];
+  for (const records of groups.values()) {
+    const newestEpoch = Math.max(...records.map((item) => hermesObservationTimeValidity(item, now, provenance).epoch ?? Number.NEGATIVE_INFINITY));
+    const newest = records.filter((item) => hermesObservationTimeValidity(item, now, provenance).epoch === newestEpoch).sort(stableObservationOrder);
+    const states = new Set(newest.map(gatewayState).filter((state): state is "running" | "stopped" => state !== null));
+    if (states.size > 1) {
+      ambiguities.push({ source: newest[0]!.source, interface: newest[0]!.interface, observedAt: newest[0]!.observedAt! });
+      continue;
+    }
+    selected.push(newest[0]!);
+  }
+  return {
+    selected: selected.sort((left, right) => left.source.localeCompare(right.source) || left.interface.localeCompare(right.interface)),
+    ambiguities: ambiguities.sort((left, right) => left.source.localeCompare(right.source) || left.interface.localeCompare(right.interface)),
+  };
 }
 
 export function resolveGatewayConflict(
   observations: readonly PreparedObservation[],
-  provenance: HermesProjectionProvenance
-): { running: PreparedObservation; stopped: PreparedObservation; summary: string } | null {
-  const concrete = latestGatewaySources(observations, provenance)
+  provenance: HermesProjectionProvenance,
+  now: string
+): { conflict: { running: PreparedObservation; stopped: PreparedObservation; summary: string } | null; ambiguities: Array<{ source: string; interface: string; observedAt: string }>; selected: PreparedObservation[] } {
+  const latest = latestGatewaySources(observations, provenance, now);
+  const concrete = latest.selected
     .filter((item) => item.effectiveFreshness === "fresh")
     .flatMap((item) => {
       const state = gatewayState(item);
@@ -134,38 +190,45 @@ export function resolveGatewayConflict(
     });
   const running = concrete.find((candidate) => candidate.state === "running")?.item;
   const stopped = concrete.find((candidate) => candidate.state === "stopped")?.item;
-  if (!running || !stopped) return null;
-  return {
+  if (!running || !stopped) return { conflict: null, ambiguities: latest.ambiguities, selected: latest.selected };
+  return { conflict: {
     running,
     stopped,
     summary: `${running.source} observed running at ${running.observedAt}; ${stopped.source} observed stopped at ${stopped.observedAt}.`,
-  };
+  }, ambiguities: latest.ambiguities, selected: latest.selected };
 }
 
 function healthFor(
   definition: HermesCapabilityDefinition,
   observations: readonly PreparedObservation[],
-  provenance: HermesProjectionProvenance
-): { health: HermesOperationalHealth; detail: string; gatewayConflict: ReturnType<typeof resolveGatewayConflict> } {
+  provenance: HermesProjectionProvenance,
+  now: string
+): { health: HermesOperationalHealth; detail: string; gatewayResolution: ReturnType<typeof resolveGatewayConflict> | null } {
   if (definition.parityState === "unsupported" || !definition.installedSupported) {
-    return { health: "unavailable", detail: definition.installedVersionSupport, gatewayConflict: null };
+    return { health: "unavailable", detail: definition.installedVersionSupport, gatewayResolution: null };
   }
-  const current = activeObservations(observations, provenance);
-  const gatewayConflict = definition.id === "gateway" ? resolveGatewayConflict(observations, provenance) : null;
-  if (gatewayConflict) return { health: "conflicting_evidence", detail: gatewayConflict.summary, gatewayConflict };
-  if (!current.length) return { health: "unknown", detail: "No fresh source-specific observation is available.", gatewayConflict: null };
+  const gatewayResolution = definition.id === "gateway" ? resolveGatewayConflict(observations, provenance, now) : null;
+  const current = gatewayResolution
+    ? gatewayResolution.selected.filter((item) => item.effectiveFreshness === "fresh")
+    : activeObservations(observations, provenance);
+  if (gatewayResolution?.conflict) return { health: "conflicting_evidence", detail: gatewayResolution.conflict.summary, gatewayResolution };
+  if (gatewayResolution?.ambiguities.length) {
+    const first = gatewayResolution.ambiguities[0]!;
+    return { health: "unknown", detail: `${first.source} reported opposing Gateway states at the same valid timestamp. The source is ambiguous.`, gatewayResolution };
+  }
+  if (!current.length) return { health: "unknown", detail: "No fresh source-specific observation is available.", gatewayResolution };
 
   const outcomes = new Set(current.map((item) => item.outcome));
   const detail = current.map((item) => item.summary).filter(Boolean).join(" ") || "No bounded source detail was reported.";
-  if (outcomes.has("conflict")) return { health: "conflicting_evidence", detail, gatewayConflict: null };
-  if (outcomes.has("failure")) return { health: "degraded", detail, gatewayConflict: null };
-  if (outcomes.has("not_configured") && ![...outcomes].some((item) => SUCCESS_OUTCOMES.has(item))) return { health: "not_configured", detail, gatewayConflict: null };
-  if (outcomes.has("unavailable") && ![...outcomes].some((item) => SUCCESS_OUTCOMES.has(item))) return { health: "unavailable", detail, gatewayConflict: null };
-  if (outcomes.has("unknown") && ![...outcomes].some((item) => SUCCESS_OUTCOMES.has(item))) return { health: "unknown", detail, gatewayConflict: null };
+  if (outcomes.has("conflict")) return { health: "conflicting_evidence", detail, gatewayResolution };
+  if (outcomes.has("failure")) return { health: "degraded", detail, gatewayResolution };
+  if (outcomes.has("not_configured") && ![...outcomes].some((item) => SUCCESS_OUTCOMES.has(item))) return { health: "not_configured", detail, gatewayResolution };
+  if (outcomes.has("unavailable") && ![...outcomes].some((item) => SUCCESS_OUTCOMES.has(item))) return { health: "unavailable", detail, gatewayResolution };
+  if (outcomes.has("unknown") && ![...outcomes].some((item) => SUCCESS_OUTCOMES.has(item))) return { health: "unknown", detail, gatewayResolution };
   if ([...outcomes].some((item) => SUCCESS_OUTCOMES.has(item)) && [...outcomes].some((item) => !SUCCESS_OUTCOMES.has(item))) {
-    return { health: "degraded", detail, gatewayConflict: null };
+    return { health: "degraded", detail, gatewayResolution };
   }
-  return { health: "healthy", detail, gatewayConflict: null };
+  return { health: "healthy", detail, gatewayResolution };
 }
 
 function statusFor(surface: HermesCapabilityDefinition["parityState"], health: HermesOperationalHealth): HermesCapabilityStatus {
@@ -204,7 +267,8 @@ export function buildHermesControlCenterProjection(input: HermesControlCenterPro
   const capabilities = input.registry.map((definition): HermesCapabilityProjection => {
     const observed = input.observations
       .filter((item) => item.capabilityId === definition.id)
-      .map((item) => prepareObservation(item, input));
+      .map((item) => prepareObservation(item, input, "raw_observation"))
+      .filter((item) => item.authorityValid);
     const catalog = input.evidenceCatalog[definition.id];
     const historical = (catalog?.historical ?? []).map((proof) => prepareObservation({
       capabilityId: proof.capabilityId,
@@ -212,26 +276,24 @@ export function buildHermesControlCenterProjection(input: HermesControlCenterPro
       interface: proof.interface,
       observedAt: proof.observedAt,
       assertedFreshness: "stale",
-      proofKind: "historical_audit",
+      proofKind: proof.proofKind,
       proofScope: proof.proofScope,
       outcome: proof.outcome,
       summary: proof.summary,
       installedBackendVersion: proof.installedBackendVersion,
       installedBackendCommit: proof.installedBackendCommit,
       facts: { evidenceReference: proof.evidenceReference },
-    }, input));
+    }, input, "approved_evidence_catalog")).filter((item) => item.authorityValid);
     const allObservations = [...observed, ...historical];
-    const resolved = healthFor(definition, observed, input.installedRuntime.provenance);
+    const resolved = healthFor(definition, observed, input.installedRuntime.provenance, input.now);
     const evidence = allObservations.map(evidenceFromObservation);
-    if (resolved.gatewayConflict) {
-      const { running, stopped, summary } = resolved.gatewayConflict;
-      evidence.unshift(evidenceFromObservation({
+    if (resolved.gatewayResolution?.conflict) {
+      const { running, stopped, summary } = resolved.gatewayResolution.conflict;
+      const derived = prepareObservation({
         capabilityId: definition.id,
         source: "Hermes gateway reconciliation",
         interface: `${running.source} + ${stopped.source}`,
         observedAt: (epoch(running.observedAt) ?? 0) >= (epoch(stopped.observedAt) ?? 0) ? running.observedAt : stopped.observedAt,
-        assertedFreshness: "fresh",
-        effectiveFreshness: "fresh",
         proofKind: input.installedRuntime.provenance.kind === "acceptance_fixture" ? "exact_fixture" : "live",
         proofScope: input.installedRuntime.provenance.kind === "acceptance_fixture" ? "exact_fixture_path" : "live_runtime_operation",
         outcome: "conflict",
@@ -239,19 +301,30 @@ export function buildHermesControlCenterProjection(input: HermesControlCenterPro
         installedBackendVersion: running.installedBackendVersion ?? stopped.installedBackendVersion,
         installedBackendCommit: running.installedBackendCommit ?? stopped.installedBackendCommit,
         facts: { runningSource: running.source, stoppedSource: stopped.source },
-      }));
+      }, input, "derived_reconciliation");
+      if (derived.authorityValid) evidence.unshift(evidenceFromObservation(derived));
     }
     const currentSuccess = observed.some((item) =>
+      input.installedRuntime.provenance.kind === "live_runtime" &&
+      item.origin === "raw_observation" && item.proofKind === "live" &&
       item.effectiveFreshness === "fresh" && item.proofScope === "live_runtime_operation" && SUCCESS_OUTCOMES.has(item.outcome)
     );
     const liveProven = allObservations.some((item) =>
-      SUCCESS_OUTCOMES.has(item.outcome) && (
-        (item.proofScope === "live_runtime_operation" && item.effectiveFreshness === "fresh") ||
-        item.proofScope === "historical_live_acceptance"
+      SUCCESS_OUTCOMES.has(item.outcome) && item.authorityValid && (
+        (input.installedRuntime.provenance.kind === "live_runtime" && item.origin === "raw_observation" &&
+          item.proofKind === "live" && item.proofScope === "live_runtime_operation" && item.effectiveFreshness === "fresh") ||
+        (item.origin === "approved_evidence_catalog" && item.proofKind === "historical_audit" &&
+          item.proofScope === "historical_live_acceptance" &&
+          hermesObservationTimeValidity(item, input.now, input.installedRuntime.provenance).validAgainstReference &&
+          Boolean(item.source.trim() && item.interface.trim() && String(item.facts?.evidenceReference ?? "").trim()) &&
+          Boolean(item.installedBackendVersion || item.installedBackendCommit))
       )
     );
     const exactFixturePath = observed.some((item) =>
-      item.proofScope === "exact_fixture_path" && item.effectiveFreshness === "fresh" && item.outcome !== "unknown" && item.outcome !== "not_configured"
+      input.installedRuntime.provenance.kind === "acceptance_fixture" && item.origin === "raw_observation" &&
+      item.proofKind === "exact_fixture" && item.proofScope === "exact_fixture_path" &&
+      hermesObservationTimeValidity(item, input.now, input.installedRuntime.provenance).validAgainstReference &&
+      item.outcome !== "unknown" && item.outcome !== "not_configured"
     );
     const status = statusFor(definition.parityState, resolved.health);
     return {
@@ -291,6 +364,7 @@ export function buildHermesControlCenterProjection(input: HermesControlCenterPro
     schemaVersion: HERMES_SNAPSHOT_SCHEMA_VERSION,
     checkedAt: input.now,
     provenance: input.installedRuntime.provenance,
+    evidenceProvenance: input.evidenceProvenance,
     installed: {
       desktopVersion: installation.desktopVersion,
       desktopCommit: installation.desktopCommit,
@@ -343,6 +417,7 @@ export function hermesProjectionMatrixRows(snapshot: HermesControlCenterSnapshot
       effectiveFreshness: item.effectiveFreshness,
       proofKind: item.proofKind,
       proofScope: item.proofScope,
+      origin: item.origin,
       outcome: item.outcome,
       facts: item.facts,
     })),

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { HERMES_CAPABILITY_EVIDENCE_CATALOG } from "../src/lib/hermes/capability-evidence-catalog";
 import { HERMES_CAPABILITY_REGISTRY } from "../src/lib/hermes/capability-registry";
+import { validateHermesEvidenceAuthority } from "../src/lib/hermes/control-center-authority";
 import {
   buildHermesAcceptanceFixtureProjection,
   HERMES_ACCEPTANCE_FIXTURE_ID,
@@ -67,6 +68,29 @@ export function validateRawProjectionEnvelope(value: unknown): asserts value is 
   if (value.provenance.kind === "acceptance_fixture" && typeof value.provenance.fixtureId !== "string") throw new Error("Acceptance-fixture provenance requires a stable fixture ID.");
   if (!isRecord(value.installedRuntime) || "provenance" in value.installedRuntime || !isRecord(value.installedRuntime.installation) || !isRecord(value.installedRuntime.live) || typeof value.installedRuntime.profile !== "string" || typeof value.installedRuntime.adapter !== "string") throw new Error("Raw observation envelope installed runtime is invalid.");
   if (!Array.isArray(value.observations) || !value.observations.every(validateObservation)) throw new Error("Raw observation envelope contains invalid or authored projection observations.");
+  const provenanceKind = value.provenance.kind as "live_runtime" | "acceptance_fixture";
+  if (value.observations.some((observation) => !validateHermesEvidenceAuthority({
+    origin: "raw_observation",
+    provenanceKind,
+    proofKind: observation.proofKind,
+    proofScope: observation.proofScope,
+  }).valid)) throw new Error("Raw observation envelope contains an invalid evidence-authority tuple.");
+  if (!isRecord(value.evidenceProvenance) ||
+    !(typeof value.evidenceProvenance.implementationRevision === "string" || value.evidenceProvenance.implementationRevision === null) ||
+    !(typeof value.evidenceProvenance.fixtureId === "string" || value.evidenceProvenance.fixtureId === null) ||
+    !(typeof value.evidenceProvenance.fixtureCapturedAt === "string" || value.evidenceProvenance.fixtureCapturedAt === null) ||
+    !(typeof value.evidenceProvenance.artifactGeneratedAt === "string" || value.evidenceProvenance.artifactGeneratedAt === null)) {
+    throw new Error("Raw observation envelope evidence provenance is invalid.");
+  }
+  if (typeof value.evidenceProvenance.implementationRevision === "string" && !/^[0-9a-f]{40}$/i.test(value.evidenceProvenance.implementationRevision)) throw new Error("Raw observation envelope implementation revision is invalid.");
+  if (typeof value.evidenceProvenance.artifactGeneratedAt === "string" && !Number.isFinite(Date.parse(value.evidenceProvenance.artifactGeneratedAt))) throw new Error("Raw observation envelope artifact generation time is invalid.");
+  if (provenanceKind === "acceptance_fixture" &&
+    (value.evidenceProvenance.fixtureId !== value.provenance.fixtureId || value.evidenceProvenance.fixtureCapturedAt !== value.capturedAt)) {
+    throw new Error("Raw observation envelope fixture evidence provenance does not match its projection provenance.");
+  }
+  if (provenanceKind === "live_runtime" && (value.evidenceProvenance.fixtureId !== null || value.evidenceProvenance.fixtureCapturedAt !== null)) {
+    throw new Error("Live-runtime evidence provenance cannot claim fixture identity.");
+  }
   const known = new Set(HERMES_CAPABILITY_REGISTRY.map((item) => item.id));
   const supplied = new Set(value.observations.map((item) => item.capabilityId));
   const unknown = [...supplied].filter((id) => !known.has(id));
@@ -81,6 +105,7 @@ export function assembleRawProjectionEnvelope(value: unknown): HermesControlCent
     installedRuntime: { ...value.installedRuntime, provenance: value.provenance },
     observations: value.observations,
     evidenceCatalog: HERMES_CAPABILITY_EVIDENCE_CATALOG,
+    evidenceProvenance: value.evidenceProvenance,
     now: value.now,
   });
 }
@@ -141,6 +166,8 @@ export function renderHermesParityEvidence(snapshot: HermesControlCenterSnapshot
     "",
     `Generated at ${generatedAt}. ${provenance}`,
     "",
+    `Implementation revision: \`${snapshot.evidenceProvenance.implementationRevision ?? "not supplied"}\`. Artifact generated at: ${snapshot.evidenceProvenance.artifactGeneratedAt ?? generatedAt}.`,
+    "",
     "Installed Desktop source commit: **unknown**. The commit `311a5b0a552be78f5c58807e2be1db02e3badcb0` is historical Desktop source-audit evidence only.",
     "",
     `All ${snapshot.capabilities.length} rows and all displayed percentages use the production Hermes Control Center projection assembler. Generated time is not an observation time. Exact fixture path proof is non-parity evidence and never earns Live-Proven credit.`,
@@ -182,12 +209,13 @@ function arg(name: string): string | null {
   return index >= 0 ? process.argv[index + 1] ?? null : null;
 }
 
-export async function loadExplicitProjection(args: { fixtureId?: string | null; observationsPath?: string | null; projectionUrl?: string | null }): Promise<HermesControlCenterSnapshot> {
+export async function loadExplicitProjection(args: { fixtureId?: string | null; observationsPath?: string | null; projectionUrl?: string | null; implementationRevision?: string | null; artifactGeneratedAt?: string | null }): Promise<HermesControlCenterSnapshot> {
   const selected = [args.fixtureId, args.observationsPath, args.projectionUrl].filter(Boolean);
   if (selected.length !== 1) throw new Error("Provide exactly one explicit input: --url <live Control Center URL>, --observations <raw projection-input.json>, or --fixture <fixture ID>.");
   if (args.fixtureId) {
     if (args.fixtureId !== HERMES_ACCEPTANCE_FIXTURE_ID) throw new Error(`Unknown Hermes fixture ID: ${args.fixtureId}.`);
-    return buildHermesAcceptanceFixtureProjection();
+    if (!args.implementationRevision || !/^[0-9a-f]{40}$/i.test(args.implementationRevision)) throw new Error("Fixture evidence generation requires --implementation-revision with a full 40-character commit SHA.");
+    return buildHermesAcceptanceFixtureProjection({ implementationRevision: args.implementationRevision, artifactGeneratedAt: args.artifactGeneratedAt ?? null });
   }
   if (args.observationsPath) {
     const parsed = JSON.parse(fs.readFileSync(path.resolve(args.observationsPath), "utf8")) as unknown;
@@ -203,8 +231,8 @@ export async function loadExplicitProjection(args: { fixtureId?: string | null; 
 async function main() {
   try {
     if (arg("--input")) throw new Error("--input no longer accepts assembled snapshots. Use --observations with a versioned raw projection-input envelope.");
-    const snapshot = await loadExplicitProjection({ fixtureId: arg("--fixture"), observationsPath: arg("--observations"), projectionUrl: arg("--url") });
     const generatedAt = arg("--generated-at") ?? new Date().toISOString();
+    const snapshot = await loadExplicitProjection({ fixtureId: arg("--fixture"), observationsPath: arg("--observations"), projectionUrl: arg("--url"), implementationRevision: arg("--implementation-revision"), artifactGeneratedAt: generatedAt });
     const generated = renderHermesParityEvidence(snapshot, generatedAt);
     const existing = fs.readFileSync(documentPath, "utf8");
     let next = existing.includes(START)

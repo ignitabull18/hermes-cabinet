@@ -31,6 +31,7 @@ export const HERMES_OPERATIONAL_HEALTH_STATES = [
 
 export type HermesOperationalHealth = (typeof HERMES_OPERATIONAL_HEALTH_STATES)[number];
 export type HermesProofKind = "live" | "exact_fixture" | "historical_audit";
+export type HermesEvidenceOrigin = "raw_observation" | "approved_evidence_catalog" | "derived_reconciliation";
 export const HERMES_PROOF_SCOPES = [
   "live_runtime_operation",
   "historical_live_acceptance",
@@ -66,6 +67,7 @@ export type HermesCapabilityObservation = {
 };
 
 export type HermesCapabilityEvidence = Omit<HermesCapabilityObservation, "capabilityId" | "assertedFreshness"> & {
+  origin: HermesEvidenceOrigin;
   stale: boolean;
   assertedFreshness: HermesObservationFreshness;
   effectiveFreshness: HermesObservationFreshness;
@@ -83,6 +85,7 @@ export type HermesGovernanceProof = {
 
 export type HermesHistoricalProof = {
   capabilityId: string;
+  proofKind: "historical_audit";
   proofScope: Extract<HermesProofScope, "historical_live_acceptance" | "source_audit">;
   source: string;
   interface: string;
@@ -179,7 +182,15 @@ export type HermesControlCenterProjectionInput = {
   installedRuntime: HermesInstalledRuntime;
   observations: readonly HermesCapabilityObservation[];
   evidenceCatalog: HermesCapabilityEvidenceCatalog;
+  evidenceProvenance: HermesEvidenceProvenance;
   now: string;
+};
+
+export type HermesEvidenceProvenance = {
+  implementationRevision: string | null;
+  fixtureId: string | null;
+  fixtureCapturedAt: string | null;
+  artifactGeneratedAt: string | null;
 };
 
 export const HERMES_RAW_PROJECTION_SCHEMA_VERSION = "hermes-control-center-projection-input.v1" as const;
@@ -194,12 +205,14 @@ export type HermesRawProjectionEnvelope = {
   installedRuntime: Omit<HermesInstalledRuntime, "provenance">;
   observations: readonly HermesCapabilityObservation[];
   evidenceCatalogId: typeof HERMES_EVIDENCE_CATALOG_ID;
+  evidenceProvenance: HermesEvidenceProvenance;
 };
 
 export type HermesControlCenterSnapshot = {
   schemaVersion: typeof HERMES_SNAPSHOT_SCHEMA_VERSION;
   checkedAt: string;
   provenance: HermesProjectionProvenance;
+  evidenceProvenance: HermesEvidenceProvenance;
   installed: {
     desktopVersion: string | null;
     desktopCommit: string | null;

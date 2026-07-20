@@ -95,7 +95,7 @@ const installedRuntime: HermesInstalledRuntime = {
     desktopCommit: null,
     backendVersion: "0.18.2",
     backendCommit: "594308d4bbe9",
-    cabinetCommit: "a5310e66cd12",
+    cabinetCommit: null,
     upstreamAudit: {
       auditedAt: "2026-07-19T21:06:53Z",
       auditedCommit: "0d2ad3993eb91c486854bc71e2721b747ab1d0f4",
@@ -140,11 +140,16 @@ const installedRuntime: HermesInstalledRuntime = {
   },
 };
 
-export function buildHermesAcceptanceFixtureProjection() {
-  return buildHermesControlCenterProjection(buildHermesAcceptanceFixtureInput());
+type FixtureEvidenceOptions = {
+  implementationRevision?: string | null;
+  artifactGeneratedAt?: string | null;
+};
+
+export function buildHermesAcceptanceFixtureProjection(options: FixtureEvidenceOptions = {}) {
+  return buildHermesControlCenterProjection(buildHermesAcceptanceFixtureInput(options));
 }
 
-export function buildHermesAcceptanceFixtureEnvelope(): HermesRawProjectionEnvelope {
+export function buildHermesAcceptanceFixtureEnvelope(options: FixtureEvidenceOptions = {}): HermesRawProjectionEnvelope {
   const { provenance, ...runtime } = installedRuntime;
   return {
     schemaVersion: HERMES_RAW_PROJECTION_SCHEMA_VERSION,
@@ -154,15 +159,26 @@ export function buildHermesAcceptanceFixtureEnvelope(): HermesRawProjectionEnvel
     installedRuntime: runtime,
     observations: HERMES_ACCEPTANCE_FIXTURE_OBSERVATIONS,
     evidenceCatalogId: HERMES_EVIDENCE_CATALOG_ID,
+    evidenceProvenance: fixtureEvidenceProvenance(options),
   };
 }
 
-export function buildHermesAcceptanceFixtureInput(): HermesControlCenterProjectionInput {
+function fixtureEvidenceProvenance(options: FixtureEvidenceOptions) {
+  return {
+    implementationRevision: options.implementationRevision ?? null,
+    fixtureId: HERMES_ACCEPTANCE_FIXTURE_ID,
+    fixtureCapturedAt: HERMES_ACCEPTANCE_FIXTURE_CAPTURED_AT,
+    artifactGeneratedAt: options.artifactGeneratedAt ?? null,
+  };
+}
+
+export function buildHermesAcceptanceFixtureInput(options: FixtureEvidenceOptions = {}): HermesControlCenterProjectionInput {
   return {
     registry: HERMES_CAPABILITY_REGISTRY,
     installedRuntime,
     observations: HERMES_ACCEPTANCE_FIXTURE_OBSERVATIONS,
     evidenceCatalog: HERMES_CAPABILITY_EVIDENCE_CATALOG,
+    evidenceProvenance: fixtureEvidenceProvenance(options),
     now: HERMES_ACCEPTANCE_FIXTURE_CAPTURED_AT,
   };
 }

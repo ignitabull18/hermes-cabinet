@@ -214,6 +214,12 @@ export async function getHermesControlCenterSnapshot(): Promise<HermesControlCen
     installedRuntime,
     observations: collectHermesObservations(health, management, installation),
     evidenceCatalog: HERMES_CAPABILITY_EVIDENCE_CATALOG,
+    evidenceProvenance: {
+      implementationRevision: null,
+      fixtureId: null,
+      fixtureCapturedAt: null,
+      artifactGeneratedAt: null,
+    },
     now,
   });
 }

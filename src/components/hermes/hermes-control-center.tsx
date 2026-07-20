@@ -128,13 +128,13 @@ function CapabilityRow({ capability, active, onSelect }: { capability: HermesCap
 
 function CapabilityInspector({ capability, snapshot }: { capability: HermesCapabilityProjection; snapshot: HermesControlCenterSnapshot }) {
   const detailRows = [
-    ["Cabinet surface", capability.surfaceState],
-    ["Installed support", capability.installedSupport.detail],
-    ["Current health", HEALTH_LABELS[capability.operationalHealth]],
-    ["Interface", capability.interface],
-    ["Cabinet surface", capability.cabinetSurface],
-    ["Risk", capability.readWriteRisk],
-    ["Mode", capability.mode],
+    { id: "surface-state", label: "Surface state", value: capability.surfaceState },
+    { id: "installed-support", label: "Installed support", value: capability.installedSupport.detail },
+    { id: "current-health", label: "Current health", value: HEALTH_LABELS[capability.operationalHealth] },
+    { id: "interface", label: "Interface", value: capability.interface },
+    { id: "cabinet-surface", label: "Cabinet surface", value: capability.cabinetSurface },
+    { id: "risk", label: "Risk", value: capability.readWriteRisk },
+    { id: "mode", label: "Mode", value: capability.mode },
   ];
   const creditRows = [
     ["Discoverable", capability.credit.discoverability],
@@ -156,10 +156,10 @@ function CapabilityInspector({ capability, snapshot }: { capability: HermesCapab
       <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col gap-5 p-5">
           <dl className="flex flex-col gap-3">
-            {detailRows.map(([label, value]) => (
-              <div key={label} className="grid grid-cols-[7rem_minmax(0,1fr)] gap-3 text-sm">
-                <dt className="text-muted-foreground">{label}</dt>
-                <dd className="break-words font-medium">{value}</dd>
+            {detailRows.map((row) => (
+              <div key={row.id} data-testid={`hermes-inspector-detail-${row.id}`} className="grid grid-cols-[7rem_minmax(0,1fr)] gap-3 text-sm">
+                <dt className="text-muted-foreground">{row.label}</dt>
+                <dd className="break-words font-medium">{row.value}</dd>
               </div>
             ))}
           </dl>
@@ -348,6 +348,7 @@ export function HermesControlCenter() {
           <AlertDescription className="flex flex-wrap gap-x-4 gap-y-1">
             <span>Fixture ID: {snapshot.provenance.fixtureId}</span>
             <span>Captured: {snapshot.provenance.capturedAt}</span>
+            <span>Implementation: {snapshot.evidenceProvenance.implementationRevision ?? "not supplied"}</span>
           </AlertDescription>
         </Alert>
       ) : null}
@@ -451,6 +452,7 @@ export function HermesControlCenter() {
                       <p className="font-medium text-foreground">{snapshot.provenance.label}</p>
                       <p>Fixture ID: {snapshot.provenance.fixtureId}</p>
                       <p>Captured: {snapshot.provenance.capturedAt}</p>
+                      <p>Implementation: {snapshot.evidenceProvenance.implementationRevision ?? "not supplied"}</p>
                     </div>
                   ) : null}
                 </SheetHeader>

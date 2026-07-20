@@ -1,8 +1,10 @@
 import type { HermesCapabilityEvidenceCatalog, HermesHistoricalProof } from "./control-center-types";
+import { assertValidHermesEvidenceCatalog } from "./control-center-authority";
 import upstreamAudit from "./upstream-audit.json";
 
 const sourceAudit = (capabilityId: string, source: string, summary: string): HermesHistoricalProof => ({
   capabilityId,
+  proofKind: "historical_audit",
   proofScope: "source_audit",
   source,
   interface: "Hermes Desktop source audit",
@@ -23,6 +25,7 @@ const historicalAcceptance = (
   evidenceReference: string
 ): HermesHistoricalProof => ({
   capabilityId,
+  proofKind: "historical_audit",
   proofScope: "historical_live_acceptance",
   source,
   interface: interfaceIdentity,
@@ -80,3 +83,5 @@ export const HERMES_CAPABILITY_EVIDENCE_CATALOG: HermesCapabilityEvidenceCatalog
     historicalAcceptance("browser-opencli", "OpenCLI read-only acceptance", "opencli local page title, DOM read, and screenshot", "2026-07-19T20:18:51Z", "A local read-only acceptance opened a test page, read its title and DOM, and captured a screenshot without an external write.", "docs/plans/hermes-desktop-capability-parity.md#phase-4-opencli-browser-module"),
   ] },
 };
+
+assertValidHermesEvidenceCatalog(HERMES_CAPABILITY_EVIDENCE_CATALOG);
