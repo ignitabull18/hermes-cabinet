@@ -10,7 +10,7 @@ import {
   type HermesRuntimeInterventionService,
 } from "@/lib/hermes/governed-runtime-intervention";
 import type { HermesControlCenterSnapshot } from "@/lib/hermes/control-center-types";
-import { readHermesServerConfig } from "@/lib/hermes/server-config";
+import { hermesInterventionsEnabled, readHermesServerConfig } from "@/lib/hermes/server-config";
 import { getCabinetRuntimeMode } from "@/lib/runtime/runtime-config";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +26,7 @@ type RouteDependencies = {
   actorIdentity?: typeof authenticatedCabinetActorIdentity;
   snapshot?: () => Promise<HermesControlCenterSnapshot>;
   service?: Pick<HermesRuntimeInterventionService, "prepare" | "commit" | "recheck">;
+  interventionsEnabled?: typeof hermesInterventionsEnabled;
 };
 
 export async function handleRuntimeInterventionPost(request: NextRequest, dependencies: RouteDependencies = {}) {
@@ -34,6 +35,12 @@ export async function handleRuntimeInterventionPost(request: NextRequest, depend
   const crossOrigin = (dependencies.sameOrigin ?? requireSameOrigin)(request);
   if (crossOrigin) return crossOrigin;
   if ((dependencies.runtimeMode ?? getCabinetRuntimeMode)() !== "hermes") return NextResponse.json({ error: "Hermes runtime mode is disabled." }, { status: 404 });
+  if (!(dependencies.interventionsEnabled ?? hermesInterventionsEnabled)()) {
+    return NextResponse.json(
+      { error: "Governed Hermes interventions require owner enablement." },
+      { status: 403, headers: { "Cache-Control": "no-store" } },
+    );
+  }
   try {
     const body = await request.json() as Record<string, unknown>;
     const actorIdentity = await (dependencies.actorIdentity ?? authenticatedCabinetActorIdentity)(request);
@@ -84,4 +91,13 @@ export async function handleRuntimeInterventionPost(request: NextRequest, depend
 
 export async function POST(request: NextRequest) {
   return handleRuntimeInterventionPost(request);
+}
+
+export async function GET(request: NextRequest) {
+  const unauthorized = await requireApiAuth(request);
+  if (unauthorized) return unauthorized;
+  return NextResponse.json(
+    { enabled: getCabinetRuntimeMode() === "hermes" && hermesInterventionsEnabled() },
+    { headers: { "Cache-Control": "no-store" } },
+  );
 }

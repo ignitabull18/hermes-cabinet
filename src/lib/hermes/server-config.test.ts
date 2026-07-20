@@ -2,8 +2,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   HermesConfigurationError,
+  hermesInterventionsEnabled,
   readHermesServerConfig,
 } from "./server-config";
+
+test("Hermes intervention enablement is server-only and defaults false", () => {
+  assert.equal(hermesInterventionsEnabled({}), false);
+  assert.equal(hermesInterventionsEnabled({ CABINET_HERMES_INTERVENTIONS_ENABLED: "false" }), false);
+  assert.equal(hermesInterventionsEnabled({ CABINET_HERMES_INTERVENTIONS_ENABLED: "1" }), false);
+  assert.equal(hermesInterventionsEnabled({ CABINET_HERMES_INTERVENTIONS_ENABLED: " true " }), true);
+});
 
 const valid = {
   CABINET_HERMES_API_URL: "http://127.0.0.1:8642/",

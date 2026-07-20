@@ -5,7 +5,7 @@ import { expectedToken, KB_AUTH_COOKIE } from "@/lib/auth/kb-auth";
 import { buildHermesRuntimeInterventionFixtureProjection } from "@/lib/hermes/control-center-intervention-fixture";
 import { handleRuntimeInterventionPost, POST } from "./route";
 
-const managedEnv = ["KB_PASSWORD", "CABINET_LOGIN_PBKDF2_ITERS", "CABINET_RUNTIME_MODE", "CABINET_APP_ORIGIN"] as const;
+const managedEnv = ["KB_PASSWORD", "CABINET_LOGIN_PBKDF2_ITERS", "CABINET_RUNTIME_MODE", "CABINET_APP_ORIGIN", "CABINET_HERMES_INTERVENTIONS_ENABLED"] as const;
 const original = Object.fromEntries(managedEnv.map((name) => [name, process.env[name]]));
 
 afterEach(() => {
@@ -52,6 +52,7 @@ test("same-origin authenticated request passes both boundary gates", async () =>
   process.env.CABINET_LOGIN_PBKDF2_ITERS = "1";
   process.env.CABINET_RUNTIME_MODE = "hermes";
   process.env.CABINET_APP_ORIGIN = "http://127.0.0.1:4000";
+  process.env.CABINET_HERMES_INTERVENTIONS_ENABLED = "true";
   const token = await expectedToken();
   const response = await POST(request("http://127.0.0.1:4000", `${KB_AUTH_COOKIE}=${token}`));
   assert.equal(response.status, 502);
@@ -70,6 +71,7 @@ test("browser-authored live provenance cannot authorize a fixture mutation", asy
     requireAuth: async () => null,
     sameOrigin: () => null,
     runtimeMode: () => "hermes",
+    interventionsEnabled: () => true,
     actorIdentity: async () => "opaque-test-actor",
     snapshot: async () => fixture,
     service: {
@@ -98,6 +100,7 @@ test("same-origin authenticated live authority reaches the intervention service"
     requireAuth: async () => null,
     sameOrigin: () => null,
     runtimeMode: () => "hermes",
+    interventionsEnabled: () => true,
     actorIdentity: async () => "opaque-test-actor",
     snapshot: async () => live,
     service: {
@@ -108,4 +111,39 @@ test("same-origin authenticated live authority reaches the intervention service"
   });
   assert.equal(response.status, 502);
   assert.equal(prepares, 1);
+});
+
+test("absent or false server enablement rejects before parsing or creating a Hermes service", async () => {
+  for (const enabled of [undefined, "false"]) {
+    if (enabled === undefined) delete process.env.CABINET_HERMES_INTERVENTIONS_ENABLED;
+    else process.env.CABINET_HERMES_INTERVENTIONS_ENABLED = enabled;
+    const response = await handleRuntimeInterventionPost(request("http://127.0.0.1:4000"), {
+      requireAuth: async () => null,
+      sameOrigin: () => null,
+      runtimeMode: () => "hermes",
+      actorIdentity: async () => { throw new Error("actor must not be resolved"); },
+      service: {
+        prepare: async () => { throw new Error("service must not be reached"); },
+        commit: async () => { throw new Error("service must not be reached"); },
+        recheck: async () => { throw new Error("service must not be reached"); },
+      },
+    });
+    assert.equal(response.status, 403);
+    assert.match(JSON.stringify(await response.json()), /owner enablement/);
+  }
+});
+
+test("browser input cannot enable interventions", async () => {
+  const req = new NextRequest("http://127.0.0.1:4000/api/hermes/runtime-interventions", {
+    method: "POST",
+    headers: { origin: "http://127.0.0.1:4000", host: "127.0.0.1:4000", "content-type": "application/json" },
+    body: JSON.stringify({ stage: "prepare", interventionsEnabled: true, CABINET_HERMES_INTERVENTIONS_ENABLED: "true" }),
+  });
+  const response = await handleRuntimeInterventionPost(req, {
+    requireAuth: async () => null,
+    sameOrigin: () => null,
+    runtimeMode: () => "hermes",
+    interventionsEnabled: () => false,
+  });
+  assert.equal(response.status, 403);
 });

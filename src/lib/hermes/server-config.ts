@@ -9,6 +9,13 @@ export type HermesServerConfig = {
   timeoutMs: number;
 };
 
+/** Consequential Hermes runtime interventions are opt-in and server-only. */
+export function hermesInterventionsEnabled(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): boolean {
+  return env.CABINET_HERMES_INTERVENTIONS_ENABLED?.trim().toLowerCase() === "true";
+}
+
 export function hermesGatewayWebSocketUrl(config: HermesServerConfig): string {
   const url = new URL(config.gatewayBaseUrl);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
