@@ -12,6 +12,7 @@ const managedEnv = [
   "CABINET_HERMES_API_URL",
   "CABINET_HERMES_API_KEY",
   "CABINET_HERMES_MANAGEMENT_URL",
+  "CABINET_HERMES_MANAGEMENT_TOKEN",
   "CABINET_HERMES_GATEWAY_URL",
   "CABINET_HERMES_GATEWAY_TOKEN",
   "CABINET_HERMES_PROFILE",
@@ -37,10 +38,10 @@ function request(cookie?: string): NextRequest {
 
 function configureHermes() {
   process.env.CABINET_RUNTIME_MODE = "hermes";
-  process.env.CABINET_HERMES_API_URL = "http://hermes.test:8642";
+  process.env.CABINET_HERMES_API_URL = "http://127.0.0.1:8642";
   process.env.CABINET_HERMES_API_KEY = "route-secret";
-  process.env.CABINET_HERMES_MANAGEMENT_URL = "http://hermes.test:56314";
-  process.env.CABINET_HERMES_GATEWAY_URL = "http://hermes.test:8645";
+  process.env.CABINET_HERMES_MANAGEMENT_URL = "http://127.0.0.1:56314";
+  process.env.CABINET_HERMES_GATEWAY_URL = "http://127.0.0.1:8645";
   process.env.CABINET_HERMES_GATEWAY_TOKEN = "gateway-secret";
   process.env.CABINET_HERMES_PROFILE = "operator-os";
 }
@@ -107,4 +108,21 @@ test("Hermes health bridge reports clear missing configuration without values", 
   assert.equal(body.status, "misconfigured");
   assert.match(body.message, /CABINET_HERMES_API_URL/);
   assert.ok(!JSON.stringify(body).includes("route-secret"));
+});
+
+test("Hermes health bridge rejects a public upstream before any credential-bearing request", async () => {
+  delete process.env.KB_PASSWORD;
+  configureHermes();
+  process.env.CABINET_HERMES_API_URL = "https://public.example:8642";
+  let requests = 0;
+  globalThis.fetch = async () => {
+    requests += 1;
+    return new Response(JSON.stringify({ status: "ok" }));
+  };
+  const result = await GET(request());
+  const body = await result.json();
+  assert.equal(result.status, 503);
+  assert.equal(body.status, "misconfigured");
+  assert.equal(requests, 0);
+  assert.doesNotMatch(JSON.stringify(body), /public\.example|route-secret/);
 });

@@ -3,7 +3,7 @@ import { requireApiAuth } from "@/lib/auth/request-gate";
 import { getCabinetRuntimeMode } from "@/lib/runtime/runtime-config";
 import {
   HermesConfigurationError,
-  readHermesServerConfig,
+  readHermesReadOnlyServerConfig,
 } from "@/lib/hermes/server-config";
 import { HermesManagementClient } from "@/lib/hermes/management-client";
 import type { HermesHealthSnapshot } from "@/lib/hermes/types";
@@ -32,9 +32,12 @@ export async function GET(request: NextRequest) {
 
   try {
     const result = await new HermesManagementClient(
-      readHermesServerConfig()
+      readHermesReadOnlyServerConfig()
     ).health();
-    return NextResponse.json(result, { headers: NO_STORE });
+    return NextResponse.json(result, {
+      status: result.status === "misconfigured" ? 503 : 200,
+      headers: NO_STORE,
+    });
   } catch (error) {
     const message =
       error instanceof HermesConfigurationError

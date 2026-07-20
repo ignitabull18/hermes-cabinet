@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   HermesConfigurationError,
   hermesInterventionsEnabled,
+  readHermesReadOnlyServerConfig,
   readHermesServerConfig,
 } from "./server-config";
 
@@ -63,7 +64,7 @@ test("Hermes server configuration rejects non-HTTP endpoints and unsafe timeouts
         ...valid,
         CABINET_HERMES_API_URL: "file:///tmp/hermes.sock",
       }),
-    /HTTP\(S\) URL/
+    /HTTP\(S\) loopback URL/
   );
   assert.throws(
     () =>
@@ -73,4 +74,40 @@ test("Hermes server configuration rejects non-HTTP endpoints and unsafe timeouts
       }),
     /250 to 30000/
   );
+});
+
+test("Hermes server configuration rejects public, credential-bearing, query, and fragment URLs before use", () => {
+  const canary = "configuration-secret-canary";
+  for (const url of [
+    "https://example.com:8642",
+    `http://user:${canary}@127.0.0.1:8642`,
+    `http://127.0.0.1:8642?token=${canary}`,
+    `http://127.0.0.1:8642/#${canary}`,
+  ]) {
+    assert.throws(
+      () => readHermesServerConfig({ ...valid, CABINET_HERMES_API_URL: url }),
+      (error: unknown) => error instanceof HermesConfigurationError && !error.message.includes(canary) && !error.message.includes("example.com"),
+    );
+  }
+});
+
+test("read-only configuration keeps source groups independent while strict mutation config remains complete", () => {
+  const partial = readHermesReadOnlyServerConfig({
+    CABINET_HERMES_API_URL: valid.CABINET_HERMES_API_URL,
+    CABINET_HERMES_API_KEY: valid.CABINET_HERMES_API_KEY,
+  });
+  assert.equal(partial.apiBaseUrl, "http://127.0.0.1:8642");
+  assert.equal(partial.apiKey, valid.CABINET_HERMES_API_KEY);
+  assert.equal(partial.managementBaseUrl, null);
+  assert.equal(partial.managementToken, null);
+  assert.equal(partial.gatewayBaseUrl, null);
+  assert.deepEqual(partial.sourceStates, {
+    agent_api: "ready_to_probe",
+    management: "unavailable",
+    gateway: "unavailable",
+  });
+  assert.throws(() => readHermesServerConfig({
+    CABINET_HERMES_API_URL: valid.CABINET_HERMES_API_URL,
+    CABINET_HERMES_API_KEY: valid.CABINET_HERMES_API_KEY,
+  }), /CABINET_HERMES_MANAGEMENT_URL/);
 });

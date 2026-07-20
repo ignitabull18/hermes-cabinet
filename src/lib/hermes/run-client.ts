@@ -215,7 +215,11 @@ export class HermesRunClient {
     signal?.addEventListener("abort", abort, { once: true });
     const timeoutId = bounded ? setTimeout(abort, this.config.timeoutMs) : null;
     try {
-      return await this.fetchImpl(`${this.config.apiBaseUrl}${path}`, { ...init, signal: controller.signal });
+      return await this.fetchImpl(`${this.config.apiBaseUrl}${path}`, {
+        ...init,
+        redirect: "error",
+        signal: controller.signal,
+      });
     } catch {
       if (controller.signal.aborted) throw new HermesRunError("timeout", "Hermes run request timed out or was cancelled.", true);
       throw new HermesRunError("retryable", "Hermes run service is unreachable.", true);
@@ -226,14 +230,15 @@ export class HermesRunClient {
   }
 
   private async throwResponse(response: Response): Promise<never> {
-    let message = `Hermes run request failed with HTTP ${response.status}.`;
+    const message = `Hermes run request failed with HTTP ${response.status}.`;
+    let classificationDetail = "";
     try {
       const body = record(await response.json());
       const error = record(body.error);
-      message = string(error.message) ?? string(body.detail) ?? message;
+      classificationDetail = string(error.message) ?? string(body.detail) ?? "";
     } catch {}
     if (response.status === 401 || response.status === 403) throw new HermesRunError("authentication_failure", message, false, response.status);
-    if (response.status === 404 && /profile/i.test(message) && /(unknown|unavailable|unconfigured)/i.test(message)) throw new HermesRunError("unavailable_profile", message, false, response.status);
+    if (response.status === 404 && /profile/i.test(classificationDetail) && /(unknown|unavailable|unconfigured)/i.test(classificationDetail)) throw new HermesRunError("unavailable_profile", message, false, response.status);
     if (response.status === 404) throw new HermesRunError("run_not_found", message, false, response.status);
     if (response.status === 409 || response.status === 400) throw new HermesRunError("terminal", message, false, response.status);
     if (response.status === 408 || response.status === 429 || response.status >= 500) throw new HermesRunError("retryable", message, true, response.status);

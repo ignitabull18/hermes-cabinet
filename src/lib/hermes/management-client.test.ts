@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
 import { HermesManagementClient } from "./management-client";
-import type { HermesServerConfig } from "./server-config";
+import { readHermesReadOnlyServerConfig, type HermesServerConfig } from "./server-config";
 
 const secret = "HERMES_BROWSER_LEAK_CANARY_7f4d9c";
 const config: HermesServerConfig = {
@@ -22,13 +23,14 @@ function response(body: unknown, status = 200): Response {
   });
 }
 
-test("management health normalizes version and profile without returning credentials", async () => {
-  const requests: Array<{ url: string; authorization: string | null }> = [];
+test("Agent API health normalizes version without returning credentials or following redirects", async () => {
+  const requests: Array<{ url: string; authorization: string | null; redirect: RequestRedirect | undefined }> = [];
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = String(input);
     requests.push({
       url,
       authorization: new Headers(init?.headers).get("authorization"),
+      redirect: init?.redirect,
     });
     if (url.endsWith("/health/detailed")) {
       return response({ status: "ok", version: "0.18.2", gateway_state: "running", raw_secret: secret });
@@ -43,26 +45,18 @@ test("management health normalizes version and profile without returning credent
   assert.equal(result.profile, "operator-os");
   assert.equal(result.gatewayState, "running");
   assert.equal(requests[0]?.authorization, `Bearer ${secret}`);
-  assert.equal(requests[1]?.authorization, null);
+  assert.equal(requests[0]?.redirect, "error");
+  assert.equal(requests.length, 1);
   assert.ok(!JSON.stringify(result).includes(secret));
   assert.ok(!JSON.stringify(result).toLowerCase().includes("authorization"));
 });
 
-test("management health distinguishes authentication, profile, and connection failures", async () => {
+test("Agent API health distinguishes authentication and connection failures", async () => {
   const auth = await new HermesManagementClient(
     config,
     async () => response({ error: "invalid key" }, 401)
   ).health();
   assert.equal(auth.status, "authentication_failure");
-
-  const unavailable = await new HermesManagementClient(
-    config,
-    async (input) =>
-      String(input).endsWith("/health/detailed")
-        ? response({ status: "ok", version: "0.18.2" })
-        : response({ profiles: ["default"] })
-  ).health();
-  assert.equal(unavailable.status, "unavailable_profile");
 
   const offline = await new HermesManagementClient(config, async () => {
     throw new TypeError("connection refused");
@@ -70,8 +64,105 @@ test("management health distinguishes authentication, profile, and connection fa
   assert.equal(offline.status, "offline");
 });
 
+test("authenticated Agent API health remains available when management and Gateway are unconfigured", async () => {
+  const partial = readHermesReadOnlyServerConfig({
+    CABINET_HERMES_API_URL: "http://127.0.0.1:8642",
+    CABINET_HERMES_API_KEY: "partial-api-secret",
+  });
+  let requests = 0;
+  const client = new HermesManagementClient(partial, async (_input, init) => {
+    requests += 1;
+    assert.equal(new Headers(init?.headers).get("authorization"), "Bearer partial-api-secret");
+    assert.equal(init?.redirect, "error");
+    return response({ status: "ok", version: "0.18.2" });
+  });
+  assert.equal((await client.health()).status, "online");
+  assert.equal((await client.managementStatus()).state, "not_configured");
+  assert.equal(requests, 1);
+});
+
+test("management status uses its session-token boundary and distinguishes source outcomes", async () => {
+  const requests: Array<{ token: string | null; redirect: RequestRedirect | undefined }> = [];
+  const successful = await new HermesManagementClient(config, async (_input, init) => {
+    requests.push({
+      token: new Headers(init?.headers).get("x-hermes-session-token"),
+      redirect: init?.redirect,
+    });
+    return response({ profiles: ["operator-os"], gateway_state: "running", session_token: secret, authorization: `Bearer ${secret}` });
+  }).managementStatus();
+  assert.equal(successful.state, "success");
+  assert.equal(requests[0]?.token, config.managementToken);
+  assert.equal(requests[0]?.redirect, "error");
+  assert.doesNotMatch(JSON.stringify(successful), new RegExp(`${secret}|session_token|authorization`, "i"));
+
+  let missingRequests = 0;
+  const missing = await new HermesManagementClient(
+    { ...config, managementToken: null },
+    async () => { missingRequests += 1; return response({}); },
+  ).managementStatus();
+  assert.equal(missing.state, "not_configured");
+  assert.equal(missingRequests, 0);
+
+  const rejected = await new HermesManagementClient(config, async () => response({ detail: `bad ${secret}` }, 401)).managementStatus();
+  assert.equal(rejected.state, "authentication_failure");
+  assert.doesNotMatch(JSON.stringify(rejected), new RegExp(secret));
+
+  const unknown = await new HermesManagementClient(config, async () => response({ profiles: ["default"] })).managementStatus();
+  assert.equal(unknown.state, "unknown_profile");
+
+  const failed = await new HermesManagementClient(config, async () => response({}, 422)).managementStatus();
+  assert.equal(failed.state, "endpoint_failure");
+
+  const redirectSecret = "management-redirect-secret";
+  const redirected = await new HermesManagementClient(
+    config,
+    async () => new Response(null, { status: 302, headers: { Location: `https://example.com/?token=${redirectSecret}` } }),
+  ).managementStatus();
+  assert.equal(redirected.state, "endpoint_failure");
+  assert.doesNotMatch(JSON.stringify(redirected), new RegExp(`${redirectSecret}|example\\.com`));
+
+  const unavailable = await new HermesManagementClient(config, async () => { throw new TypeError("connection refused"); }).managementStatus();
+  assert.equal(unavailable.state, "unavailable");
+});
+
+test("credential-bearing Agent API redirects fail closed without reaching the destination", async () => {
+  let sourceRequests = 0;
+  let destinationRequests = 0;
+  const destination = createServer((_request, response) => {
+    destinationRequests += 1;
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ version: "redirected" }));
+  });
+  await new Promise<void>((resolve) => destination.listen(0, "127.0.0.1", resolve));
+  const destinationAddress = destination.address();
+  assert.ok(destinationAddress && typeof destinationAddress !== "string");
+  const source = createServer((_request, response) => {
+    sourceRequests += 1;
+    response.writeHead(302, { Location: `http://127.0.0.1:${destinationAddress.port}/secret-destination` });
+    response.end();
+  });
+  await new Promise<void>((resolve) => source.listen(0, "127.0.0.1", resolve));
+  const sourceAddress = source.address();
+  assert.ok(sourceAddress && typeof sourceAddress !== "string");
+  try {
+    const redirected = await new HermesManagementClient({
+      ...config,
+      apiBaseUrl: `http://127.0.0.1:${sourceAddress.port}`,
+    }).health();
+    assert.equal(redirected.status, "offline");
+    assert.equal(sourceRequests, 1);
+    assert.equal(destinationRequests, 0);
+    assert.doesNotMatch(JSON.stringify(redirected), /secret-destination|management-secret|HERMES_BROWSER_LEAK_CANARY/);
+  } finally {
+    await Promise.all([
+      new Promise<void>((resolve, reject) => source.close((error) => error ? reject(error) : resolve())),
+      new Promise<void>((resolve, reject) => destination.close((error) => error ? reject(error) : resolve())),
+    ]);
+  }
+});
+
 test("Kanban run intervention client uses exact installed contracts and keeps claim identity server-side", async () => {
-  const requests: Array<{ url: string; method: string; body: unknown; token: string | null }> = [];
+  const requests: Array<{ url: string; method: string; body: unknown; token: string | null; redirect: RequestRedirect | undefined }> = [];
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = String(input);
     requests.push({
@@ -79,6 +170,7 @@ test("Kanban run intervention client uses exact installed contracts and keeps cl
       method: init?.method ?? "GET",
       body: init?.body ? JSON.parse(String(init.body)) : null,
       token: new Headers(init?.headers).get("x-hermes-session-token"),
+      redirect: init?.redirect,
     });
     if (url.endsWith("/terminate")) return response({ ok: true, run_id: 17, task_id: 23, token: secret });
     return response({ run: { id: 17, task_id: 23, status: "running", claim_lock: secret, started_at: "2026-07-20T03:20:00Z", ended_at: null } });
@@ -95,6 +187,7 @@ test("Kanban run intervention client uses exact installed contracts and keeps cl
   ]);
   assert.deepEqual(requests[1]?.body, { reason: "Stop the duplicate worker safely" });
   assert.ok(requests.every((item) => item.token === config.managementToken));
+  assert.ok(requests.every((item) => item.redirect === "error"));
   assert.equal(JSON.stringify(result).includes(secret), false);
 });
 
@@ -120,6 +213,31 @@ test("management snapshot normalizes canonical surfaces and never returns its se
   assert.equal(result.memory.recallHealth, "healthy");
   assert.equal(result.toolsets[0]?.toolCount, 1);
   assert.ok(config.managementToken && !JSON.stringify(result).includes(config.managementToken));
+});
+
+test("authenticated management collection remains available when Agent API and Gateway are unconfigured", async () => {
+  const partial = readHermesReadOnlyServerConfig({
+    CABINET_HERMES_MANAGEMENT_URL: "http://127.0.0.1:56314",
+    CABINET_HERMES_MANAGEMENT_TOKEN: "partial-management-secret",
+    CABINET_HERMES_PROFILE: "operator-os",
+  });
+  const requests: string[] = [];
+  const client = new HermesManagementClient(partial, async (input, init) => {
+    requests.push(String(input));
+    assert.equal(new Headers(init?.headers).get("x-hermes-session-token"), "partial-management-secret");
+    assert.equal(init?.redirect, "error");
+    if (String(input).endsWith("/api/status")) return response({ profiles: ["operator-os"] });
+    if (String(input).endsWith("/api/profiles")) return response({ profiles: [] });
+    return response([]);
+  });
+  const health = await client.health();
+  assert.equal(health.status, "misconfigured");
+  assert.equal(requests.length, 0);
+  const result = await client.snapshot(health);
+  assert.equal(result.profile, "operator-os");
+  assert.ok(requests.length > 1);
+  assert.ok(requests.every((url) => url.startsWith("http://127.0.0.1:56314/")));
+  assert.doesNotMatch(JSON.stringify(result), /partial-management-secret/);
 });
 
 test("operator projection returns exact live records while stripping credential fields", async () => {

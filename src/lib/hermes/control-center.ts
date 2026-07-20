@@ -9,8 +9,9 @@ import type {
   HermesOperationalHealth,
 } from "./control-center-types";
 import { detectHermesInstallation } from "./installation-detection";
+import { assessHermesLiveReadiness, type HermesLiveReadiness } from "./live-readonly-readiness";
 import { HermesManagementClient } from "./management-client";
-import { readHermesServerConfig } from "./server-config";
+import { readHermesReadOnlyServerConfig } from "./server-config";
 import type { HermesHealthSnapshot, HermesManagementSnapshot } from "./types";
 
 function gatewayState(value: string | null, explicitRunning: boolean | null = null): "running" | "stopped" | "unknown" {
@@ -41,7 +42,8 @@ export function messagingHealth(platforms: Array<{ configured: boolean; lastErro
 function collectHermesObservations(
   health: HermesHealthSnapshot,
   management: HermesManagementSnapshot,
-  installed: ReturnType<typeof detectHermesInstallation>
+  installed: ReturnType<typeof detectHermesInstallation>,
+  readiness?: HermesLiveReadiness,
 ): HermesCapabilityObservation[] {
   const observedAt = management.checkedAt;
   const failed = new Map(management.diagnostics.filter((item) => item.status === "degraded").map((item) => [item.area, item.message]));
@@ -211,6 +213,19 @@ function collectHermesObservations(
     managementFailure ? `Management gateway observation failed: ${managementFailure}` : `Management gateway state is ${managementState}.`,
     { observedAt: management.operator.runtime.observedAt, facts: { state: managementFailure ? "unavailable" : managementState } }
   );
+  const gatewayReadiness = readiness?.sources.find((source) => source.id === "gateway");
+  if (gatewayReadiness && gatewayReadiness.state !== "ready_to_probe") {
+    add(
+      "gateway",
+      "Cabinet Hermes Gateway configuration",
+      "server-only Gateway configuration",
+      gatewayReadiness.state === "invalid" ? "failure" : "not_configured",
+      gatewayReadiness.state === "invalid"
+        ? "Hermes Gateway server configuration is invalid."
+        : "Hermes Gateway is not configured for direct Cabinet access.",
+      { observedAt: health.checkedAt, facts: { sourceState: gatewayReadiness.state } },
+    );
+  }
 
   const openCli = management.openCli;
   const openCliConnected = openCli.available && openCli.daemon === "running" && openCli.extension === "connected" && openCli.profiles.some((profile) => profile.status === "connected");
@@ -244,7 +259,8 @@ function collectHermesObservations(
 }
 
 export async function getHermesControlCenterSnapshot(): Promise<HermesControlCenterSnapshot> {
-  const config = readHermesServerConfig();
+  const readiness = assessHermesLiveReadiness();
+  const config = readHermesReadOnlyServerConfig();
   const client = new HermesManagementClient(config);
   const health = await client.health();
   const management = await client.snapshot(health);
@@ -252,7 +268,7 @@ export async function getHermesControlCenterSnapshot(): Promise<HermesControlCen
   const installation = detectHermesInstallation(health.version, Date.parse(now));
   const installedRuntime: HermesInstalledRuntime = {
     installation,
-    profile: config.profile,
+    profile: config.profile ?? "unknown",
     adapter: management.compatibility.adapter,
     provenance: { kind: "live_runtime", label: "Live runtime projection", capturedAt: now, fixtureId: null },
     live: {
@@ -274,7 +290,7 @@ export async function getHermesControlCenterSnapshot(): Promise<HermesControlCen
   return buildHermesControlCenterProjection({
     registry: HERMES_CAPABILITY_REGISTRY,
     installedRuntime,
-    observations: collectHermesObservations(health, management, installation),
+    observations: collectHermesObservations(health, management, installation, readiness),
     evidenceCatalog: HERMES_CAPABILITY_EVIDENCE_CATALOG,
     evidenceProvenance: {
       implementationRevision: null,
