@@ -34,7 +34,7 @@ async function prepare(page: Page) {
 
 async function selectRun(page: Page, name: string) {
   await page.getByTestId('hermes-runtime-run-list').getByRole('button').filter({ hasText: name }).click();
-  await expect(page.getByTestId('hermes-run-inspector')).toBeVisible();
+  await expect(page.locator('[data-testid="hermes-run-inspector"]:visible')).toBeVisible();
 }
 
 test.beforeAll(async () => {
