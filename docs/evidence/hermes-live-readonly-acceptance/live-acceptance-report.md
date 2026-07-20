@@ -1,9 +1,9 @@
 # Hermes Phase 4A partial live read-only acceptance closeout
 
 - Classification: **Live runtime**
-- Captured: `2026-07-20T22:59:26.870Z`
-- Implementation revision: `ffc3b1aa63910efa1d8d65cea9be7d8e5c87aaff`
-- Runtime Cabinet revision: `ffc3b1aa63910efa1d8d65cea9be7d8e5c87aaff`
+- Captured: `2026-07-20T23:51:43.030Z`
+- Implementation revision: `9c887115128904c3ca7d6ae8ed5d4fb1a9789b55`
+- Runtime Cabinet revision: `9c887115128904c3ca7d6ae8ed5d4fb1a9789b55`
 - Running Hermes Agent version: `0.19.0`, confirmed by `GET /health/detailed`
 - Running Hermes Agent commit: **Unknown**; the endpoint did not report it
 - Detected local Agent checkout: `d7b36070ef80`, from local installation metadata
@@ -53,6 +53,18 @@ That partial observation does not satisfy the full visible capability semantics,
 
 The three retained Live-Proven credits are separately authorized historical-live proofs. No fixture or partial About observation earned current-live credit.
 
+<!-- GENERATED:HERMES_LIVE_PROVEN_ATTRIBUTION:START -->
+### Live-Proven attribution
+
+Generated directly from the canonical capability projection.
+
+| Capability ID | Classification | Evidence origin | Proof kind | Proof scope | Source | Interface | Observed at |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `command-center` | current | `raw_observation` | live | live_runtime_operation | Hermes detailed health bridge | /health/detailed | 2026-07-20T23:51:43.030Z |
+| `approvals` | historical | `approved_evidence_catalog` | historical_audit | historical_live_acceptance | Cabinet Hermes M3-M7 acceptance suite | Hermes gateway and run decision contract | 2026-07-19T02:23:07Z |
+| `browser-opencli` | historical | `approved_evidence_catalog` | historical_audit | historical_live_acceptance | OpenCLI read-only acceptance | opencli local page title, DOM read, and screenshot | 2026-07-19T20:18:51Z |
+<!-- GENERATED:HERMES_LIVE_PROVEN_ATTRIBUTION:END -->
+
 ## Cabinet daemon distinction and live discrepancy
 
 The visible daemon banner refers to Cabinet’s application agent daemon, not Hermes Agent. It now says: **“Cabinet agent daemon is unavailable. This is separate from the connected Hermes Agent runtime.”** The daemon was not restarted or hidden for this review.
@@ -61,12 +73,12 @@ During the live browser review, the Control Center repeatedly obtained the curre
 
 ## Verification
 
-- Full unit suite: 574 passed, 0 failed.
+- Full unit suite: 585 passed, 0 failed.
 - Focused Hermes and closeout regressions: passed.
-- Production browser workflows: 3 passed, 0 failed.
+- Production browser workflows: 4 passed, 0 failed.
 - TypeScript: passed.
 - Focused ESLint: passed.
-- Exact Commit A production build: passed; the generated build identity contains `ffc3b1aa63910efa1d8d65cea9be7d8e5c87aaff`.
+- Exact Commit A production build: passed; the generated build identity contains `9c887115128904c3ca7d6ae8ed5d4fb1a9789b55`.
 - `git diff --check`: passed.
 - Live browser: desktop 1440×900 and mobile 390×844 passed; mobile horizontal overflow was 0 px.
 - Reduced-motion workflow: passed.

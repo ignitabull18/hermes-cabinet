@@ -1,9 +1,9 @@
 {
   "classification": "Live runtime",
-  "capturedAt": "2026-07-20T22:59:26.870Z",
-  "artifactGeneratedAt": "2026-07-20T22:59:24.000Z",
-  "implementationRevision": "ffc3b1aa63910efa1d8d65cea9be7d8e5c87aaff",
-  "runtimeCabinetRevision": "ffc3b1aa63910efa1d8d65cea9be7d8e5c87aaff",
+  "capturedAt": "2026-07-20T23:51:43.030Z",
+  "artifactGeneratedAt": "2026-07-20T23:49:07.743Z",
+  "implementationRevision": "9c887115128904c3ca7d6ae8ed5d4fb1a9789b55",
+  "runtimeCabinetRevision": "9c887115128904c3ca7d6ae8ed5d4fb1a9789b55",
   "observedRunningAgent": {
     "version": "0.19.0",
     "source": "GET /health/detailed",
