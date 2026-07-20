@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-20T04:26:28Z",
+  "implementationRevision": "0f257a380c6c1a02bd0cbca7f85b1db425c42f22",
+  "classification": "contract_and_test_evidence_only",
+  "liveRuntimeProjectionCaptured": false,
+  "liveScreenshotsCaptured": false,
+  "liveParityClaimed": false,
+  "interventionsEnabled": false,
+  "mutationEndpointCalls": 0,
+  "fullUnitSuite": {
+    "passed": 555,
+    "failed": 0
+  },
+  "focusedHermesContractSuite": {
+    "passed": 132,
+    "failed": 0
+  },
+  "focusedConfigurationAndGateTests": {
+    "passed": 16,
+    "failed": 0
+  },
+  "productionBrowserWorkflows": {
+    "passed": 2,
+    "failed": 0,
+    "desktop": "1440x900",
+    "mobile": "390x844",
+    "reducedMotion": true,
+    "zeroHorizontalOverflow": true,
+    "relevantConsoleErrors": 0,
+    "mutationEndpointCalls": 0
+  },
+  "productionBuild": "passed_with_existing_turbopack_nft_warnings",
+  "assertions": [
+    "Absent and false server enablement fail before Hermes client construction",
+    "Browser request fields cannot enable interventions",
+    "Read-only readiness remains independent of mutation enablement",
+    "Credential-bearing endpoint URLs project only credential-free origins",
+    "Secret values, approved-equivalent values, local paths, and local identities do not egress",
+    "Missing and invalid configuration fail readiness without fabricating live evidence"
+  ]
+}

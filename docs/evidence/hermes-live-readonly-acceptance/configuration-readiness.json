@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-20T04:26:28Z",
+  "implementationRevision": "0f257a380c6c1a02bd0cbca7f85b1db425c42f22",
+  "classification": "configuration_readiness_only",
+  "ready": false,
+  "interventionsEnabled": false,
+  "variables": [
+    {
+      "name": "CABINET_HERMES_API_URL",
+      "requiredForLiveReview": true,
+      "status": "absent",
+      "sourceType": "none",
+      "safeEndpointIdentity": null
+    },
+    {
+      "name": "CABINET_HERMES_API_KEY",
+      "requiredForLiveReview": true,
+      "status": "absent",
+      "sourceType": "none",
+      "safeEndpointIdentity": null
+    },
+    {
+      "name": "CABINET_HERMES_MANAGEMENT_URL",
+      "requiredForLiveReview": true,
+      "status": "absent",
+      "sourceType": "none",
+      "safeEndpointIdentity": null
+    },
+    {
+      "name": "CABINET_HERMES_MANAGEMENT_TOKEN",
+      "requiredForLiveReview": true,
+      "status": "absent",
+      "sourceType": "none",
+      "safeEndpointIdentity": null
+    },
+    {
+      "name": "CABINET_HERMES_GATEWAY_URL",
+      "requiredForLiveReview": true,
+      "status": "absent",
+      "sourceType": "none",
+      "safeEndpointIdentity": null
+    },
+    {
+      "name": "CABINET_HERMES_GATEWAY_TOKEN",
+      "requiredForLiveReview": true,
+      "status": "absent",
+      "sourceType": "none",
+      "safeEndpointIdentity": null
+    },
+    {
+      "name": "CABINET_HERMES_PROFILE",
+      "requiredForLiveReview": true,
+      "status": "absent",
+      "sourceType": "none",
+      "safeEndpointIdentity": null
+    },
+    {
+      "name": "CABINET_HERMES_TIMEOUT_MS",
+      "requiredForLiveReview": false,
+      "status": "absent",
+      "sourceType": "default",
+      "safeEndpointIdentity": null
+    },
+    {
+      "name": "CABINET_HERMES_INTERVENTIONS_ENABLED",
+      "requiredForLiveReview": false,
+      "status": "absent",
+      "sourceType": "default",
+      "safeEndpointIdentity": null
+    }
+  ],
+  "missing": [
+    "CABINET_HERMES_API_URL",
+    "CABINET_HERMES_API_KEY",
+    "CABINET_HERMES_MANAGEMENT_URL",
+    "CABINET_HERMES_MANAGEMENT_TOKEN",
+    "CABINET_HERMES_GATEWAY_URL",
+    "CABINET_HERMES_GATEWAY_TOKEN",
+    "CABINET_HERMES_PROFILE"
+  ],
+  "invalid": []
+}
