@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import { buildHermesRuntimeInterventionFixtureProjection } from "./control-center-intervention-fixture";
+import { hermesProjectionMatrixRows } from "./control-center-projection";
 import {
   HermesRuntimeInterventionError,
   HermesRuntimeInterventionService,
@@ -118,4 +121,21 @@ test("bounded failure output redacts credentials and never returns raw payloads"
   assert.equal(result.status, "failed");
   assert.doesNotMatch(serialized, /secret-value|user:token|api_key=secret/);
   assert.ok(serialized.length < 700);
+});
+
+test("Phase 3B machine evidence is deterministic, complete, fixture-only, and sanitized", () => {
+  const machine = JSON.parse(fs.readFileSync("docs/evidence/hermes-governed-runtime-interventions/acceptance-fixture-projection.json", "utf8")) as ReturnType<typeof buildHermesRuntimeInterventionFixtureProjection>;
+  const rebuilt = buildHermesRuntimeInterventionFixtureProjection({
+    implementationRevision: machine.evidenceProvenance.implementationRevision,
+    artifactGeneratedAt: machine.evidenceProvenance.artifactGeneratedAt,
+  });
+  assert.deepEqual(machine, JSON.parse(JSON.stringify(rebuilt)));
+  assert.deepEqual(hermesProjectionMatrixRows(machine), hermesProjectionMatrixRows(rebuilt));
+  assert.equal(machine.capabilities.length, 48);
+  assert.equal(new Set(machine.capabilities.map((item) => item.id)).size, 48);
+  assert.equal(machine.provenance.label, "Acceptance fixture — no live mutation performed");
+  assert.equal(machine.parity.liveVisibility.covered, 0);
+  const run = machine.runtimeExecution.runs.find((item) => item.id === "Run 17");
+  assert.deepEqual(run?.intervention, { category: "terminate_kanban_run", targetRunId: "17" });
+  assert.doesNotMatch(JSON.stringify(machine), /private-claim|fixture-secret|worker_pid|task_title|authorization:|api_key/i);
 });

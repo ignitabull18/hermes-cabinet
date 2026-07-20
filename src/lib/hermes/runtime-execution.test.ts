@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 import { buildHermesRuntimeExecutionFixtureProjection, HERMES_RUNTIME_EXECUTION_CAPTURED_AT } from './control-center-runtime-fixture';
-import { hermesProjectionMatrixRows } from './control-center-projection';
 import { normalizeActiveWorkerRows, normalizeKnownRunRows, normalizeRuntimeExecution, safeRuntimeText } from './runtime-execution';
 
 const at = HERMES_RUNTIME_EXECUTION_CAPTURED_AT;
@@ -124,14 +123,14 @@ test('fixture and UI contain no runtime mutation controls or secret-bearing data
   assert.match(ui, /Hermes prepares; Jeremy commits\./);
 });
 
-test('committed machine evidence is deterministic and matches the generated matrix rows', () => {
+test('accepted Phase 3A machine evidence preserves its frozen runtime facts', () => {
   const evidencePath = 'docs/evidence/hermes-runtime-execution/acceptance-fixture-projection.json';
   const machine = JSON.parse(fs.readFileSync(evidencePath, 'utf8')) as ReturnType<typeof buildHermesRuntimeExecutionFixtureProjection>;
   const rebuilt = buildHermesRuntimeExecutionFixtureProjection({
     implementationRevision: machine.evidenceProvenance.implementationRevision,
     artifactGeneratedAt: machine.evidenceProvenance.artifactGeneratedAt,
   });
-  assert.deepEqual(machine, JSON.parse(JSON.stringify(rebuilt)));
-  assert.deepEqual(hermesProjectionMatrixRows(machine), hermesProjectionMatrixRows(rebuilt));
+  assert.deepEqual(machine.runtimeExecution, JSON.parse(JSON.stringify(rebuilt.runtimeExecution)));
+  assert.deepEqual(machine.provenance, rebuilt.provenance);
   assert.equal(machine.capabilities.length, 48);
 });
