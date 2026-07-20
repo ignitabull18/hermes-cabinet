@@ -40,4 +40,8 @@ Commit must:
 4. Cache the result by the stable request identity so duplicate browser commits cannot call Hermes twice.
 5. Re-read Hermes and report success only when the run is terminal with the expected reclaimed outcome. A timeout or bounded failure remains visible and is not retried automatically.
 
+Cabinet retains only bounded ephemeral server-side previews and receipts. Expired never-committed previews are removed, uncommitted previews have a deterministic maximum, in-flight receipts are never evicted, and completed duplicate receipts remain available for their bounded retention. An unknown result may be rechecked repeatedly through the exact run's read-only endpoint; every recheck performs zero mutation calls and can never redispatch termination.
+
+Governed termination of one specifically identified active Kanban run is implemented behind fresh live authority, exact typed confirmation, stale-state protection, and idempotent reconciliation. No live mutation has yet been performed.
+
 The UI must retain the rule: **Hermes prepares; Jeremy commits.** Acceptance fixtures may exercise preview, confirmation, duplicate, stale, conflict, success, timeout, and failure presentation, but fixture provenance can never enter the live mutation client.

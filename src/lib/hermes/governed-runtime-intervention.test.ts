@@ -141,7 +141,7 @@ test("a never-begun expired preview cannot dispatch and fresh Hermes state preve
   const expired = setup();
   const preview = await prepare(expired);
   expired.clock.value += 121_000;
-  await assert.rejects(commit(expired, preview), /prepared state is stale/);
+  await assert.rejects(commit(expired, preview), /unavailable/);
   assert.equal(expired.client.mutations, 0);
 
   const restarted = setup();
@@ -154,13 +154,63 @@ test("bounded receipt cleanup evicts its preview and cannot enable a second disp
   const clock = { value: NOW.getTime() };
   const client = new FakeClient();
   client.states = [active(), active(), reclaimed(), active(), active(), reclaimed()];
-  const service = new HermesRuntimeInterventionService(client, () => new Date(clock.value), { receiptTtlMs: 60_000, maxReceipts: 1 });
+  const service = new HermesRuntimeInterventionService(client, () => new Date(clock.value), { receiptTtlMs: 60_000, maxReceipts: 1, maxUncommittedPreviews: 4 });
   const first = await service.prepare({ targetRunId: "17", reason: "Stop the first duplicate worker", authority: authority(), actorIdentity: ACTOR });
   await service.commit({ previewId: first.previewId, targetRunId: "17", confirmationPhrase: first.confirmationPhrase, actorIdentity: ACTOR });
   const second = await service.prepare({ targetRunId: "17", reason: "Stop the second duplicate worker", authority: authority(), actorIdentity: ACTOR });
   await service.commit({ previewId: second.previewId, targetRunId: "17", confirmationPhrase: second.confirmationPhrase, actorIdentity: ACTOR });
   await assert.rejects(service.commit({ previewId: first.previewId, targetRunId: "17", confirmationPhrase: first.confirmationPhrase, actorIdentity: ACTOR }), /unavailable/);
   assert.equal(client.mutations, 2);
+});
+
+test("expired never-committed previews are removed without a Hermes call", async () => {
+  const subject = setup();
+  const preview = await prepare(subject);
+  const readsBeforeCleanup = subject.client.reads;
+  subject.clock.value += 121_000;
+  await assert.rejects(commit(subject, preview), /unavailable/);
+  assert.equal(subject.client.reads, readsBeforeCleanup);
+  assert.equal(subject.client.mutations, 0);
+});
+
+test("uncommitted preview collection is capped deterministically without exposing server-only state", async () => {
+  const clock = { value: NOW.getTime() };
+  const client = new FakeClient();
+  client.states = [active()];
+  const service = new HermesRuntimeInterventionService(client, () => new Date(clock.value), { receiptTtlMs: 60_000, maxReceipts: 4, maxUncommittedPreviews: 2 });
+  const previews: HermesRuntimeInterventionPreview[] = [];
+  for (const reason of ["Stop the first duplicate worker", "Stop the second duplicate worker", "Stop the third duplicate worker"]) {
+    previews.push(await service.prepare({ targetRunId: "17", reason, authority: authority({ observedAt: new Date(clock.value).toISOString() }), actorIdentity: "actor-secret-identity" }));
+    clock.value += 1;
+  }
+  const readsBeforeCleanup = client.reads;
+  await assert.rejects(service.commit({ previewId: previews[0]!.previewId, targetRunId: "17", confirmationPhrase: previews[0]!.confirmationPhrase, actorIdentity: "actor-secret-identity" }), (error: unknown) => {
+    assert.doesNotMatch(JSON.stringify(error), /actor-secret-identity|private-claim-value|management-token/);
+    return error instanceof HermesRuntimeInterventionError && error.code === "preview_expired";
+  });
+  for (const retained of previews.slice(1)) {
+    await assert.rejects(service.commit({ previewId: retained.previewId, targetRunId: "17", confirmationPhrase: "wrong", actorIdentity: "actor-secret-identity" }), /exact server-issued/);
+  }
+  assert.equal(client.reads, readsBeforeCleanup);
+  assert.equal(client.mutations, 0);
+});
+
+test("cleanup never evicts an in-flight receipt or causes a second dispatch", async () => {
+  const clock = { value: NOW.getTime() };
+  const client = new FakeClient();
+  let release!: () => void;
+  client.mutationGate = new Promise<void>((resolve) => { release = resolve; });
+  client.states = [active(), active(), reclaimed()];
+  const service = new HermesRuntimeInterventionService(client, () => new Date(clock.value), { receiptTtlMs: 1, maxReceipts: 0, maxUncommittedPreviews: 1 });
+  const preview = await service.prepare({ targetRunId: "17", reason: "Stop the duplicate worker safely", authority: authority(), actorIdentity: ACTOR });
+  const first = service.commit({ previewId: preview.previewId, targetRunId: "17", confirmationPhrase: preview.confirmationPhrase, actorIdentity: ACTOR });
+  await new Promise((resolve) => setImmediate(resolve));
+  clock.value += 10_000;
+  const duplicate = service.commit({ previewId: preview.previewId, targetRunId: "17", confirmationPhrase: preview.confirmationPhrase, actorIdentity: ACTOR });
+  assert.equal(client.mutations, 1);
+  release();
+  assert.deepEqual(await duplicate, await first);
+  assert.equal(client.mutations, 1);
 });
 
 test("post-dispatch timeout, connection, 5xx, malformed response, and verification failure remain outcome unknown", async () => {
@@ -209,6 +259,8 @@ test("explicit 409 blocks only when one reconciliation proves the exact run unch
   const result = await commit(subject, await prepare(subject));
   assert.equal(result.status, "blocked_no_action");
   assert.equal(result.mutationAttempted, true);
+  assert.equal(result.mutationResponseReceived, true);
+  assert.equal(result.retryAttempted, false);
   assert.equal(subject.client.mutations, 1);
 });
 
@@ -223,6 +275,21 @@ test("read-only recheck can verify an unknown receipt and never redispatches", a
   assert.equal(checked.status, "verified_success");
   assert.equal(subject.client.mutations, 1);
   assert.ok(checked.lastReconciliationAt);
+});
+
+test("repeatable read-only rechecks never redispatch the mutation", async () => {
+  const subject = setup();
+  subject.client.mutationError = new Error("connection reset");
+  subject.client.states = [active(), active(), active(), active(), active()];
+  const preview = await prepare(subject);
+  const unknown = await commit(subject, preview);
+  assert.equal(unknown.status, "outcome_unknown");
+  const first = await subject.service.recheck({ previewId: preview.previewId, targetRunId: "17", actorIdentity: ACTOR });
+  const second = await subject.service.recheck({ previewId: preview.previewId, targetRunId: "17", actorIdentity: ACTOR });
+  assert.equal(first.status, "outcome_unknown");
+  assert.equal(second.status, "outcome_unknown");
+  assert.equal(subject.client.mutations, 1);
+  assert.equal(subject.client.reads, 5);
 });
 
 test("bounded ambiguous output redacts credentials and raw payloads", async () => {

@@ -13,6 +13,7 @@ const PREVIEW_TTL_MS = 120_000;
 const AUTHORITY_TTL_MS = 30_000;
 const RECEIPT_TTL_MS = 30 * 60_000;
 const MAX_RECEIPTS = 200;
+const MAX_UNCOMMITTED_PREVIEWS = 64;
 
 export type HermesInterventionPhase =
   | "prepared"
@@ -70,6 +71,8 @@ type StoredPreview = {
   stateFingerprint: string;
   actorIdentity: string;
   authorityIdentity: string;
+  createdAt: number;
+  lastAccessAt: number;
 };
 
 type Receipt = {
@@ -160,10 +163,15 @@ export class HermesRuntimeInterventionService {
   constructor(
     private readonly client: HermesRuntimeInterventionClient,
     private readonly now: () => Date = () => new Date(),
-    private readonly retention: { receiptTtlMs: number; maxReceipts: number } = { receiptTtlMs: RECEIPT_TTL_MS, maxReceipts: MAX_RECEIPTS },
+    private readonly retention: { receiptTtlMs: number; maxReceipts: number; maxUncommittedPreviews: number } = {
+      receiptTtlMs: RECEIPT_TTL_MS,
+      maxReceipts: MAX_RECEIPTS,
+      maxUncommittedPreviews: MAX_UNCOMMITTED_PREVIEWS,
+    },
   ) {}
 
   async prepare(input: { targetRunId: string; reason: string; authority: HermesLiveInterventionAuthority; actorIdentity: string }): Promise<HermesRuntimeInterventionPreview> {
+    this.cleanup();
     const targetRunId = input.targetRunId.trim();
     if (!/^\d+$/.test(targetRunId)) throw new HermesRuntimeInterventionError("invalid_request", "A numeric Hermes run identity is required.");
     if (input.authority.kind !== "live_runtime" || input.authority.targetRunId !== targetRunId) {
@@ -194,7 +202,16 @@ export class HermesRuntimeInterventionService {
       confirmationPhrase: `TERMINATE RUN ${run.runId}`,
       phase: "prepared",
     };
-    this.previews.set(preview.previewId, { public: preview, stateFingerprint: fingerprint, actorIdentity: input.actorIdentity, authorityIdentity: input.authority.authorityIdentity });
+    const createdAt = this.now().getTime();
+    this.previews.set(preview.previewId, {
+      public: preview,
+      stateFingerprint: fingerprint,
+      actorIdentity: input.actorIdentity,
+      authorityIdentity: input.authority.authorityIdentity,
+      createdAt,
+      lastAccessAt: createdAt,
+    });
+    this.cleanup();
     return preview;
   }
 
@@ -205,6 +222,7 @@ export class HermesRuntimeInterventionService {
     if (stored.actorIdentity !== input.actorIdentity) throw new HermesRuntimeInterventionError("actor_mismatch", "This preview belongs to a different authenticated Cabinet session.");
     if (stored.public.targetRunId !== input.targetRunId) throw new HermesRuntimeInterventionError("target_mismatch", "The confirmed target does not match the prepared run.");
     if (input.confirmationPhrase !== stored.public.confirmationPhrase) throw new HermesRuntimeInterventionError("not_confirmed", "Type the exact server-issued confirmation phrase.");
+    stored.lastAccessAt = this.now().getTime();
 
     const existing = this.receipts.get(stored.public.idempotencyIdentity);
     if (existing) {
@@ -224,12 +242,15 @@ export class HermesRuntimeInterventionService {
   }
 
   async recheck(input: { previewId: string; targetRunId: string; actorIdentity: string }): Promise<HermesRuntimeInterventionResult> {
+    this.cleanup();
     const stored = this.previews.get(input.previewId);
     if (!stored || stored.actorIdentity !== input.actorIdentity || stored.public.targetRunId !== input.targetRunId) {
       throw new HermesRuntimeInterventionError("target_mismatch", "The outcome receipt does not match this authenticated session and run.");
     }
     const receipt = this.receipts.get(stored.public.idempotencyIdentity);
     if (!receipt) throw new HermesRuntimeInterventionError("invalid_request", "No dispatched intervention is available to recheck.");
+    stored.lastAccessAt = this.now().getTime();
+    receipt.lastAccessAt = stored.lastAccessAt;
     const prior = await receipt.promise;
     if (prior.status !== "outcome_unknown") return prior;
     const checkedAt = this.now().toISOString();
@@ -302,7 +323,7 @@ export class HermesRuntimeInterventionService {
       if (isReclaimed(run)) return this.result(stored, "verified_success", "verified", `Hermes verified that run ${stored.public.targetRunId} ended with the reclaimed outcome after an ambiguous dispatch response.`, true, responseReceived, "run_reclaimed", checkedAt);
       const explicitConflict = dispatchError instanceof HermesManagementRequestError && dispatchError.status === 409;
       if (explicitConflict && isActive(run) && stateFingerprint(run) === stored.stateFingerprint) {
-        return this.result(stored, "blocked_no_action", "verification_attempted", "Hermes returned an explicit conflict and the exact run remains unchanged. No mutation was applied or retried.", true, false, "run_reclaimed", checkedAt);
+        return this.result(stored, "blocked_no_action", "verification_attempted", "Hermes returned an explicit conflict and the exact run remains unchanged. No mutation was applied or retried.", true, responseReceived, "run_reclaimed", checkedAt);
       }
     } catch {
       // The single allowed read-only reconciliation failed; uncertainty remains.
@@ -313,15 +334,28 @@ export class HermesRuntimeInterventionService {
   private cleanup(): void {
     const now = this.now().getTime();
     for (const [identity, receipt] of this.receipts) {
-      if (now - receipt.lastAccessAt > this.retention.receiptTtlMs) {
+      if (receipt.result !== null && now - receipt.lastAccessAt > this.retention.receiptTtlMs) {
         this.receipts.delete(identity);
         this.previews.delete(identity);
       }
     }
-    if (this.receipts.size <= this.retention.maxReceipts) return;
-    const oldest = [...this.receipts.entries()].sort((left, right) => left[1].lastAccessAt - right[1].lastAccessAt);
-    for (const [identity] of oldest.slice(0, this.receipts.size - this.retention.maxReceipts)) {
+    const completedReceipts = [...this.receipts.entries()]
+      .filter(([, receipt]) => receipt.result !== null)
+      .sort((left, right) => left[1].lastAccessAt - right[1].lastAccessAt || left[0].localeCompare(right[0]));
+    for (const [identity] of completedReceipts) {
+      if (this.receipts.size <= this.retention.maxReceipts) break;
       this.receipts.delete(identity);
+      this.previews.delete(identity);
+    }
+
+    for (const [identity, preview] of this.previews) {
+      if (this.receipts.has(identity)) continue;
+      if (Date.parse(preview.public.expiresAt) < now) this.previews.delete(identity);
+    }
+    const uncommitted = [...this.previews.entries()]
+      .filter(([identity]) => !this.receipts.has(identity))
+      .sort((left, right) => left[1].lastAccessAt - right[1].lastAccessAt || left[1].createdAt - right[1].createdAt || left[0].localeCompare(right[0]));
+    for (const [identity] of uncommitted.slice(0, Math.max(0, uncommitted.length - this.retention.maxUncommittedPreviews))) {
       this.previews.delete(identity);
     }
   }
