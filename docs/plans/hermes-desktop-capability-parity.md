@@ -147,7 +147,9 @@ Gateway reconciliation groups evidence by source and interface, retains the late
 <!-- GENERATED:HERMES_TRUTH_STATE:START -->
 ## Generated per-capability truth-state evidence
 
-Generated at 2026-07-19T23:55:00.000Z. Acceptance fixture — not live runtime. Fixture ID: `hermes-phase-2a2-proof-integrity-v1`. Captured: 2026-07-19T22:15:00.000Z.
+Generated at 2026-07-20T00:37:00.000Z. Acceptance fixture — not live runtime. Fixture ID: `hermes-phase-2a2-proof-integrity-v1`. Captured: 2026-07-19T22:15:00.000Z.
+
+Implementation revision: `f5921b9c4898c759442815dff6c85c136dcd68f6`. Artifact generated at: 2026-07-20T00:37:00.000Z.
 
 Installed Desktop source commit: **unknown**. The commit `311a5b0a552be78f5c58807e2be1db02e3badcb0` is historical Desktop source-audit evidence only.
 
@@ -171,7 +173,7 @@ Overall credits: Discoverability 48/48 (100%); Current Live Visibility 0/48 (0%)
 | Provider accounts | supported | `visible_read_only` | `healthy` | exact_fixture / exact_fixture_path / success | Hermes model options | /api/model/options | 2026-07-19T22:15:00.000Z | fresh / fresh | yes | D:yes L:no M:no P:no |
 | Models | supported | `visible_read_only` | `healthy` | exact_fixture / exact_fixture_path / success | Hermes current model | /api/model/info | 2026-07-19T22:15:00.000Z | fresh / fresh | yes | D:yes L:no M:no P:no |
 | API keys and tools | supported | `visible_read_only` | `unknown` | exact_fixture / exact_fixture_path / unknown | Phase 2A.2 acceptance observation | capability-specific source not exercised by this fixture | 2026-07-19T22:15:00.000Z | fresh / fresh | no | D:yes L:no M:no P:no |
-| Gateway | supported | `visible_read_only` | `conflicting_evidence` | exact_fixture / exact_fixture_path / conflict | Hermes gateway reconciliation | Hermes health bridge + Hermes management status | 2026-07-19T22:15:00.000Z | fresh / fresh | yes | D:yes L:no M:no P:no |
+| Gateway | supported | `visible_read_only` | `conflicting_evidence` | exact_fixture / exact_fixture_path / conflict | Hermes gateway reconciliation | Hermes health bridge + Hermes management status | 2026-07-19T22:15:00.000Z | unknown / fresh | yes | D:yes L:no M:no P:no |
 | MCP | supported | `visible_read_only` | `healthy` | exact_fixture / exact_fixture_path / connected_empty | Hermes MCP servers | /api/mcp/servers | 2026-07-19T22:15:00.000Z | fresh / fresh | yes | D:yes L:no M:no P:no |
 | Plugins | supported | `visible_read_only` | `healthy` | exact_fixture / exact_fixture_path / success | Hermes dashboard plugins | /api/dashboard/plugins | 2026-07-19T22:15:00.000Z | fresh / fresh | yes | D:yes L:no M:no P:no |
 | Notifications | supported | `mapped` | `healthy` | exact_fixture / cabinet_local_surface / success | Cabinet-local Hermes event preferences | Cabinet preference store | 2026-07-19T22:15:00.000Z | fresh / fresh | no | D:yes L:no M:yes P:no |

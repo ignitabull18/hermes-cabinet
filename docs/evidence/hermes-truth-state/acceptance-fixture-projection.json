@@ -7,12 +7,18 @@
     "capturedAt": "2026-07-19T22:15:00.000Z",
     "fixtureId": "hermes-phase-2a2-proof-integrity-v1"
   },
+  "evidenceProvenance": {
+    "implementationRevision": "f5921b9c4898c759442815dff6c85c136dcd68f6",
+    "fixtureId": "hermes-phase-2a2-proof-integrity-v1",
+    "fixtureCapturedAt": "2026-07-19T22:15:00.000Z",
+    "artifactGeneratedAt": "2026-07-20T00:37:00.000Z"
+  },
   "installed": {
     "desktopVersion": "0.17.0",
     "desktopCommit": null,
     "backendVersion": "0.18.2",
     "backendCommit": "594308d4bbe9",
-    "cabinetCommit": "a5310e66cd12",
+    "cabinetCommit": null,
     "adapter": "desktop-0.18",
     "upstreamAudit": {
       "auditedAt": "2026-07-19T21:06:53Z",
@@ -183,6 +189,7 @@
       "operationalDetail": "The acceptance fixture does not assert current operational health for this source.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Phase 2A.2 acceptance observation",
           "interface": "capability-specific source not exercised by this fixture",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -236,6 +243,7 @@
       "operationalDetail": "The exact fixture health bridge responded.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Hermes detailed health bridge",
           "interface": "/health/detailed",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -292,6 +300,7 @@
       "operationalDetail": "Twelve profile-scoped skills were projected.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Hermes skills",
           "interface": "/api/skills",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -348,6 +357,7 @@
       "operationalDetail": "Telegram: Fatal polling conflict. Another poller is active.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Hermes messaging platforms",
           "interface": "/api/messaging/platforms",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -366,6 +376,7 @@
           "summary": "Telegram: Fatal polling conflict. Another poller is active."
         },
         {
+          "origin": "approved_evidence_catalog",
           "source": "Installed Desktop messaging route audit",
           "interface": "Hermes Desktop source audit",
           "observedAt": "2026-07-19T21:06:53Z",
@@ -422,6 +433,7 @@
       "operationalDetail": "One safe artifact record was projected.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Hermes files",
           "interface": "/api/files",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -439,6 +451,7 @@
           "summary": "One safe artifact record was projected."
         },
         {
+          "origin": "approved_evidence_catalog",
           "source": "Installed Desktop artifacts route audit",
           "interface": "Hermes Desktop source audit",
           "observedAt": "2026-07-19T21:06:53Z",
@@ -495,6 +508,7 @@
       "operationalDetail": "The cron endpoint responded successfully with no canonical jobs.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Hermes cron jobs",
           "interface": "/api/cron/jobs",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -551,6 +565,7 @@
       "operationalDetail": "One profile was projected.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Hermes profiles",
           "interface": "/api/profiles",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -607,6 +622,7 @@
       "operationalDetail": "One active Hermes worker was projected.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Hermes active agents",
           "interface": "/api/plugins/kanban/workers/active",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -624,6 +640,7 @@
           "summary": "One active Hermes worker was projected."
         },
         {
+          "origin": "approved_evidence_catalog",
           "source": "Installed Desktop agents route audit",
           "interface": "Hermes Desktop source audit",
           "observedAt": "2026-07-19T21:06:53Z",
@@ -680,6 +697,7 @@
       "operationalDetail": "The operator-os graph endpoint responded with no nodes.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Hermes memory graph",
           "interface": "/api/learning/graph",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -699,6 +717,7 @@
           "summary": "The operator-os graph endpoint responded with no nodes."
         },
         {
+          "origin": "approved_evidence_catalog",
           "source": "Installed Desktop Starmap route audit",
           "interface": "Hermes Desktop source audit",
           "observedAt": "2026-07-19T21:06:53Z",
@@ -755,6 +774,7 @@
       "operationalDetail": "The acceptance fixture does not assert current operational health for this source.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Phase 2A.2 acceptance observation",
           "interface": "capability-specific source not exercised by this fixture",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -808,6 +828,7 @@
       "operationalDetail": "One authenticated provider summary was projected.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Hermes model options",
           "interface": "/api/model/options",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -825,6 +846,7 @@
           "summary": "One authenticated provider summary was projected."
         },
         {
+          "origin": "approved_evidence_catalog",
           "source": "Installed Desktop provider settings audit",
           "interface": "Hermes Desktop source audit",
           "observedAt": "2026-07-19T21:06:53Z",
@@ -881,6 +903,7 @@
       "operationalDetail": "One redacted provider account summary was projected.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Hermes model options",
           "interface": "/api/model/options",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -898,6 +921,7 @@
           "summary": "One redacted provider account summary was projected."
         },
         {
+          "origin": "approved_evidence_catalog",
           "source": "Installed Desktop account settings audit",
           "interface": "Hermes Desktop source audit",
           "observedAt": "2026-07-19T21:06:53Z",
@@ -954,6 +978,7 @@
       "operationalDetail": "The inherited current model was projected.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Hermes current model",
           "interface": "/api/model/info",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -971,6 +996,7 @@
           "summary": "The inherited current model was projected."
         },
         {
+          "origin": "approved_evidence_catalog",
           "source": "Installed Desktop model settings audit",
           "interface": "Hermes Desktop source audit",
           "observedAt": "2026-07-19T21:06:53Z",
@@ -1027,6 +1053,7 @@
       "operationalDetail": "The acceptance fixture does not assert current operational health for this source.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Phase 2A.2 acceptance observation",
           "interface": "capability-specific source not exercised by this fixture",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -1080,10 +1107,11 @@
       "operationalDetail": "Hermes health bridge observed running at 2026-07-19T22:15:00.000Z; Hermes management status observed stopped at 2026-07-19T22:15:00.000Z.",
       "evidence": [
         {
+          "origin": "derived_reconciliation",
           "source": "Hermes gateway reconciliation",
           "interface": "Hermes health bridge + Hermes management status",
           "observedAt": "2026-07-19T22:15:00.000Z",
-          "assertedFreshness": "fresh",
+          "assertedFreshness": "unknown",
           "effectiveFreshness": "fresh",
           "proofKind": "exact_fixture",
           "proofScope": "exact_fixture_path",
@@ -1098,6 +1126,7 @@
           "summary": "Hermes health bridge observed running at 2026-07-19T22:15:00.000Z; Hermes management status observed stopped at 2026-07-19T22:15:00.000Z."
         },
         {
+          "origin": "raw_observation",
           "source": "Hermes health bridge",
           "interface": "/health/detailed gateway_state",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -1115,6 +1144,7 @@
           "summary": "Health bridge gateway state is running."
         },
         {
+          "origin": "raw_observation",
           "source": "Hermes management status",
           "interface": "/api/status gateway state",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -1132,6 +1162,7 @@
           "summary": "Management gateway state is stopped."
         },
         {
+          "origin": "approved_evidence_catalog",
           "source": "Installed Desktop gateway settings audit",
           "interface": "Hermes Desktop source audit",
           "observedAt": "2026-07-19T21:06:53Z",
@@ -1188,6 +1219,7 @@
       "operationalDetail": "The MCP endpoint responded successfully with no configured servers.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Hermes MCP servers",
           "interface": "/api/mcp/servers",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -1244,6 +1276,7 @@
       "operationalDetail": "One enabled plugin was projected.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Hermes dashboard plugins",
           "interface": "/api/dashboard/plugins",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -1300,6 +1333,7 @@
       "operationalDetail": "Cabinet-local notification preferences are mapped to Hermes events.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Cabinet-local Hermes event preferences",
           "interface": "Cabinet preference store",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -1317,6 +1351,7 @@
           "summary": "Cabinet-local notification preferences are mapped to Hermes events."
         },
         {
+          "origin": "approved_evidence_catalog",
           "source": "Cabinet notification preference component contract",
           "interface": "Hermes Desktop source audit",
           "observedAt": "2026-07-19T21:06:53Z",
@@ -1373,6 +1408,7 @@
       "operationalDetail": "One session was projected.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Hermes sessions",
           "interface": "/api/sessions",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -1390,6 +1426,7 @@
           "summary": "One session was projected."
         },
         {
+          "origin": "approved_evidence_catalog",
           "source": "Installed Desktop session route audit",
           "interface": "Hermes Desktop source audit",
           "observedAt": "2026-07-19T21:06:53Z",
@@ -1446,6 +1483,7 @@
       "operationalDetail": "Not detected in the installed Desktop build",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Phase 2A.2 acceptance observation",
           "interface": "capability-specific source not exercised by this fixture",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -1499,6 +1537,7 @@
       "operationalDetail": "Installed metadata was detected independently of runtime health.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Installed Hermes metadata",
           "interface": "application metadata and source audit",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -1552,6 +1591,7 @@
       "operationalDetail": "The current model endpoint responded. The model configuration schema was unavailable in this fixture.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Hermes current model",
           "interface": "/api/model/info",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -1569,6 +1609,7 @@
           "summary": "The current model endpoint responded."
         },
         {
+          "origin": "raw_observation",
           "source": "Hermes config schema",
           "interface": "/api/config/schema",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -1583,6 +1624,7 @@
           "summary": "The model configuration schema was unavailable in this fixture."
         },
         {
+          "origin": "approved_evidence_catalog",
           "source": "Installed Desktop model settings audit",
           "interface": "Hermes Desktop source audit",
           "observedAt": "2026-07-19T21:06:53Z",
@@ -1639,6 +1681,7 @@
       "operationalDetail": "The acceptance fixture does not assert current operational health for this source.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Phase 2A.2 acceptance observation",
           "interface": "capability-specific source not exercised by this fixture",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -1692,6 +1735,7 @@
       "operationalDetail": "The acceptance fixture does not assert current operational health for this source.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Phase 2A.2 acceptance observation",
           "interface": "capability-specific source not exercised by this fixture",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -1745,6 +1789,7 @@
       "operationalDetail": "The acceptance fixture does not assert current operational health for this source.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Phase 2A.2 acceptance observation",
           "interface": "capability-specific source not exercised by this fixture",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -1798,6 +1843,7 @@
       "operationalDetail": "The acceptance fixture does not assert current operational health for this source.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Phase 2A.2 acceptance observation",
           "interface": "capability-specific source not exercised by this fixture",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -1851,6 +1897,7 @@
       "operationalDetail": "Supermemory is active for profile operator-os.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Hermes memory",
           "interface": "/api/memory",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -1869,6 +1916,7 @@
           "summary": "Supermemory is active for profile operator-os."
         },
         {
+          "origin": "approved_evidence_catalog",
           "source": "Installed Desktop memory route audit",
           "interface": "Hermes Desktop source audit",
           "observedAt": "2026-07-19T21:06:53Z",
@@ -1925,6 +1973,7 @@
       "operationalDetail": "Audio interfaces were not probed. Browser microphone permission was not requested.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Hermes audio interface detection",
           "interface": "/api/audio/transcribe and /api/audio/speak",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -1943,6 +1992,7 @@
           "summary": "Audio interfaces were not probed. Browser microphone permission was not requested."
         },
         {
+          "origin": "approved_evidence_catalog",
           "source": "Installed audio interface source audit",
           "interface": "Hermes Desktop source audit",
           "observedAt": "2026-07-19T21:06:53Z",
@@ -1999,6 +2049,7 @@
       "operationalDetail": "The acceptance fixture does not assert current operational health for this source.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Phase 2A.2 acceptance observation",
           "interface": "capability-specific source not exercised by this fixture",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -2052,6 +2103,7 @@
       "operationalDetail": "The acceptance fixture does not assert current operational health for this source.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Phase 2A.2 acceptance observation",
           "interface": "capability-specific source not exercised by this fixture",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -2105,6 +2157,7 @@
       "operationalDetail": "The acceptance fixture does not assert current operational health for this source.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Phase 2A.2 acceptance observation",
           "interface": "capability-specific source not exercised by this fixture",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -2158,6 +2211,7 @@
       "operationalDetail": "The acceptance fixture does not assert current operational health for this source.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Phase 2A.2 acceptance observation",
           "interface": "capability-specific source not exercised by this fixture",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -2211,6 +2265,7 @@
       "operationalDetail": "The acceptance fixture does not assert current operational health for this source.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Phase 2A.2 acceptance observation",
           "interface": "capability-specific source not exercised by this fixture",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -2264,6 +2319,7 @@
       "operationalDetail": "The acceptance fixture does not assert current operational health for this source.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Phase 2A.2 acceptance observation",
           "interface": "capability-specific source not exercised by this fixture",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -2317,6 +2373,7 @@
       "operationalDetail": "The acceptance fixture does not assert current operational health for this source.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Phase 2A.2 acceptance observation",
           "interface": "capability-specific source not exercised by this fixture",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -2370,6 +2427,7 @@
       "operationalDetail": "Session pin state was projected as unknown.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Hermes sessions",
           "interface": "/api/sessions",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -2387,6 +2445,7 @@
           "summary": "Session pin state was projected as unknown."
         },
         {
+          "origin": "approved_evidence_catalog",
           "source": "Installed Desktop session action audit",
           "interface": "Hermes Desktop source audit",
           "observedAt": "2026-07-19T21:06:53Z",
@@ -2443,6 +2502,7 @@
       "operationalDetail": "The acceptance fixture does not assert current operational health for this source.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Phase 2A.2 acceptance observation",
           "interface": "capability-specific source not exercised by this fixture",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -2496,6 +2556,7 @@
       "operationalDetail": "The acceptance fixture does not assert current operational health for this source.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Phase 2A.2 acceptance observation",
           "interface": "capability-specific source not exercised by this fixture",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -2549,6 +2610,7 @@
       "operationalDetail": "The acceptance fixture does not assert current operational health for this source.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Phase 2A.2 acceptance observation",
           "interface": "capability-specific source not exercised by this fixture",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -2602,6 +2664,7 @@
       "operationalDetail": "The acceptance fixture does not assert current operational health for this source.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Phase 2A.2 acceptance observation",
           "interface": "capability-specific source not exercised by this fixture",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -2616,6 +2679,7 @@
           "summary": "The acceptance fixture does not assert current operational health for this source."
         },
         {
+          "origin": "approved_evidence_catalog",
           "source": "Cabinet Hermes M3-M7 source audit",
           "interface": "Hermes Desktop source audit",
           "observedAt": "2026-07-19T21:06:53Z",
@@ -2633,6 +2697,7 @@
           "summary": "The approval contract exists in the audited source. Source existence does not prove a live operation."
         },
         {
+          "origin": "approved_evidence_catalog",
           "source": "Cabinet Hermes M3-M7 acceptance suite",
           "interface": "Hermes gateway and run decision contract",
           "observedAt": "2026-07-19T02:23:07Z",
@@ -2689,6 +2754,7 @@
       "operationalDetail": "OpenCLI daemon, extension, and one browser profile are connected.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "OpenCLI doctor",
           "interface": "opencli doctor",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -2708,6 +2774,7 @@
           "summary": "OpenCLI daemon, extension, and one browser profile are connected."
         },
         {
+          "origin": "approved_evidence_catalog",
           "source": "OpenCLI interface source audit",
           "interface": "Hermes Desktop source audit",
           "observedAt": "2026-07-19T21:06:53Z",
@@ -2725,6 +2792,7 @@
           "summary": "OpenCLI interface support was found in the audited integration source."
         },
         {
+          "origin": "approved_evidence_catalog",
           "source": "OpenCLI read-only acceptance",
           "interface": "opencli local page title, DOM read, and screenshot",
           "observedAt": "2026-07-19T20:18:51Z",
@@ -2781,6 +2849,7 @@
       "operationalDetail": "The executor toolset is configured.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Hermes toolsets",
           "interface": "/api/tools/toolsets",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -2837,6 +2906,7 @@
       "operationalDetail": "Raw logs remain available only through the diagnostic escape path.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Hermes log diagnostic",
           "interface": "/api/logs",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -2890,6 +2960,7 @@
       "operationalDetail": "The acceptance fixture does not assert current operational health for this source.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Phase 2A.2 acceptance observation",
           "interface": "capability-specific source not exercised by this fixture",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -2943,6 +3014,7 @@
       "operationalDetail": "Computer Use status is unavailable in this fixture.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Hermes computer-use status",
           "interface": "/api/tools/computer-use/status",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -2996,6 +3068,7 @@
       "operationalDetail": "The acceptance fixture does not assert current operational health for this source.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Phase 2A.2 acceptance observation",
           "interface": "capability-specific source not exercised by this fixture",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -3049,6 +3122,7 @@
       "operationalDetail": "The acceptance fixture does not assert current operational health for this source.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Phase 2A.2 acceptance observation",
           "interface": "capability-specific source not exercised by this fixture",
           "observedAt": "2026-07-19T22:15:00.000Z",
@@ -3102,6 +3176,7 @@
       "operationalDetail": "The acceptance fixture does not assert current operational health for this source.",
       "evidence": [
         {
+          "origin": "raw_observation",
           "source": "Phase 2A.2 acceptance observation",
           "interface": "capability-specific source not exercised by this fixture",
           "observedAt": "2026-07-19T22:15:00.000Z",
