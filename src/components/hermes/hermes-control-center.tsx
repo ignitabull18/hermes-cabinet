@@ -330,7 +330,10 @@ export function HermesControlCenter() {
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("mode") === "developer") setMode("developer");
+    if (params.get("mode") === "developer") {
+      setMode("developer");
+      if (!params.get("section")) setSection("developer");
+    }
     const requestedSection = params.get("section") as Section | null;
     if (requestedSection && SECTIONS.some((item) => item.id === requestedSection)) setSection(requestedSection);
     const requestedCapability = params.get("capability");
