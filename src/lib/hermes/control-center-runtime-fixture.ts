@@ -13,16 +13,16 @@ function runtimeSnapshot() {
   const at = HERMES_RUNTIME_EXECUTION_CAPTURED_AT;
   const knownRuns = [
     { run_id: 'run-active', status: 'running', created_at: '2026-07-19T22:00:00.000Z', updated_at: at, current_step: 'Gather evidence', current_tool: 'browser.read', artifact_count: 1, source: 'Hermes Run status' },
-    { run_id: 'run-queued', status: 'queued', created_at: '2026-07-19T22:14:00.000Z', updated_at: at },
-    { run_id: 'run-approval', status: 'waiting_for_approval', waiting_reason: 'approval', created_at: '2026-07-19T21:50:00.000Z', updated_at: at, parent_run_id: 'run-active' },
-    { run_id: 'run-clarification', status: 'waiting_for_clarification', waiting_reason: 'clarification', created_at: '2026-07-19T21:45:00.000Z', updated_at: at },
-    { run_id: 'run-auth', status: 'waiting', waiting_reason: 'authentication', created_at: '2026-07-19T21:40:00.000Z', updated_at: at },
-    { run_id: 'run-blocked', status: 'blocked', waiting_reason: 'file', created_at: '2026-07-19T21:35:00.000Z', updated_at: at },
-    { run_id: 'run-retrying', status: 'retrying', retry_count: 2, created_at: '2026-07-19T21:30:00.000Z', updated_at: at },
-    { run_id: 'run-failed', status: 'failed', created_at: '2026-07-19T21:20:00.000Z', updated_at: at, error: 'Authorization: Bearer fixture-secret ' + 'oversized '.repeat(200), prompt: 'api_key=fixture-secret', tool_input: { secret: 'fixture-secret' } },
-    { run_id: 'run-completed', status: 'completed', created_at: '2026-07-19T21:00:00.000Z', ended_at: '2026-07-19T21:10:00.000Z', updated_at: at, output: 'customer@example.test /Users/private-owner/secret.txt', usage: { input_tokens: 1200, output_tokens: 300, total_tokens: 1500 }, estimated_cost_usd: 0.14, artifact_count: 2 },
-    { run_id: 'run-conflict', status: 'running', created_at: '2026-07-19T21:00:00.000Z', updated_at: at, source: 'Hermes Run status' },
-    { run_id: 'run-conflict', status: 'failed', created_at: '2026-07-19T21:00:00.000Z', updated_at: at, source: 'Hermes lifecycle event' },
+    { run_id: 'run-queued', status: 'queued', created_at: '2026-07-19T22:14:00.000Z', updated_at: '2026-07-19T22:08:00.000Z' },
+    { run_id: 'run-approval', status: 'waiting_for_approval', waiting_reason: 'approval', created_at: '2026-07-19T21:50:00.000Z', updated_at: '2026-07-19T22:14:00.000Z', parent_run_id: 'run-active' },
+    { run_id: 'run-clarification', status: 'waiting_for_clarification', waiting_reason: 'clarification', created_at: '2026-07-19T21:45:00.000Z', updated_at: '2026-07-19T22:11:00.000Z' },
+    { run_id: 'run-auth', status: 'waiting', waiting_reason: 'authentication', created_at: '2026-07-19T21:40:00.000Z', updated_at: '2026-07-19T22:10:00.000Z' },
+    { run_id: 'run-blocked', status: 'blocked', waiting_reason: 'file', created_at: '2026-07-19T21:35:00.000Z', updated_at: '2026-07-19T22:09:00.000Z' },
+    { run_id: 'run-retrying', status: 'retrying', retry_count: 2, created_at: '2026-07-19T21:30:00.000Z', updated_at: '2026-07-19T22:07:00.000Z' },
+    { run_id: 'run-failed', status: 'failed', created_at: '2026-07-19T21:20:00.000Z', updated_at: '2026-07-19T22:13:00.000Z', error: 'Authorization: Bearer fixture-secret ' + 'oversized '.repeat(200), prompt: 'api_key=fixture-secret', tool_input: { secret: 'fixture-secret' } },
+    { run_id: 'run-completed', status: 'completed', created_at: '2026-07-19T21:00:00.000Z', ended_at: '2026-07-19T21:10:00.000Z', updated_at: '2026-07-19T22:06:00.000Z', output: 'customer@example.test /Users/private-owner/secret.txt', usage: { input_tokens: 1200, output_tokens: 300, total_tokens: 1500 }, estimated_cost_usd: 0.14, artifact_count: 2 },
+    { run_id: 'run-conflict', status: 'running', created_at: '2026-07-19T21:00:00.000Z', updated_at: '2026-07-19T22:12:00.000Z', source: 'Hermes Run status' },
+    { run_id: 'run-conflict', status: 'failed', created_at: '2026-07-19T21:00:00.000Z', updated_at: '2026-07-19T22:12:00.000Z', source: 'Hermes lifecycle event' },
   ];
   return normalizeRuntimeExecution({
     sessions: { sessions: [] },

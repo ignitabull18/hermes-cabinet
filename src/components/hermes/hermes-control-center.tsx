@@ -570,6 +570,9 @@ export function HermesControlCenter() {
             ) : null}
             <ScrollArea className="min-h-0 flex-1">
               <div className="mx-auto w-full max-w-4xl p-3 md:p-4">
+                {section === "overview" && !query ? (
+                  <RuntimeExecutionOverview snapshot={snapshot} onSelectRun={(id) => { setSelectedRunId(id); setSelectedId(null); }} onSelectCapability={(id) => { setSelectedId(id); setSelectedRunId(null); }} />
+                ) : null}
                 {section === "overview" && !query && operationalExceptions.length ? (
                   <section className="mb-4 space-y-2" data-testid="hermes-operational-exceptions">
                     <div>
@@ -586,9 +589,6 @@ export function HermesControlCenter() {
                       </button>
                     ))}
                   </section>
-                ) : null}
-                {section === "overview" && !query ? (
-                  <RuntimeExecutionOverview snapshot={snapshot} onSelectRun={(id) => { setSelectedRunId(id); setSelectedId(null); }} onSelectCapability={(id) => { setSelectedId(id); setSelectedRunId(null); }} />
                 ) : null}
                 {(["agents", "messaging", "artifacts", "memory", "sessions", "settings", "tools"] as Section[]).includes(section) ? (
                   <div className="mb-4">
