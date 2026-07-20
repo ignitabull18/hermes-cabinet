@@ -85,6 +85,7 @@ test("Hermes health bridge returns only the normalized server-side snapshot", as
       "enabled",
       "gatewayState",
       "message",
+      "observationSource",
       "profile",
       "profileSource",
       "status",
@@ -94,6 +95,7 @@ test("Hermes health bridge returns only the normalized server-side snapshot", as
   assert.equal(body.status, "online");
   assert.equal(body.profile, null);
   assert.equal(body.profileSource, null);
+  assert.equal(body.observationSource, "GET /health/detailed");
   assert.ok(!JSON.stringify(body).includes(secret));
   assert.ok(!JSON.stringify(body).toLowerCase().includes("authorization"));
 });

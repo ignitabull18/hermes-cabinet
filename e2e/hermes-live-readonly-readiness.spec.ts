@@ -1,45 +1,46 @@
 import { expect, test, type Page } from "@playwright/test";
 import {
-  buildHermesRuntimeInterventionFixtureProjection,
+  buildHermesRuntimeInterventionFixtureInput,
 } from "../src/lib/hermes/control-center-intervention-fixture";
+import { buildHermesControlCenterProjection } from "../src/lib/hermes/control-center-projection";
 import { emptyRuntimeExecution } from "../src/lib/hermes/runtime-execution";
 import { bootCabinet, type CabinetInstance } from "../test/support/harness";
 
 test.describe.configure({ mode: "serial" });
 
 let cabinet: CabinetInstance;
-const fixture = buildHermesRuntimeInterventionFixtureProjection({
+const controlledInput = buildHermesRuntimeInterventionFixtureInput({
   implementationRevision: "phase-4a-browser-contract",
   artifactGeneratedAt: "2026-07-20T04:26:28.000Z",
 });
-const controlledProjection = structuredClone(fixture);
-controlledProjection.provenance = {
-  kind: "live_runtime",
-  label: "Live runtime projection",
-  capturedAt: "2026-07-20T04:26:28.000Z",
-  fixtureId: null,
+controlledInput.installedRuntime.configuredProfile = "operator-os";
+controlledInput.installedRuntime.observedActiveProfile = null;
+controlledInput.installedRuntime.observedProfileSource = null;
+const proof = {
+  observedAt: controlledInput.now,
+  assertedFreshness: "fresh" as const,
+  proofKind: "exact_fixture" as const,
+  proofScope: "exact_fixture_path" as const,
+  installedBackendVersion: "0.19.0",
+  installedBackendCommit: null,
 };
-controlledProjection.health.configuredProfile = "operator-os";
-controlledProjection.health.observedActiveProfile = null;
-controlledProjection.health.observedProfileSource = null;
-controlledProjection.health.profile = "unknown";
-controlledProjection.installed.observedRunningAgentVersion = "0.19.0";
-controlledProjection.installed.observedRunningAgentVersionSource = "GET /health/detailed";
-controlledProjection.installed.observedRunningAgentObservedAt = controlledProjection.provenance.capturedAt;
-controlledProjection.installed.observedRunningAgentCommit = null;
-controlledProjection.installed.observedRunningAgentCommitSource = null;
-controlledProjection.installed.detectedAgentCheckoutCommit = "d7b36070ef80";
-controlledProjection.installed.detectedAgentCheckoutCommitSource = "local installation metadata";
-controlledProjection.runtimeExecution = emptyRuntimeExecution(controlledProjection.provenance.capturedAt, "Hermes Management is not configured for this review.");
-controlledProjection.exceptions = [{
-  kind: "source_group",
-  capabilityId: null,
-  sourceGroup: "management",
-  dependentCount: 18,
-  title: "Management unavailable",
-  health: "unavailable",
-  summary: "18 dependent capability observations were not collected. Hermes Management is not configured for this review.",
-}];
+controlledInput.observations = [
+  ...controlledInput.observations.filter((item) => !["about-updates", "command-center", "profiles", "skills"].includes(item.capabilityId)),
+  {
+    capabilityId: "command-center", source: "Hermes detailed health bridge", interface: "/health/detailed", outcome: "success", summary: "Hermes detailed health responded.", facts: { connectionState: "online" }, ...proof,
+  },
+  {
+    capabilityId: "command-center", source: "Hermes runtime execution", interface: "/api/sessions + /v1/runs/{run_id}", outcome: "unavailable", summary: "Hermes Management is not configured for this review.", facts: { runtimeExecution: emptyRuntimeExecution(controlledInput.now, "Hermes Management is not configured for this review."), sourceGroup: "management" }, ...proof,
+  },
+  {
+    capabilityId: "about-updates", source: "Hermes Agent detailed health identity", interface: "/health/detailed", outcome: "success", summary: "Runtime identity was confirmed. Update availability is unknown because no update check was performed.", facts: { reportedVersion: "0.19.0", versionSource: "GET /health/detailed", reportedRunningCommit: null, detectedAgentCheckoutCommit: "d7b36070ef80", updateCheckPerformed: false, applicationUpdateAvailability: "unknown", partialClaim: true }, ...proof,
+  },
+  ...["profiles", "skills"].map((capabilityId) => ({
+    capabilityId, source: "Hermes Management", interface: "/api/status", outcome: "unavailable" as const, summary: "Hermes Management is not configured for this review.", facts: { sourceGroup: "management" }, ...proof,
+  })),
+];
+const controlledProjection = buildHermesControlCenterProjection(controlledInput);
+const fixture = controlledProjection;
 const browserErrors = new WeakMap<Page, string[]>();
 
 async function prepare(page: Page) {
@@ -66,6 +67,7 @@ async function prepare(page: Page) {
         version: "0.19.0",
         profile: null,
         profileSource: null,
+        observationSource: "GET /health/detailed",
         gatewayState: "running",
         checkedAt: fixture.provenance.capturedAt,
         message: "Controlled browser contract.",
@@ -120,11 +122,40 @@ test("partial Agent-only review keeps configured and observed identity, grouped 
   await expect(page.getByTestId("hermes-version-strip")).toContainText("Configured profile operator-os");
   await expect(page.getByTestId("hermes-version-strip")).toContainText("Observed active profile Unknown. Management source unavailable.");
   await expect(page.getByTestId("hermes-runtime-empty-state")).toHaveText("Runtime execution sources are unavailable. Active-run state is unknown.");
-  await expect(page.getByTestId("hermes-operational-exceptions")).toContainText("18 dependent capability observations were not collected");
+  await expect(page.getByTestId("hermes-operational-exceptions")).toContainText("dependent capability observations were not collected");
   await page.getByTestId("hermes-capability-about-updates").click();
   const inspector = page.locator('[data-testid="hermes-capability-inspector"]:visible');
+  await expect(inspector).toContainText("Degraded");
+  await expect(inspector).not.toContainText("Connected");
   await expect(inspector.getByTestId("hermes-about-claim-scope")).toContainText("GET /health/detailed, runtime version identity only");
   await expect(inspector.getByTestId("hermes-about-claim-scope")).toContainText("Update checking was not performed");
+  expect(mutationCalls()).toBe(0);
+});
+
+test("a successful footer poll followed by a timeout retains stale last-known evidence without claiming offline", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const mutationCalls = await prepare(page);
+  const online = page.getByRole("button", { name: /Hermes online/ });
+  await expect(online).toBeVisible();
+  await page.unroute("**/api/hermes/health");
+  await page.route("**/api/hermes/health", (route) => route.fulfill({
+    json: {
+      enabled: true,
+      status: "probe_timeout",
+      version: null,
+      profile: null,
+      profileSource: null,
+      gatewayState: null,
+      checkedAt: new Date().toISOString(),
+      observationSource: "GET /health/detailed",
+      message: "Hermes Agent health probe timed out.",
+    },
+  }));
+  await online.click();
+  const timedOut = page.getByRole("button", { name: /Hermes health probe timed out/ });
+  await expect(timedOut).toContainText("Hermes health probe timed out");
+  await expect(timedOut).toHaveAttribute("aria-label", /last confirmed.*evidence is stale/i);
+  await expect(page.getByText("Hermes offline", { exact: true })).toHaveCount(0);
   expect(mutationCalls()).toBe(0);
 });
 
@@ -134,6 +165,7 @@ test("390x844 reduced-motion view has no overflow and emits no mutation", async 
   const mutationCalls = await prepare(page);
   await expect(page.getByTestId("hermes-runtime-empty-state")).toHaveText("Runtime execution sources are unavailable. Active-run state is unknown.");
   await expect(page.getByTestId("hermes-version-strip")).toContainText("Observed active profile Unknown. Management source unavailable.");
+  await expect(page.getByText("Hermes offline", { exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   expect(mutationCalls()).toBe(0);
 });

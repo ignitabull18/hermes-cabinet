@@ -151,6 +151,17 @@ export type HermesParityMetrics = {
   liveProven: HermesParityMetric;
 };
 
+export type HermesLiveProvenAttribution = {
+  capabilityId: string;
+  evidenceOrigin: HermesEvidenceOrigin;
+  proofKind: HermesProofKind;
+  proofScope: HermesProofScope;
+  source: string;
+  interface: string;
+  observedAt: string;
+  classification: "current" | "historical";
+};
+
 export type HermesProjectionProvenance =
   | { kind: "live_runtime"; label: "Live runtime projection"; capturedAt: string; fixtureId: null }
   | { kind: "acceptance_fixture"; label: "Acceptance fixture — not live runtime" | "Acceptance fixture — no live mutation performed"; capturedAt: string; fixtureId: string };
@@ -266,6 +277,7 @@ export type HermesControlCenterSnapshot = {
   }>;
   summary: Record<HermesCapabilityStatus, number>;
   parity: HermesParityMetrics & { byAudience: Record<HermesCapabilityAudience, HermesParityMetrics> };
+  liveProvenAttribution: HermesLiveProvenAttribution[];
   capabilities: HermesCapabilityProjection[];
   live: HermesInstalledRuntime["live"];
   developerRepository: {

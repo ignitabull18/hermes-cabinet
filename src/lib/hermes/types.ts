@@ -1,6 +1,8 @@
 export const HERMES_CONNECTION_STATES = [
   "online",
   "offline",
+  "probe_unavailable",
+  "probe_timeout",
   "authentication_failure",
   "unavailable_profile",
   "misconfigured",
@@ -17,6 +19,7 @@ export type HermesHealthSnapshot = {
   profileSource: string | null;
   gatewayState: string | null;
   checkedAt: string;
+  observationSource: string;
   message: string;
 };
 

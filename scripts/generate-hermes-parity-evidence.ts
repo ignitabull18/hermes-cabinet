@@ -10,7 +10,7 @@ import {
 import { buildHermesRepositoryFixtureProjection, HERMES_REPOSITORY_FIXTURE_ID } from "../src/lib/hermes/control-center-repository-fixture";
 import { buildHermesRuntimeExecutionFixtureProjection, HERMES_RUNTIME_EXECUTION_FIXTURE_ID } from "../src/lib/hermes/control-center-runtime-fixture";
 import { buildHermesRuntimeInterventionFixtureProjection, HERMES_RUNTIME_INTERVENTION_FIXTURE_ID } from "../src/lib/hermes/control-center-intervention-fixture";
-import { buildHermesControlCenterProjection, hermesParityMetrics, hermesProjectionMatrixRows } from "../src/lib/hermes/control-center-projection";
+import { buildHermesControlCenterProjection, hermesLiveProvenAttribution, hermesParityMetrics, hermesProjectionMatrixRows } from "../src/lib/hermes/control-center-projection";
 import {
   HERMES_EVIDENCE_CATALOG_ID,
   HERMES_PROOF_SCOPES,
@@ -26,6 +26,8 @@ const START = "<!-- GENERATED:HERMES_TRUTH_STATE:START -->";
 const END = "<!-- GENERATED:HERMES_TRUTH_STATE:END -->";
 const SUMMARY_START = "<!-- GENERATED:HERMES_PARITY_SUMMARY:START -->";
 const SUMMARY_END = "<!-- GENERATED:HERMES_PARITY_SUMMARY:END -->";
+export const REPORT_ATTRIBUTION_START = "<!-- GENERATED:HERMES_LIVE_PROVEN_ATTRIBUTION:START -->";
+export const REPORT_ATTRIBUTION_END = "<!-- GENERATED:HERMES_LIVE_PROVEN_ATTRIBUTION:END -->";
 const documentPath = path.resolve("docs/plans/hermes-desktop-capability-parity.md");
 const OUTCOMES = new Set(["success", "connected_empty", "not_configured", "unavailable", "failure", "conflict", "unknown"]);
 const PROOF_KINDS = new Set(["live", "exact_fixture", "historical_audit"]);
@@ -121,6 +123,7 @@ function recomputedAggregates(snapshot: HermesControlCenterSnapshot) {
   const byAudience = (audience: "operator" | "management" | "developer") => hermesParityMetrics(snapshot.capabilities.filter((item) => item.audience === audience));
   return {
     summary,
+    liveProvenAttribution: hermesLiveProvenAttribution(snapshot.capabilities),
     parity: {
       ...hermesParityMetrics(snapshot.capabilities),
       byAudience: { operator: byAudience("operator"), management: byAudience("management"), developer: byAudience("developer") },
@@ -141,7 +144,24 @@ export function validateLiveProjection(value: unknown): asserts value is HermesC
   }
   const snapshot = value as unknown as HermesControlCenterSnapshot;
   const recomputed = recomputedAggregates(snapshot);
-  if (!equal(snapshot.summary, recomputed.summary) || !equal(snapshot.parity, recomputed.parity)) throw new Error("Live projection aggregate integrity check failed.");
+  if (!equal(snapshot.summary, recomputed.summary) || !equal(snapshot.parity, recomputed.parity) || !equal(snapshot.liveProvenAttribution, recomputed.liveProvenAttribution)) throw new Error("Live projection aggregate integrity check failed.");
+}
+
+export function renderHermesLiveProvenAttribution(snapshot: HermesControlCenterSnapshot): string {
+  const rows = snapshot.liveProvenAttribution.map((item) =>
+    `| \`${cell(item.capabilityId)}\` | ${cell(item.classification)} | \`${cell(item.evidenceOrigin)}\` | ${cell(item.proofKind)} | ${cell(item.proofScope)} | ${cell(item.source)} | ${cell(item.interface)} | ${cell(item.observedAt)} |`
+  );
+  return [
+    REPORT_ATTRIBUTION_START,
+    "### Live-Proven attribution",
+    "",
+    "Generated directly from the canonical capability projection.",
+    "",
+    "| Capability ID | Classification | Evidence origin | Proof kind | Proof scope | Source | Interface | Observed at |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- |",
+    ...rows,
+    REPORT_ATTRIBUTION_END,
+  ].join("\n");
 }
 
 export function formatHermesMatrixRows(snapshot: HermesControlCenterSnapshot): string[] {
@@ -176,6 +196,8 @@ export function renderHermesParityEvidence(snapshot: HermesControlCenterSnapshot
     `All ${snapshot.capabilities.length} rows and all displayed percentages use the production Hermes Control Center projection assembler. Generated time is not an observation time. Exact fixture path proof is non-parity evidence and never earns Live-Proven credit.`,
     "",
     `Overall credits: Discoverability ${snapshot.parity.discoverability.covered}/${snapshot.parity.discoverability.total} (${snapshot.parity.discoverability.percentage}%); Current Live Visibility ${snapshot.parity.liveVisibility.covered}/${snapshot.parity.liveVisibility.total} (${snapshot.parity.liveVisibility.percentage}%); Governed Management ${snapshot.parity.governedManagement.covered}/${snapshot.parity.governedManagement.total} (${snapshot.parity.governedManagement.percentage}%); Live-Proven ${snapshot.parity.liveProven.covered}/${snapshot.parity.liveProven.total} (${snapshot.parity.liveProven.percentage}%).`,
+    "",
+    renderHermesLiveProvenAttribution(snapshot),
     "",
     "| Capability | Installed | Cabinet surface | Operational health | Kind / scope / outcome | Source | Interface | Observed at | Asserted / effective freshness | Fixture path | Credits |",
     "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
@@ -251,6 +273,13 @@ async function main() {
     fs.writeFileSync(documentPath, next);
     const projectionOut = arg("--projection-out");
     if (projectionOut) fs.writeFileSync(path.resolve(projectionOut), `${JSON.stringify(snapshot, null, 2)}\n`);
+    const reportOut = arg("--report-out");
+    if (reportOut) {
+      const reportPath = path.resolve(reportOut);
+      const report = fs.readFileSync(reportPath, "utf8");
+      if (!report.includes(REPORT_ATTRIBUTION_START) || !report.includes(REPORT_ATTRIBUTION_END)) throw new Error("Acceptance report is missing Live-Proven attribution markers.");
+      fs.writeFileSync(reportPath, report.replace(new RegExp(`${REPORT_ATTRIBUTION_START}[\\s\\S]*?${REPORT_ATTRIBUTION_END}`), renderHermesLiveProvenAttribution(snapshot)));
+    }
     console.log(`Updated ${documentPath} from ${snapshot.capabilities.length} typed capability projections.`);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Hermes parity evidence generation failed.";

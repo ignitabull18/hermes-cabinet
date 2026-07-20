@@ -315,7 +315,7 @@ function collectHermesObservations(
     "/health/detailed",
     agentIdentityConfirmed ? "success" : "unknown",
     agentIdentityConfirmed
-      ? "Hermes Agent detailed health confirmed the running version identity only. Update checking was not performed."
+      ? "Runtime identity was confirmed. Update availability is unknown because no update check was performed."
       : "The running Hermes Agent identity was not confirmed.",
     {
       observedAt: health.checkedAt,

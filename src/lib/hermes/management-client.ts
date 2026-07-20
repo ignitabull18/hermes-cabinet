@@ -79,7 +79,7 @@ function snapshot(
   config: NormalizedClientConfig,
   status: HermesHealthSnapshot["status"],
   message: string,
-  values: Partial<Pick<HermesHealthSnapshot, "version" | "gatewayState" | "profile" | "profileSource">> = {}
+  values: Partial<Pick<HermesHealthSnapshot, "version" | "gatewayState" | "profile" | "profileSource" | "observationSource">> = {}
 ): HermesHealthSnapshot {
   return {
     enabled: true,
@@ -89,6 +89,7 @@ function snapshot(
     profileSource: values.profileSource ?? null,
     gatewayState: values.gatewayState ?? null,
     checkedAt: new Date().toISOString(),
+    observationSource: values.observationSource ?? "GET /health/detailed",
     message,
   };
 }
@@ -149,8 +150,8 @@ export class HermesManagementClient {
       if (!healthResponse.ok) {
         return snapshot(
           this.config,
-          "offline",
-          `Hermes health request failed with HTTP ${healthResponse.status}.`
+          "probe_unavailable",
+          `Hermes Agent health probe failed with HTTP ${healthResponse.status}.`
         );
       }
 
@@ -158,6 +159,15 @@ export class HermesManagementClient {
       const version = text(health.version);
       const gatewayState = text(health.gateway_state);
       const observedProfile = text(health.active_profile) ?? text(health.profile);
+      const reportedState = text(health.status)?.toLowerCase();
+      if (reportedState && ["offline", "stopped", "not_running"].includes(reportedState)) {
+        return snapshot(this.config, "offline", "Hermes Agent explicitly reported that the runtime is stopped.", {
+          version,
+          gatewayState,
+          profile: observedProfile,
+          profileSource: observedProfile ? "GET /health/detailed" : null,
+        });
+      }
       return snapshot(this.config, "online", "Hermes Agent API is online.", {
         version,
         gatewayState,
@@ -170,10 +180,10 @@ export class HermesManagementClient {
         (error.name === "AbortError" || error.name === "TimeoutError");
       return snapshot(
         this.config,
-        "offline",
+        timedOut ? "probe_timeout" : "probe_unavailable",
         timedOut
-          ? "Hermes health request timed out."
-          : "Hermes is unreachable."
+          ? "Hermes Agent health probe timed out."
+          : "Hermes Agent health probe is temporarily unreachable."
       );
     } finally {
       clearTimeout(timeoutId);

@@ -62,17 +62,34 @@ test("Agent API health records an active profile only when the endpoint explicit
   assert.equal(result.profileSource, "GET /health/detailed");
 });
 
-test("Agent API health distinguishes authentication and connection failures", async () => {
+test("Agent API health distinguishes authentication, probe, and authoritative stopped states", async () => {
   const auth = await new HermesManagementClient(
     config,
     async () => response({ error: "invalid key" }, 401)
   ).health();
   assert.equal(auth.status, "authentication_failure");
 
-  const offline = await new HermesManagementClient(config, async () => {
+  const unavailable = await new HermesManagementClient(config, async () => {
     throw new TypeError("connection refused");
   }).health();
-  assert.equal(offline.status, "offline");
+  assert.equal(unavailable.status, "probe_unavailable");
+  assert.match(unavailable.message, /probe is temporarily unreachable/i);
+
+  const endpointFailure = await new HermesManagementClient(config, async () => response({}, 503)).health();
+  assert.equal(endpointFailure.status, "probe_unavailable");
+  assert.doesNotMatch(endpointFailure.message, /offline/i);
+
+  const stopped = await new HermesManagementClient(config, async () => response({ status: "stopped", version: "0.19.0" })).health();
+  assert.equal(stopped.status, "offline");
+  assert.match(stopped.message, /explicitly reported/i);
+});
+
+test("Agent API health classifies a timeout as a probe timeout rather than offline", async () => {
+  const timeout = Object.assign(new Error("timeout"), { name: "AbortError" });
+  const result = await new HermesManagementClient(config, async () => { throw timeout; }).health();
+  assert.equal(result.status, "probe_timeout");
+  assert.match(result.message, /health probe timed out/i);
+  assert.notEqual(result.status, "offline");
 });
 
 test("authenticated Agent API health remains available when management and Gateway are unconfigured", async () => {
@@ -182,7 +199,8 @@ test("credential-bearing Agent API redirects fail closed without reaching the de
       ...config,
       apiBaseUrl: `http://127.0.0.1:${sourceAddress.port}`,
     }).health();
-    assert.equal(redirected.status, "offline");
+    assert.equal(redirected.status, "probe_unavailable");
+    assert.doesNotMatch(redirected.message, /offline/i);
     assert.equal(sourceRequests, 1);
     assert.equal(destinationRequests, 0);
     assert.doesNotMatch(JSON.stringify(redirected), /secret-destination|management-secret|HERMES_BROWSER_LEAK_CANARY/);
@@ -291,7 +309,7 @@ test("operator projection returns exact live records while stripping credential 
     if (url.includes("/api/mcp/servers")) return response({ servers: [] });
     return response([]);
   };
-  const health = { enabled: true, status: "online" as const, version: "0.18.2", profile: "operator-os", profileSource: "GET /health/detailed", gatewayState: "running", checkedAt: "2026-07-19T20:00:00Z", message: "online" };
+  const health = { enabled: true, status: "online" as const, version: "0.18.2", profile: "operator-os", profileSource: "GET /health/detailed", gatewayState: "running", checkedAt: "2026-07-19T20:00:00Z", observationSource: "GET /health/detailed", message: "online" };
   const result = await new HermesManagementClient(config, fetchImpl).snapshot(health);
 
   assert.equal(result.operator.agents.active[0]?.task, "Review invoices");

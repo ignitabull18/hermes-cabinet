@@ -9,6 +9,7 @@ import type {
   HermesEvidenceOutcome,
   HermesEvidenceOrigin,
   HermesGovernanceProof,
+  HermesLiveProvenAttribution,
   HermesObservationFreshness,
   HermesOperationalHealth,
   HermesParityMetrics,
@@ -221,6 +222,8 @@ function healthFor(
 
   const outcomes = new Set(current.map((item) => item.outcome));
   const detail = current.map((item) => item.summary).filter(Boolean).join(" ") || "No bounded source detail was reported.";
+  const successful = current.filter((item) => SUCCESS_OUTCOMES.has(item.outcome));
+  const onlyPartialSuccess = successful.length > 0 && successful.every((item) => item.facts?.partialClaim === true);
   if (outcomes.has("conflict")) return { health: "conflicting_evidence", detail, gatewayResolution };
   if (outcomes.has("failure")) return { health: "degraded", detail, gatewayResolution };
   if (outcomes.has("not_configured") && ![...outcomes].some((item) => SUCCESS_OUTCOMES.has(item))) return { health: "not_configured", detail, gatewayResolution };
@@ -229,6 +232,7 @@ function healthFor(
   if ([...outcomes].some((item) => SUCCESS_OUTCOMES.has(item)) && [...outcomes].some((item) => !SUCCESS_OUTCOMES.has(item))) {
     return { health: "degraded", detail, gatewayResolution };
   }
+  if (onlyPartialSuccess) return { health: "degraded", detail, gatewayResolution };
   return { health: "healthy", detail, gatewayResolution };
 }
 
@@ -254,6 +258,35 @@ export function hermesParityMetrics(capabilities: readonly HermesCapabilityProje
     governedManagement: metric("governedManagement"),
     liveProven: metric("liveProven"),
   };
+}
+
+export function hermesLiveProvenAttribution(
+  capabilities: readonly HermesCapabilityProjection[],
+): HermesLiveProvenAttribution[] {
+  return capabilities.flatMap((capability) => {
+    if (!capability.credit.liveProven) return [];
+    const current = capability.evidence.find((item) =>
+      item.origin === "raw_observation" && item.proofKind === "live" &&
+      item.proofScope === "live_runtime_operation" && item.effectiveFreshness === "fresh" &&
+      SUCCESS_OUTCOMES.has(item.outcome) && item.facts?.partialClaim !== true && Boolean(item.observedAt)
+    );
+    const historical = capability.evidence.find((item) =>
+      item.origin === "approved_evidence_catalog" && item.proofKind === "historical_audit" &&
+      item.proofScope === "historical_live_acceptance" && SUCCESS_OUTCOMES.has(item.outcome) && Boolean(item.observedAt)
+    );
+    const evidence = current ?? historical;
+    if (!evidence?.observedAt) return [];
+    return [{
+      capabilityId: capability.id,
+      evidenceOrigin: evidence.origin,
+      proofKind: evidence.proofKind,
+      proofScope: evidence.proofScope,
+      source: evidence.source,
+      interface: evidence.interface,
+      observedAt: evidence.observedAt,
+      classification: current ? "current" as const : "historical" as const,
+    }];
+  });
 }
 
 function validGovernanceProof(value: HermesGovernanceProof[] | undefined): boolean {
@@ -468,6 +501,7 @@ export function buildHermesControlCenterProjection(input: HermesControlCenterPro
       ...hermesParityMetrics(capabilities),
       byAudience: { operator: byAudience("operator"), management: byAudience("management"), developer: byAudience("developer") },
     },
+    liveProvenAttribution: hermesLiveProvenAttribution(capabilities),
     capabilities,
     live: input.installedRuntime.live,
     developerRepository: {

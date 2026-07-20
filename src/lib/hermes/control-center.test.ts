@@ -6,6 +6,7 @@ import test from "node:test";
 import {
   assembleRawProjectionEnvelope,
   formatHermesMatrixRows,
+  renderHermesLiveProvenAttribution,
   renderHermesParitySummary,
   loadExplicitProjection,
   validateLiveProjection,
@@ -111,9 +112,77 @@ test("a partial About runtime-identity observation stays visible without earning
     facts: { reportedVersion: "0.19.0", updateCheckPerformed: false, updateAvailability: "unknown", partialClaim: true },
   })]);
   const about = capability(snapshot, "about-updates");
-  assert.equal(about.operationalHealth, "healthy");
+  assert.equal(about.operationalHealth, "degraded");
+  assert.equal(about.status, "degraded");
   assert.equal(about.credit.liveVisibility, false);
   assert.equal(about.credit.liveProven, false);
+});
+
+test("partial success cannot become healthy or connected, while complete success remains healthy", () => {
+  const partial = capability(liveSnapshot("profiles", [observed("profiles", "success", { facts: { partialClaim: true } })]), "profiles");
+  assert.equal(partial.operationalHealth, "degraded");
+  assert.equal(partial.status, "degraded");
+  assert.equal(partial.credit.liveVisibility, false);
+  assert.equal(partial.credit.liveProven, false);
+
+  const full = capability(liveSnapshot("profiles", [observed("profiles", "success")]), "profiles");
+  assert.equal(full.operationalHealth, "healthy");
+  assert.equal(full.status, "connected");
+  assert.equal(full.credit.liveVisibility, true);
+  assert.equal(full.credit.liveProven, true);
+});
+
+test("partial success combined with failure or unavailability remains degraded", () => {
+  for (const outcome of ["failure", "unavailable"] as const) {
+    const row = capability(liveSnapshot("profiles", [
+      observed("profiles", "success", { facts: { partialClaim: true } }),
+      observed("profiles", outcome),
+    ]), "profiles");
+    assert.equal(row.operationalHealth, "degraded", outcome);
+    assert.notEqual(row.status, "connected", outcome);
+  }
+});
+
+test("the partial Agent-only summary derives zero connected and two degraded capabilities", () => {
+  const snapshot = buildWith((input) => {
+    input.installedRuntime.provenance = { kind: "live_runtime", label: "Live runtime projection", capturedAt: NOW, fixtureId: null };
+    replaceObservation(input, "command-center", [
+      { ...observed("command-center", "success"), proofKind: "live", proofScope: "live_runtime_operation" },
+      { ...observed("command-center", "unavailable"), proofKind: "live", proofScope: "live_runtime_operation" },
+    ]);
+    replaceObservation(input, "about-updates", [{
+      ...observed("about-updates", "success", { facts: { partialClaim: true } }),
+      proofKind: "live",
+      proofScope: "live_runtime_operation",
+    }]);
+  });
+  assert.equal(snapshot.summary.connected, 0);
+  assert.equal(snapshot.summary.degraded, 2);
+});
+
+test("Live-Proven attribution, report block, machine projection, matrix, and totals agree", () => {
+  const snapshot = liveSnapshot("command-center", [observed("command-center", "success", {
+    source: "Hermes detailed health bridge",
+    interface: "GET /health/detailed",
+  })]);
+  const credited = snapshot.capabilities.filter((item) => item.credit.liveProven).map((item) => item.id).sort();
+  const attributed = snapshot.liveProvenAttribution.map((item) => item.capabilityId).sort();
+  assert.deepEqual(attributed, credited);
+  assert.deepEqual(snapshot.liveProvenAttribution.map((item) => [item.capabilityId, item.classification, item.proofScope]), [
+    ["command-center", "current", "live_runtime_operation"],
+    ["approvals", "historical", "historical_live_acceptance"],
+    ["browser-opencli", "historical", "historical_live_acceptance"],
+  ]);
+  assert.equal(snapshot.parity.liveProven.covered, snapshot.liveProvenAttribution.length);
+  const report = renderHermesLiveProvenAttribution(snapshot);
+  for (const item of snapshot.liveProvenAttribution) {
+    assert.match(report, new RegExp(item.capabilityId));
+    assert.match(report, new RegExp(item.classification));
+    assert.match(report, new RegExp(item.proofScope));
+  }
+  assert.match(renderHermesParitySummary(snapshot), new RegExp(`\\| All capabilities \\(48\\).*\\| ${snapshot.parity.liveProven.percentage}% \\|`));
+  const matrixCredited = hermesProjectionMatrixRows(snapshot).filter((row) => row.credit.liveProven).map((row) => row.id).sort();
+  assert.deepEqual(matrixCredited, attributed);
 });
 
 test("accepted Phase 2A machine evidence preserves its frozen truth observations", () => {
