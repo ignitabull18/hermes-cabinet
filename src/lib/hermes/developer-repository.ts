@@ -103,7 +103,21 @@ function bool(value: unknown): boolean | null { return typeof value === "boolean
 function count(value: unknown): number | null { return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.round(value)) : null; }
 
 export function normalizeProjectObservation(raw: unknown, profile: string, observedAt: string): HermesProjectObservation {
-  const sessions = array(record(raw).sessions).map(record);
+  const source = record(raw);
+  if (source.unavailable === true) {
+    return {
+      state: "unavailable",
+      observedAt,
+      profile: safeDeveloperLabel(profile, "Unknown profile")!,
+      project: null,
+      sessionAssociation: null,
+      workingDirectoryReported: false,
+      repositoryAssociated: false,
+      repository: null,
+      summary: "Hermes session project association is unavailable.",
+    };
+  }
+  const sessions = array(source.sessions).map(record);
   const selected = sessions.find((item) => item.is_active === true) ?? sessions[0];
   if (!selected) return { state: "connected_empty", observedAt, profile: safeDeveloperLabel(profile, "Unknown profile")!, project: null, sessionAssociation: null, workingDirectoryReported: false, repositoryAssociated: false, repository: null, summary: "Hermes sessions responded with no project association." };
   const cwd = safePathIdentity(selected.cwd);

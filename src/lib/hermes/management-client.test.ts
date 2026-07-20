@@ -81,6 +81,27 @@ test("authenticated Agent API health remains available when management and Gatew
   assert.equal(requests, 1);
 });
 
+test("Agent-only snapshot does not treat local OpenCLI diagnostics as a configured live source", async () => {
+  const partial = readHermesReadOnlyServerConfig({
+    CABINET_HERMES_API_URL: "http://127.0.0.1:8642",
+    CABINET_HERMES_API_KEY: "partial-api-secret",
+    CABINET_HERMES_PROFILE: "operator-os",
+  });
+  const client = new HermesManagementClient(partial, async (input) => {
+    if (String(input).endsWith("/health/detailed")) {
+      return response({ status: "ok", version: "0.18.2" });
+    }
+    throw new Error("unconfigured sources must not be fetched");
+  });
+
+  const health = await client.health();
+  const snapshot = await client.snapshot(health);
+
+  assert.equal(snapshot.openCli.available, false);
+  assert.equal(snapshot.openCli.daemon, "unknown");
+  assert.match(snapshot.openCli.message, /not probed/i);
+});
+
 test("management status uses its session-token boundary and distinguishes source outcomes", async () => {
   const requests: Array<{ token: string | null; redirect: RequestRedirect | undefined }> = [];
   const successful = await new HermesManagementClient(config, async (_input, init) => {

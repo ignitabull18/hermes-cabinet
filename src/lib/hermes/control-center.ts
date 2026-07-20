@@ -46,6 +46,7 @@ function collectHermesObservations(
   readiness?: HermesLiveReadiness,
 ): HermesCapabilityObservation[] {
   const observedAt = management.checkedAt;
+  const managementReady = readiness?.sources.find((source) => source.id === "management")?.state === "ready_to_probe";
   const failed = new Map(management.diagnostics.filter((item) => item.status === "degraded").map((item) => [item.area, item.message]));
   const observations: HermesCapabilityObservation[] = [];
   const add = (
@@ -199,8 +200,10 @@ function collectHermesObservations(
     "gateway",
     "Hermes health bridge",
     "/health/detailed gateway_state",
-    primaryState === "unknown" ? "unknown" : "success",
-    `Health bridge gateway state is ${primaryState}.`,
+    "unknown",
+    primaryState === "unknown"
+      ? "Agent health did not report a Gateway state."
+      : `Agent health bridge reported Gateway ${primaryState}; this does not prove the direct Gateway source is available.`,
     { observedAt: health.checkedAt, facts: { state: primaryState } }
   );
   const managementFailure = failed.get("runtime status");
@@ -233,7 +236,7 @@ function collectHermesObservations(
     "browser-opencli",
     "OpenCLI doctor",
     "opencli doctor",
-    openCliConnected ? "success" : openCli.available ? "failure" : "unavailable",
+    managementReady ? (openCliConnected ? "success" : openCli.available ? "failure" : "unavailable") : "unavailable",
     openCli.message,
     { facts: { daemon: openCli.daemon, extension: openCli.extension, connectedProfiles: openCli.profiles.filter((profile) => profile.status === "connected").length } }
   );
@@ -246,14 +249,16 @@ function collectHermesObservations(
     "Hermes audio interfaces were not probed. Browser microphone permission was not requested.",
     { facts: { serverInterface: "unprobed", browserPermission: "not_requested" } }
   );
-  const versionKnown = Boolean(installed.desktopVersion || installed.backendVersion || installed.backendCommit);
+  const agentIdentityConfirmed = health.status === "online" && Boolean(health.version);
   add(
     "about-updates",
-    "Installed Hermes metadata",
-    "application metadata and source audit",
-    versionKnown ? "success" : "unknown",
-    versionKnown ? "Installed Hermes metadata was detected independently of runtime health." : "Installed Hermes version metadata is unknown.",
-    { observedAt: health.checkedAt, facts: { updateAuditStale: installed.upstreamAudit.stale } }
+    "Hermes Agent detailed health identity",
+    "/health/detailed",
+    agentIdentityConfirmed ? "success" : "unknown",
+    agentIdentityConfirmed
+      ? "Hermes Agent detailed health confirmed the running backend identity."
+      : "The running Hermes Agent identity was not confirmed.",
+    { observedAt: health.checkedAt, facts: { reportedVersion: health.version, updateAuditStale: installed.upstreamAudit.stale } }
   );
   return observations;
 }

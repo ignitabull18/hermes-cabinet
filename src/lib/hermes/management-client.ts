@@ -25,6 +25,7 @@ type NormalizedClientConfig = {
   profile: string;
   profileConfigured: boolean;
   timeoutMs: number;
+  sourceStates: Record<"agent_api" | "management" | "gateway", import("./live-readonly-readiness").HermesReadinessSourceState>;
 };
 
 export type HermesManagementStatusObservation = {
@@ -106,6 +107,9 @@ export class HermesManagementClient {
       profile: config.profile ?? "unknown",
       profileConfigured: Boolean(config.profile),
       timeoutMs: config.timeoutMs,
+      sourceStates: "sourceStates" in config
+        ? config.sourceStates
+        : { agent_api: "ready_to_probe", management: "ready_to_probe", gateway: "ready_to_probe" },
     };
   }
 
@@ -246,7 +250,19 @@ export class HermesManagementClient {
         read("mcp", this.profilePath("/api/mcp/servers"), { servers: [] }),
         read("toolsets", this.profilePath("/api/tools/toolsets"), []),
         read("plugins", this.profilePath("/api/dashboard/plugins"), []),
-        readOpenCliDiagnostics(),
+        this.config.sourceStates.management === "ready_to_probe"
+          ? readOpenCliDiagnostics()
+          : Promise.resolve({
+              available: false,
+              version: null,
+              daemon: "unknown" as const,
+              extension: "unknown" as const,
+              profiles: [],
+              binaryLocation: null,
+              capabilities: { screenshot: false, domRead: false, formInteraction: false, download: false },
+              invocation: "terminal" as const,
+              message: "OpenCLI was not probed because its supporting Hermes management source is unavailable for this partial review.",
+            }),
         statusPromise,
         read("active agents", "/api/plugins/kanban/workers/active", { workers: [], unavailable: true }),
         read("recent agents", "/api/plugins/kanban/board", { columns: [], unavailable: true }),
