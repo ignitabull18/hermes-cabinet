@@ -169,14 +169,16 @@ function SessionsModule({ data, query }: { data: OperatorData; query: string }) 
   const needle = query.trim().toLowerCase();
   const sessions = data.sessions.filter((item) => !needle || `${item.title} ${item.profile ?? ""} ${item.status}`.toLowerCase().includes(needle)).slice(0, 50);
   return (
-    <ModuleShell title="Sessions and archives" detail={`${data.sessions.length} canonical Hermes sessions reported.`} icon={Clock3}>
+    <ModuleShell title="Sessions and lineage" detail={`${data.sessions.length} bounded Hermes session records. Content and raw identities stay server-side.`} icon={Clock3}>
       {sessions.length === 0 ? <EmptyState>No sessions match this view.</EmptyState> : (
         <div className="divide-y divide-border">
           {sessions.map((session) => (
             <div key={session.id} className="grid gap-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{session.title}</p>
-                <p className="truncate text-xs text-muted-foreground">{session.profile ?? "No profile"} · {session.status} · Updated {relativeTime(session.updatedAt)}</p>
+                <p className="truncate text-xs text-muted-foreground">{session.profile ? `Observed profile ${session.profile}` : "Profile not reported by this source"} · {session.status} · Updated {relativeTime(session.updatedAt)}</p>
+                {session.parentDisplayId || session.childCount ? <p className="mt-1 text-xs text-muted-foreground">{session.parentDisplayId ? `Parent ${session.parentDisplayId}` : "Root session"} · {session.childCount ?? 0} children</p> : null}
+                {session.messageCount !== undefined ? <p className="mt-1 text-xs text-muted-foreground">{session.messageCount ?? "Unknown"} messages · {session.toolCallCount ?? "Unknown"} tool calls · {(session.inputTokens ?? 0).toLocaleString()} input / {(session.outputTokens ?? 0).toLocaleString()} output tokens</p> : null}
               </div>
               <Button variant="outline" size="sm" onClick={() => { window.location.href = "/agents"; }}>Open sessions</Button>
             </div>
