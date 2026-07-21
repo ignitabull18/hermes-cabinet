@@ -1,18 +1,20 @@
 import type { HermesSkillsAdapter } from "./skills-adapter";
-import type { HermesManagedSkill, HermesSkillOperation, HermesSkillsSnapshot } from "./skills-management-types";
+import type { HermesManagedSkill, HermesSkillAction, HermesSkillOperation, HermesSkillsSnapshot, HermesSkillsSourceState } from "./skills-management-types";
 
 export const HERMES_SKILLS_ACCEPTANCE_LABEL = "Acceptance fixture — no live Hermes mutation performed";
 
-function installed(name: string, enabled: boolean, actions: HermesManagedSkill["supportedActions"], updateAvailable: boolean | null = null): HermesManagedSkill {
+function installed(name: string, enabled: boolean, actions: HermesManagedSkill["supportedActions"], updateAvailable: boolean | null = null, hubIdentifier: string | null = null, source: string | null = null): HermesManagedSkill {
+  const provenance = hubIdentifier ? "hub" : "bundled";
   return {
-    identity: `operator-os:${name}`,
+    identity: hubIdentifier ? `operator-os:hub:${hubIdentifier}` : `operator-os:${provenance}:${name}`,
     name,
     category: "fixture",
     installed: true,
     enabled,
     version: name === "update-ready" ? "1.0.0" : null,
-    source: actions.includes("remove") ? "Hermes Skills Hub" : "bundled",
-    provenance: actions.includes("remove") ? "hub" : "bundled",
+    source: source ?? (hubIdentifier ? hubIdentifier.split("/")[0] : "bundled"),
+    provenance,
+    hubIdentifier,
     profile: "operator-os",
     updateAvailable,
     observedAt: "2026-07-21T20:00:00.000Z",
@@ -33,14 +35,14 @@ export function buildHermesSkillsAcceptanceSnapshot(): HermesSkillsSnapshot {
       install: { supported: true, interface: "fixture Hermes adapter", note: "No live dispatch." },
       enable: { supported: true, interface: "fixture Hermes adapter", note: "No live dispatch." },
       disable: { supported: true, interface: "fixture Hermes adapter", note: "No live dispatch." },
-      update: { supported: true, interface: "fixture Hermes adapter", note: "No live dispatch." },
+      update: { supported: false, interface: "fixture audit only", note: "Exact target-specific update readback is unavailable." },
       remove: { supported: true, interface: "fixture Hermes adapter", note: "No live dispatch." },
     },
     installed: [
       installed("enabled-skill", true, ["disable"]),
       installed("disabled-skill", false, ["enable"]),
-      installed("update-ready", true, ["disable", "update", "remove"], true),
-      installed("removable-skill", true, ["disable", "update", "remove"], false),
+      installed("update-ready", true, ["disable", "remove"], true, "official/productivity/update-ready", "official"),
+      installed("removable-skill", true, ["disable", "remove"], false, "official/productivity/removable-skill", "official"),
       installed("unsupported-bundled", true, ["disable"]),
       installed("malicious-metadata-redacted", true, ["disable"]),
     ],
@@ -53,6 +55,7 @@ export function buildHermesSkillsAcceptanceSnapshot(): HermesSkillsSnapshot {
       version: null,
       source: "official",
       provenance: "hub",
+      hubIdentifier: "official/productivity/installable-skill",
       profile: "operator-os",
       updateAvailable: null,
       observedAt: "2026-07-21T20:00:00.000Z",
@@ -68,6 +71,12 @@ export class FakeHermesSkillsAdapter implements HermesSkillsAdapter {
   failBeforeDispatch = false;
   unknownAfterDispatch = false;
   staleOnNextRead = false;
+  sourceStateOverride: HermesSkillsSourceState | null = null;
+  observedAtOverride: string | null = null;
+  executionBarrier: Promise<void> | null = null;
+  executionStarted: (() => void) | null = null;
+  installAsDifferentHubIdentity = false;
+  leaveSameNameBundledOnRemove = false;
   private snapshotValue = buildHermesSkillsAcceptanceSnapshot();
 
   async read(): Promise<HermesSkillsSnapshot> {
@@ -76,32 +85,48 @@ export class FakeHermesSkillsAdapter implements HermesSkillsAdapter {
       const first = this.snapshotValue.installed[0];
       this.snapshotValue = { ...this.snapshotValue, observedAt: new Date().toISOString(), installed: [{ ...first, version: "externally-changed" }, ...this.snapshotValue.installed.slice(1)] };
     }
-    return structuredClone(this.snapshotValue);
+    const snapshot = structuredClone(this.snapshotValue);
+    snapshot.observedAt = this.observedAtOverride ?? new Date().toISOString();
+    snapshot.sourceState = this.sourceStateOverride ?? snapshot.sourceState;
+    snapshot.installed = snapshot.installed.map((skill) => ({ ...skill, observedAt: snapshot.observedAt }));
+    snapshot.available = snapshot.available.map((skill) => ({ ...skill, observedAt: snapshot.observedAt }));
+    return snapshot;
   }
 
-  async checkUpdate(name: string): Promise<boolean | null> {
-    return this.snapshotValue.installed.find((skill) => skill.name === name)?.updateAvailable ?? null;
+  async authorize(action: HermesSkillAction): Promise<string> {
+    if (action === "update") throw new Error("Update remains audit-only");
+    return `fixture-authority-${action}`;
   }
 
-  async execute(operation: HermesSkillOperation): Promise<{ responseReceived: boolean }> {
+  async execute(operation: HermesSkillOperation, expectedAuthority: string): Promise<{ responseReceived: boolean }> {
     if (this.failBeforeDispatch) throw new Error("Fixture failed before dispatch");
+    if (expectedAuthority !== `fixture-authority-${operation.action}`) throw new Error("Fixture authority mismatch");
     this.mutationCalls += 1;
     this.operations.push(operation);
+    this.executionStarted?.();
+    if (this.executionBarrier) await this.executionBarrier;
     if (this.unknownAfterDispatch) {
       const error = new Error("Fixture outcome unknown") as Error & { dispatched?: boolean };
       const { HermesSkillsAdapterError } = await import("./skills-adapter");
       throw new HermesSkillsAdapterError("timeout", error.message, true, false);
     }
     if (operation.action === "install") {
-      this.snapshotValue.available = this.snapshotValue.available.filter((skill) => skill.name !== operation.targetName);
-      this.snapshotValue.installed.push(installed(operation.targetName, true, ["disable", "update", "remove"], false));
+      const catalog = this.snapshotValue.available.find((skill) => skill.identity === operation.targetIdentity);
+      this.snapshotValue.available = this.snapshotValue.available.filter((skill) => skill.identity !== operation.targetIdentity);
+      const installedIdentifier = this.installAsDifferentHubIdentity ? `clawhub/${operation.targetName}` : operation.targetIdentity;
+      this.snapshotValue.installed.push(installed(operation.targetName, true, ["disable", "remove"], false, installedIdentifier, this.installAsDifferentHubIdentity ? "clawhub" : catalog?.source ?? null));
     } else if (operation.action === "remove") {
-      this.snapshotValue.installed = this.snapshotValue.installed.filter((skill) => skill.name !== operation.targetName);
+      this.snapshotValue.installed = this.snapshotValue.installed.filter((skill) => skill.identity !== operation.targetIdentity);
+      if (this.leaveSameNameBundledOnRemove) this.snapshotValue.installed.push(installed(operation.targetName, true, ["disable"]));
     } else {
       this.snapshotValue.installed = this.snapshotValue.installed.map((skill) => skill.name === operation.targetName ? {
         ...skill,
         enabled: operation.action === "enable" ? true : operation.action === "disable" ? false : skill.enabled,
-        updateAvailable: operation.action === "update" ? false : skill.updateAvailable,
+        supportedActions: operation.action === "enable"
+          ? ["disable", ...(skill.provenance === "hub" ? ["remove" as const] : [])]
+          : operation.action === "disable"
+            ? ["enable", ...(skill.provenance === "hub" ? ["remove" as const] : [])]
+            : skill.supportedActions,
       } : skill);
     }
     this.snapshotValue.observedAt = new Date().toISOString();

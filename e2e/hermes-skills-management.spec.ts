@@ -8,7 +8,16 @@ import { bootCabinet, type CabinetInstance } from "../test/support/harness";
 test.describe.configure({ mode: "serial" });
 let cabinet: CabinetInstance;
 const evidenceDir = path.resolve("docs/evidence/hermes-skills-management");
-const projection = buildHermesAcceptanceFixtureProjection({ implementationRevision: "phase-5a-browser", artifactGeneratedAt: "2026-07-21T20:00:00.000Z" });
+const fixtureProjection = buildHermesAcceptanceFixtureProjection({ implementationRevision: "phase-5a-browser", artifactGeneratedAt: "2026-07-21T20:00:00.000Z" });
+const projection = {
+  ...fixtureProjection,
+  installed: {
+    ...fixtureProjection.installed,
+    backendVersion: "0.19.0",
+    observedRunningAgentVersion: "0.19.0",
+    observedRunningAgentVersionSource: "Phase 5A simulated contract identity",
+  },
+};
 const browserErrors = new WeakMap<Page, string[]>();
 
 async function prepare(page: Page) {
@@ -24,11 +33,11 @@ async function prepare(page: Page) {
     const body = route.request().postDataJSON() as Record<string, string>;
     if (body.stage === "prepare") return route.fulfill({ json: { ok: true, preview: {
       previewId: "hermes-skills-browser-fixture",
-      requestIdentity: "hermes-skills-browser-fixture",
+      requestIdentity: "hermes-request-11111111111111111111111111111111",
       action: body.action,
       targetIdentity: body.targetIdentity,
       targetName: "enabled-skill",
-      currentState: { identity: "operator-os:enabled-skill", name: "enabled-skill", installed: true, enabled: true, version: null, source: "bundled", provenance: "bundled", profile: "operator-os", updateAvailable: null },
+      currentState: { identity: "operator-os:bundled:enabled-skill", name: "enabled-skill", installed: true, enabled: true, version: null, source: "bundled", provenance: "bundled", hubIdentifier: null, profile: "operator-os", updateAvailable: null },
       targetState: "Installed and disabled in Hermes",
       profile: "operator-os",
       expectedConsequence: "Hermes will stop loading enabled-skill for new work in the selected profile.",
@@ -43,9 +52,9 @@ async function prepare(page: Page) {
     if (body.stage === "commit") {
       commits += 1;
       return route.fulfill({ json: { ok: true, result: {
-        requestIdentity: "hermes-skills-browser-fixture",
+        requestIdentity: "hermes-request-11111111111111111111111111111111",
         action: "disable",
-        targetIdentity: "operator-os:enabled-skill",
+        targetIdentity: "operator-os:bundled:enabled-skill",
         targetName: "enabled-skill",
         profile: "operator-os",
         status: "verified_success",
@@ -84,6 +93,7 @@ test("Operator is action-oriented and completes preview, typed confirmation, and
   await expect(page.getByTestId("hermes-parity-metrics")).toHaveCount(0);
   await page.getByRole("button", { name: "Skills", exact: true }).click();
   await expect(page.getByTestId("hermes-skills-fixture-label")).toContainText("Acceptance fixture — no live Hermes mutation performed");
+  await expect(page.getByTestId("hermes-skills-fixture-label")).toContainText("Fixture Agent 0.19.0");
   await page.getByTestId("hermes-skill-enabled-skill").getByRole("button", { name: "Disable" }).click();
   const dialog = page.getByTestId("hermes-skill-confirmation-dialog");
   await dialog.getByLabel("Reason").fill("Disable during the governed acceptance fixture.");

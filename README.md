@@ -259,7 +259,7 @@ cp .env.example .env.local
 | `CABINET_HERMES_GATEWAY_URL` / `CABINET_HERMES_GATEWAY_TOKEN` | _(required for live Hermes execution)_ | Loopback Gateway and server-only WebSocket token. |
 | `CABINET_HERMES_PROFILE` | _(required in Hermes mode)_ | Hermes profile name; the product baseline uses `operator-os`. |
 | `CABINET_HERMES_TIMEOUT_MS` | `3000` | Upstream timeout, constrained to 250–30000 ms. |
-| `CABINET_HERMES_CLI_PATH` | `hermes` | Optional fixed server-only Hermes executable used for durable Skills install, targeted update, and removal. Browser input cannot change it. |
+| `CABINET_HERMES_CLI_PATH` | _(unset)_ | Explicit absolute server-only Hermes 0.19.0 executable required for Skills install and removal. There is no `PATH` fallback; update remains audit-only. Browser input cannot change it. |
 | `CABINET_HERMES_INTERVENTIONS_ENABLED` | `false` | Enables only the implemented governed intervention path; it does not bypass confirmation or authority checks. |
 
 ### Authentication

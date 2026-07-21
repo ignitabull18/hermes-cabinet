@@ -204,7 +204,7 @@ export function HermesSkillsManagement() {
         <Alert className="border-warning/40 bg-warning/5" data-testid="hermes-skills-fixture-label">
           <TriangleAlert aria-hidden="true" />
           <AlertTitle>{snapshot.fixtureLabel}</AlertTitle>
-          <AlertDescription>Every visible change uses the fake Hermes adapter.</AlertDescription>
+          <AlertDescription>Fixture Agent 0.19.0. Every visible change uses the fake Hermes adapter.</AlertDescription>
         </Alert>
       ) : null}
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3 shadow-sm sm:flex-row sm:items-end sm:justify-between">

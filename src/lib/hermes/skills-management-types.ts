@@ -6,7 +6,9 @@ export type HermesSkillsSourceState =
   | "unavailable"
   | "authentication_failure"
   | "failure"
-  | "timeout";
+  | "timeout"
+  | "stale"
+  | "malformed";
 
 export type HermesManagedSkill = {
   identity: string;
@@ -17,6 +19,7 @@ export type HermesManagedSkill = {
   version: string | null;
   source: string | null;
   provenance: "hub" | "bundled" | "agent" | null;
+  hubIdentifier: string | null;
   profile: string;
   updateAvailable: boolean | null;
   observedAt: string;
@@ -39,7 +42,7 @@ export type HermesSkillsSnapshot = {
 
 export type HermesSkillTargetState = Pick<
   HermesManagedSkill,
-  "identity" | "name" | "installed" | "enabled" | "version" | "source" | "provenance" | "profile" | "updateAvailable"
+  "identity" | "name" | "installed" | "enabled" | "version" | "source" | "provenance" | "hubIdentifier" | "profile" | "updateAvailable"
 >;
 
 export type HermesSkillOperation = {

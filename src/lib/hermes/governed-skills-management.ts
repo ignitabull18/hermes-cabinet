@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { sanitizeHermesText } from "./control-center-sanitizer";
 import { HermesSkillsAdapterError, type HermesSkillsAdapter } from "./skills-adapter";
 import type {
@@ -10,26 +10,44 @@ import type {
   HermesSkillsSnapshot,
 } from "./skills-management-types";
 
-const PREVIEW_TTL_MS = 120_000;
-const RECEIPT_TTL_MS = 30 * 60_000;
-const MAX_PREVIEWS = 100;
-const MAX_RECEIPTS = 200;
+const DEFAULT_PREVIEW_TTL_MS = 120_000;
+const DEFAULT_RECEIPT_RETENTION_MS = 30 * 60_000;
+const DEFAULT_CANONICAL_FRESHNESS_MS = 60_000;
+const DEFAULT_MAX_PREVIEWS = 100;
+const DEFAULT_MAX_RECEIPTS = 200;
+
+type ServiceOptions = {
+  previewTtlMs?: number;
+  receiptRetentionMs?: number;
+  canonicalFreshnessMs?: number;
+  maxPreviews?: number;
+  maxReceipts?: number;
+  opaqueToken?: () => string;
+};
 
 type StoredPreview = {
   public: HermesSkillsManagementPreview;
-  actorIdentity: string;
+  actorScope: string;
   query: string;
   stateFingerprint: string;
+  authorityIdentity: string;
   createdAt: number;
   lastAccessAt: number;
 };
 
 type Receipt = {
+  lifecycle: "pending" | "completed";
+  previewKey: string;
   promise: Promise<HermesSkillsManagementResult>;
   result: HermesSkillsManagementResult | null;
   createdAt: number;
+  completedAt: number | null;
   lastAccessAt: number;
 };
+
+type CanonicalAssessment =
+  | { ok: true }
+  | { ok: false; status: "blocked_no_action" | "failed_before_dispatch"; summary: string };
 
 function hash(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -49,7 +67,9 @@ function fingerprint(action: HermesSkillAction, skill: HermesManagedSkill): stri
     installed: skill.installed,
     enabled: skill.enabled,
     version: skill.version,
+    source: skill.source,
     provenance: skill.provenance,
+    hubIdentifier: skill.hubIdentifier,
     profile: skill.profile,
     updateAvailable: skill.updateAvailable,
     supportedActions: [...skill.supportedActions].sort(),
@@ -60,38 +80,47 @@ function desiredState(action: HermesSkillAction): string {
   if (action === "install") return "Installed and verified in Hermes";
   if (action === "enable") return "Installed and enabled in Hermes";
   if (action === "disable") return "Installed and disabled in Hermes";
-  if (action === "update") return "Installed with no update reported by Hermes";
-  return "Not installed in Hermes";
+  if (action === "update") return "Update remains audit-only for this Hermes contract";
+  return "The exact hub-installed skill is absent from Hermes";
 }
 
 function consequence(action: HermesSkillAction, name: string): string {
   if (action === "install") return `Hermes will scan and install ${name} for the selected profile.`;
   if (action === "enable") return `Hermes will allow ${name} to load for new work in the selected profile.`;
   if (action === "disable") return `Hermes will stop loading ${name} for new work in the selected profile.`;
-  if (action === "update") return `Hermes will replace the hub-installed copy of ${name} with the current upstream version.`;
-  return `Hermes will remove the hub-installed copy of ${name} from the selected profile.`;
+  if (action === "update") return `Hermes update remains audit-only until exact target readback is available.`;
+  return `Hermes will remove the exact hub-installed copy of ${name} from the selected profile.`;
 }
 
 function reversibility(action: HermesSkillAction): string {
-  if (action === "install") return "Reversible by a separately confirmed removal while the hub identity remains available.";
+  if (action === "install") return "Reversible by a separately confirmed removal while the exact hub identity remains available.";
   if (action === "enable") return "Reversible by a separately confirmed disable action.";
   if (action === "disable") return "Reversible by a separately confirmed enable action.";
-  if (action === "remove") return "Reversible only by a new reviewed installation from the same Hermes hub identity.";
-  return "Not automatically reversible. Hermes does not expose a version rollback operation in this contract.";
+  if (action === "remove") return "Reversible only by a new reviewed installation from the same exact Hermes hub identity.";
+  return "Update is not operational in this audited contract.";
 }
 
 function confirmation(action: HermesSkillAction, name: string, profile: string): string {
   return `${action.toUpperCase()} SKILL ${name} IN ${profile}`;
 }
 
-function findTarget(snapshot: HermesSkillsSnapshot, action: HermesSkillAction, identity: string, name?: string): HermesManagedSkill | null {
-  if (action === "install") return snapshot.available.find((skill) => skill.identity === identity) ?? null;
-  return snapshot.installed.find((skill) => skill.identity === identity || (name && skill.name === name)) ?? null;
+function findTarget(snapshot: HermesSkillsSnapshot, action: HermesSkillAction, identity: string): HermesManagedSkill | null {
+  const collection = action === "install" ? snapshot.available : snapshot.installed;
+  return collection.find((skill) => skill.identity === identity) ?? null;
+}
+
+function sameCanonicalInstalledSkill(skill: HermesManagedSkill, expected: HermesSkillsManagementPreview["currentState"]): boolean {
+  return skill.installed
+    && skill.identity === expected.identity
+    && skill.name === expected.name
+    && skill.profile === expected.profile
+    && skill.provenance === expected.provenance
+    && skill.hubIdentifier === expected.hubIdentifier;
 }
 
 export class HermesSkillsManagementError extends Error {
   constructor(
-    readonly code: "invalid_request" | "preview_expired" | "actor_mismatch" | "target_mismatch" | "not_confirmed" | "unsupported_action" | "stale_target" | "fixture_forbidden",
+    readonly code: "invalid_request" | "preview_expired" | "target_mismatch" | "not_confirmed" | "unsupported_action" | "stale_target" | "fixture_forbidden",
     message: string,
   ) {
     super(message);
@@ -102,11 +131,25 @@ export class HermesSkillsManagementError extends Error {
 export class HermesSkillsManagementService {
   private readonly previews = new Map<string, StoredPreview>();
   private readonly receipts = new Map<string, Receipt>();
+  private readonly previewTtlMs: number;
+  private readonly receiptRetentionMs: number;
+  private readonly canonicalFreshnessMs: number;
+  private readonly maxPreviews: number;
+  private readonly maxReceipts: number;
+  private readonly opaqueToken: () => string;
 
   constructor(
     private readonly adapter: HermesSkillsAdapter,
     private readonly now: () => Date = () => new Date(),
-  ) {}
+    options: ServiceOptions = {},
+  ) {
+    this.previewTtlMs = options.previewTtlMs ?? DEFAULT_PREVIEW_TTL_MS;
+    this.receiptRetentionMs = options.receiptRetentionMs ?? DEFAULT_RECEIPT_RETENTION_MS;
+    this.canonicalFreshnessMs = options.canonicalFreshnessMs ?? DEFAULT_CANONICAL_FRESHNESS_MS;
+    this.maxPreviews = options.maxPreviews ?? DEFAULT_MAX_PREVIEWS;
+    this.maxReceipts = options.maxReceipts ?? DEFAULT_MAX_RECEIPTS;
+    this.opaqueToken = options.opaqueToken ?? (() => randomBytes(16).toString("hex"));
+  }
 
   async snapshot(query = ""): Promise<HermesSkillsSnapshot> {
     return this.adapter.read(query);
@@ -116,24 +159,25 @@ export class HermesSkillsManagementService {
     this.cleanup();
     const query = (input.query ?? "").trim().slice(0, 80);
     const snapshot = await this.adapter.read(query);
-    if (snapshot.sourceState !== "success" && snapshot.sourceState !== "connected_empty") {
-      throw new HermesSkillsManagementError("stale_target", "A fresh canonical Hermes Skills observation is required.");
-    }
+    const assessment = this.assessCanonical(snapshot, snapshot.profile);
+    if (!assessment.ok) throw new HermesSkillsManagementError("stale_target", assessment.summary);
     const target = findTarget(snapshot, input.action, input.targetIdentity);
-    if (!target) throw new HermesSkillsManagementError("target_mismatch", "Hermes no longer reports the selected skill target.");
+    if (!target) throw new HermesSkillsManagementError("target_mismatch", "Hermes no longer reports the selected exact skill target.");
+    if (snapshot.profile !== target.profile) throw new HermesSkillsManagementError("target_mismatch", "The canonical Hermes profile does not match the selected target.");
+    if (snapshot.duplicateIdentities.includes(target.identity)) throw new HermesSkillsManagementError("stale_target", "Hermes reported a duplicate or ambiguous canonical skill identity. No action can be prepared safely.");
     if (!target.supportedActions.includes(input.action)) throw new HermesSkillsManagementError("unsupported_action", "The installed Hermes contract does not support this action for the selected skill.");
-    if (snapshot.duplicateIdentities.includes(target.identity)) throw new HermesSkillsManagementError("stale_target", "Hermes reported a duplicate skill identity. No action can be prepared safely.");
-    if (input.action === "update") {
-      const updateAvailable = await this.adapter.checkUpdate(target.name);
-      if (updateAvailable !== true) throw new HermesSkillsManagementError("unsupported_action", updateAvailable === false ? "Hermes reports that this skill is already current." : "Hermes did not provide authoritative update availability for this skill.");
-      target.updateAvailable = true;
+    if ((input.action === "install" || input.action === "remove") && !target.hubIdentifier) {
+      throw new HermesSkillsManagementError("unsupported_action", "The exact Hermes hub identifier is required for this action.");
     }
+    const authorityIdentity = await this.adapter.authorize(input.action);
     const reason = safeReason(input.reason);
     const stateFingerprint = fingerprint(input.action, target);
-    const requestIdentity = `hermes-skills-${hash(JSON.stringify({ action: input.action, identity: target.identity, name: target.name, profile: target.profile, stateFingerprint, reason })).slice(0, 32)}`;
+    const actorScope = hash(input.actorIdentity);
+    const previewId = this.uniqueIdentity("hermes-preview");
+    const requestIdentity = this.uniqueIdentity("hermes-request");
     const createdAt = this.now().getTime();
     const preview: HermesSkillsManagementPreview = {
-      previewId: requestIdentity,
+      previewId,
       requestIdentity,
       action: input.action,
       targetIdentity: target.identity,
@@ -146,6 +190,7 @@ export class HermesSkillsManagementService {
         version: target.version,
         source: target.source,
         provenance: target.provenance,
+        hubIdentifier: target.hubIdentifier,
         profile: target.profile,
         updateAvailable: target.updateAvailable,
       },
@@ -155,56 +200,97 @@ export class HermesSkillsManagementService {
       reversibility: reversibility(input.action),
       sourceEvidence: snapshot.interface,
       evidenceObservedAt: snapshot.observedAt,
-      expiresAt: new Date(createdAt + PREVIEW_TTL_MS).toISOString(),
+      expiresAt: new Date(createdAt + this.previewTtlMs).toISOString(),
       confirmationPhrase: confirmation(input.action, target.name, target.profile),
       reason,
       phase: "prepared",
     };
-    this.previews.set(preview.previewId, { public: preview, actorIdentity: input.actorIdentity, query, stateFingerprint, createdAt, lastAccessAt: createdAt });
+    const key = this.previewKey(actorScope, previewId);
+    this.previews.set(key, { public: preview, actorScope, query, stateFingerprint, authorityIdentity, createdAt, lastAccessAt: createdAt });
     this.cleanup();
     return preview;
   }
 
   async commit(input: { previewId: string; targetIdentity: string; confirmationPhrase: string; actorIdentity: string }): Promise<HermesSkillsManagementResult> {
     this.cleanup();
-    const stored = this.previews.get(input.previewId);
+    const actorScope = hash(input.actorIdentity);
+    const previewKey = this.previewKey(actorScope, input.previewId);
+    const stored = this.previews.get(previewKey);
     if (!stored) throw new HermesSkillsManagementError("preview_expired", "The prepared operation is unavailable. Prepare it again.");
-    if (stored.actorIdentity !== input.actorIdentity) throw new HermesSkillsManagementError("actor_mismatch", "This preview belongs to a different authenticated Cabinet session.");
     if (stored.public.targetIdentity !== input.targetIdentity) throw new HermesSkillsManagementError("target_mismatch", "The confirmed skill does not match the prepared target.");
     if (stored.public.confirmationPhrase !== input.confirmationPhrase) throw new HermesSkillsManagementError("not_confirmed", "Type the exact server-issued confirmation phrase.");
     stored.lastAccessAt = this.now().getTime();
-    const prior = this.receipts.get(stored.public.requestIdentity);
+    const receiptKey = this.receiptKey(stored);
+    const prior = this.receipts.get(receiptKey);
     if (prior) {
       prior.lastAccessAt = stored.lastAccessAt;
       return prior.promise;
     }
     if (Date.parse(stored.public.expiresAt) < this.now().getTime()) throw new HermesSkillsManagementError("preview_expired", "The prepared state is stale. Prepare it again.");
-    const receipt: Receipt = { promise: Promise.resolve(null as never), result: null, createdAt: stored.lastAccessAt, lastAccessAt: stored.lastAccessAt };
+
+    const receipt: Receipt = {
+      lifecycle: "pending",
+      previewKey,
+      promise: Promise.resolve(null as never),
+      result: null,
+      createdAt: stored.lastAccessAt,
+      completedAt: null,
+      lastAccessAt: stored.lastAccessAt,
+    };
     receipt.promise = this.execute(stored).then((result) => {
+      receipt.lifecycle = "completed";
       receipt.result = result;
+      receipt.completedAt = this.now().getTime();
+      receipt.lastAccessAt = receipt.completedAt;
+      this.cleanup();
       return result;
     });
-    this.receipts.set(stored.public.requestIdentity, receipt);
+    this.receipts.set(receiptKey, receipt);
+    this.cleanup();
     return receipt.promise;
   }
 
   async recheck(input: { previewId: string; targetIdentity: string; actorIdentity: string }): Promise<HermesSkillsManagementResult> {
     this.cleanup();
-    const stored = this.previews.get(input.previewId);
-    if (!stored || stored.actorIdentity !== input.actorIdentity || stored.public.targetIdentity !== input.targetIdentity) {
+    const actorScope = hash(input.actorIdentity);
+    const stored = this.previews.get(this.previewKey(actorScope, input.previewId));
+    if (!stored || stored.public.targetIdentity !== input.targetIdentity) {
       throw new HermesSkillsManagementError("target_mismatch", "The reconciliation target does not match this authenticated session.");
     }
-    const receipt = this.receipts.get(stored.public.requestIdentity);
+    const receipt = this.receipts.get(this.receiptKey(stored));
     if (!receipt) throw new HermesSkillsManagementError("invalid_request", "No dispatched operation is available to reconcile.");
     const prior = await receipt.promise;
     if (prior.status !== "outcome_unknown") return prior;
     const verification = await this.verify(stored);
-    const result = verification
-      ? this.result(stored, "verified_success", "verified", "Hermes now verifies the requested skill state. No mutation retry was attempted.", true, prior.mutationResponseReceived, this.now().toISOString())
-      : { ...prior, summary: "Hermes still does not verify the requested skill state. No mutation retry was attempted.", verificationObservedAt: this.now().toISOString(), completedAt: this.now().toISOString() };
+    const result = verification.verified
+      ? this.result(stored, "verified_success", "verified", "Hermes now verifies the exact requested skill state. No mutation retry was attempted.", true, prior.mutationResponseReceived, verification.observedAt)
+      : { ...prior, summary: "Hermes still does not verify the exact requested skill state. No mutation retry was attempted.", verificationObservedAt: verification.observedAt, completedAt: this.now().toISOString() };
+    receipt.lifecycle = "completed";
     receipt.result = result;
+    receipt.completedAt = this.now().getTime();
+    receipt.lastAccessAt = receipt.completedAt;
     receipt.promise = Promise.resolve(result);
     return result;
+  }
+
+  private uniqueIdentity(prefix: "hermes-preview" | "hermes-request"): string {
+    for (let attempt = 0; attempt < 32; attempt += 1) {
+      const token = this.opaqueToken();
+      if (!/^[a-f0-9]{32}$/i.test(token)) throw new HermesSkillsManagementError("invalid_request", "The server could not create a secure operation identity.");
+      const identity = `${prefix}-${token.toLowerCase()}`;
+      const inPreviews = [...this.previews.values()].some((preview) => preview.public.previewId === identity || preview.public.requestIdentity === identity);
+      const inReceipts = [...this.receipts.keys()].some((key) => key.endsWith(`:${identity}`));
+      if (!inPreviews && !inReceipts) return identity;
+    }
+    throw new HermesSkillsManagementError("invalid_request", "The server could not create a unique operation identity.");
+  }
+
+  private previewKey(actorScope: string, previewId: string): string {
+    return `${actorScope}:${previewId}`;
+  }
+
+  private receiptKey(stored: StoredPreview): string {
+    return `${stored.actorScope}:${stored.public.requestIdentity}`;
   }
 
   private result(stored: StoredPreview, status: HermesSkillsManagementResult["status"], phase: HermesSkillsManagementResult["phase"], summary: string, attempted: boolean, responseReceived: boolean, verifiedAt: string | null): HermesSkillsManagementResult {
@@ -225,6 +311,19 @@ export class HermesSkillsManagementService {
     };
   }
 
+  private assessCanonical(snapshot: HermesSkillsSnapshot, expectedProfile: string): CanonicalAssessment {
+    if (snapshot.profile !== expectedProfile) return { ok: false, status: "blocked_no_action", summary: "Hermes reported a different canonical profile. No mutation was dispatched." };
+    if (snapshot.sourceState !== "success" && snapshot.sourceState !== "connected_empty") {
+      return { ok: false, status: "failed_before_dispatch", summary: `Canonical Hermes Skills state is ${snapshot.sourceState}. No mutation was dispatched.` };
+    }
+    const observedAt = Date.parse(snapshot.observedAt);
+    const now = this.now().getTime();
+    if (!Number.isFinite(observedAt)) return { ok: false, status: "failed_before_dispatch", summary: "Canonical Hermes Skills state has a malformed observation time. No mutation was dispatched." };
+    if (observedAt > now + 5_000) return { ok: false, status: "failed_before_dispatch", summary: "Canonical Hermes Skills state has a future observation time. No mutation was dispatched." };
+    if (now - observedAt > this.canonicalFreshnessMs) return { ok: false, status: "failed_before_dispatch", summary: "Canonical Hermes Skills state is stale. No mutation was dispatched." };
+    return { ok: true };
+  }
+
   private async execute(stored: StoredPreview): Promise<HermesSkillsManagementResult> {
     let snapshot: HermesSkillsSnapshot;
     try {
@@ -232,14 +331,28 @@ export class HermesSkillsManagementService {
     } catch {
       return this.result(stored, "failed_before_dispatch", "precondition_check", "Hermes could not complete the canonical precondition read. No mutation was dispatched.", false, false, null);
     }
-    const current = findTarget(snapshot, stored.public.action, stored.public.targetIdentity, stored.public.targetName);
-    if (await this.alreadyDesired(stored, snapshot)) {
-      return this.result(stored, "verified_success", "verified", "Hermes already verifies the requested skill state. No mutation was dispatched.", false, false, this.now().toISOString());
+    const assessment = this.assessCanonical(snapshot, stored.public.profile);
+    if (!assessment.ok) return this.result(stored, assessment.status, "precondition_check", assessment.summary, false, false, null);
+    if (snapshot.duplicateIdentities.includes(stored.public.targetIdentity)) {
+      return this.result(stored, "blocked_no_action", "precondition_check", "Hermes reported a duplicate or ambiguous canonical target. No mutation was dispatched.", false, false, null);
     }
-    if (stored.public.action === "update" && current) current.updateAvailable = await this.adapter.checkUpdate(current.name);
+    if (this.alreadyDesired(stored, snapshot)) {
+      return this.result(stored, "verified_success", "verified", "Hermes already verifies the exact requested skill state. No mutation was dispatched.", false, false, snapshot.observedAt);
+    }
+    const current = findTarget(snapshot, stored.public.action, stored.public.targetIdentity);
     if (!current || fingerprint(stored.public.action, current) !== stored.stateFingerprint) {
-      return this.result(stored, "blocked_no_action", "precondition_check", "Hermes skill state changed after preview. No mutation was dispatched.", false, false, null);
+      return this.result(stored, "blocked_no_action", "precondition_check", "Canonical Hermes skill state changed after preview. No mutation was dispatched.", false, false, null);
     }
+    let currentAuthority: string;
+    try {
+      currentAuthority = await this.adapter.authorize(stored.public.action);
+    } catch {
+      return this.result(stored, "failed_before_dispatch", "precondition_check", "The audited Hermes execution authority is unavailable. No mutation was dispatched.", false, false, null);
+    }
+    if (currentAuthority !== stored.authorityIdentity) {
+      return this.result(stored, "blocked_no_action", "precondition_check", "The audited Hermes execution authority changed after preview. No mutation was dispatched.", false, false, null);
+    }
+
     const operation: HermesSkillOperation = {
       action: stored.public.action,
       targetIdentity: stored.public.targetIdentity,
@@ -249,43 +362,84 @@ export class HermesSkillsManagementService {
     };
     let responseReceived = false;
     try {
-      const response = await this.adapter.execute(operation);
+      const response = await this.adapter.execute(operation, stored.authorityIdentity);
       responseReceived = response.responseReceived;
     } catch (error) {
       const dispatched = error instanceof HermesSkillsAdapterError && error.dispatched;
       if (!dispatched) return this.result(stored, "failed_before_dispatch", "precondition_check", "Hermes could not start the requested skill operation. No mutation was dispatched.", false, false, null);
       return this.result(stored, "outcome_unknown", "mutation_dispatch_attempted", "The Hermes operation was dispatched, but its outcome is unknown. Use read-only reconciliation; do not repeat the mutation.", true, error instanceof HermesSkillsAdapterError && error.responseReceived, null);
     }
-    const verified = await this.verify(stored);
-    return verified
-      ? this.result(stored, "verified_success", "verified", "Hermes readback verifies the requested skill state.", true, responseReceived, this.now().toISOString())
-      : this.result(stored, "outcome_unknown", "verification_attempted", "Hermes responded, but canonical readback did not verify the requested skill state. No retry was attempted.", true, responseReceived, this.now().toISOString());
+    const verification = await this.verify(stored);
+    return verification.verified
+      ? this.result(stored, "verified_success", "verified", "Hermes readback verifies the exact requested skill state.", true, responseReceived, verification.observedAt)
+      : this.result(stored, "outcome_unknown", "verification_attempted", "Hermes responded, but canonical readback did not verify the exact requested skill state. No retry was attempted.", true, responseReceived, verification.observedAt);
   }
 
-  private async alreadyDesired(stored: StoredPreview, snapshot: HermesSkillsSnapshot): Promise<boolean> {
-    const installedByName = snapshot.installed.find((skill) => skill.name === stored.public.targetName) ?? null;
-    if (stored.public.action === "install") return Boolean(installedByName);
-    if (stored.public.action === "remove") return !installedByName;
-    if (stored.public.action === "enable") return installedByName?.enabled === true;
-    if (stored.public.action === "disable") return installedByName?.enabled === false;
-    if (!installedByName) return false;
-    return (await this.adapter.checkUpdate(stored.public.targetName)) === false;
+  private alreadyDesired(stored: StoredPreview, snapshot: HermesSkillsSnapshot): boolean {
+    if (stored.public.action === "install") {
+      return snapshot.installed.some((skill) =>
+        skill.profile === stored.public.profile
+        && skill.name === stored.public.targetName
+        && skill.provenance === "hub"
+        && skill.hubIdentifier === stored.public.targetIdentity
+        && skill.source === stored.public.currentState.source,
+      );
+    }
+    if (stored.public.action === "remove") {
+      const identifier = stored.public.currentState.hubIdentifier;
+      return Boolean(identifier) && !snapshot.installed.some((skill) =>
+        skill.profile === stored.public.profile
+        && skill.provenance === "hub"
+        && skill.hubIdentifier === identifier,
+      );
+    }
+    if (stored.public.action === "update") return false;
+    const installed = snapshot.installed.find((skill) => sameCanonicalInstalledSkill(skill, stored.public.currentState));
+    return stored.public.action === "enable" ? installed?.enabled === true : installed?.enabled === false;
   }
 
-  private async verify(stored: StoredPreview): Promise<boolean> {
+  private async verify(stored: StoredPreview): Promise<{ verified: boolean; observedAt: string | null }> {
     try {
       const snapshot = await this.adapter.read(stored.query);
-      return this.alreadyDesired(stored, snapshot);
+      const assessment = this.assessCanonical(snapshot, stored.public.profile);
+      if (!assessment.ok || snapshot.duplicateIdentities.includes(stored.public.targetIdentity)) return { verified: false, observedAt: Number.isFinite(Date.parse(snapshot.observedAt)) ? snapshot.observedAt : null };
+      return { verified: this.alreadyDesired(stored, snapshot), observedAt: snapshot.observedAt };
     } catch {
-      return false;
+      return { verified: false, observedAt: null };
     }
   }
 
   private cleanup(): void {
     const now = this.now().getTime();
-    for (const [key, preview] of this.previews) if (now - preview.lastAccessAt > RECEIPT_TTL_MS) this.previews.delete(key);
-    for (const [key, receipt] of this.receipts) if (now - receipt.lastAccessAt > RECEIPT_TTL_MS) this.receipts.delete(key);
-    for (const [key] of [...this.previews.entries()].sort((a, b) => a[1].lastAccessAt - b[1].lastAccessAt).slice(0, Math.max(0, this.previews.size - MAX_PREVIEWS))) this.previews.delete(key);
-    for (const [key] of [...this.receipts.entries()].sort((a, b) => a[1].lastAccessAt - b[1].lastAccessAt).slice(0, Math.max(0, this.receipts.size - MAX_RECEIPTS))) this.receipts.delete(key);
+    const evictReceipt = (key: string, receipt: Receipt) => {
+      if (receipt.lifecycle !== "completed") return;
+      this.receipts.delete(key);
+      this.previews.delete(receipt.previewKey);
+    };
+
+    for (const [key, receipt] of this.receipts) {
+      if (receipt.lifecycle === "completed" && receipt.completedAt !== null && now - receipt.completedAt > this.receiptRetentionMs) evictReceipt(key, receipt);
+    }
+
+    const completedByAge = [...this.receipts.entries()]
+      .filter(([, receipt]) => receipt.lifecycle === "completed")
+      .sort((a, b) => (a[1].completedAt ?? a[1].createdAt) - (b[1].completedAt ?? b[1].createdAt));
+    for (let index = 0; index < completedByAge.length - this.maxReceipts; index += 1) {
+      const [key, receipt] = completedByAge[index];
+      evictReceipt(key, receipt);
+    }
+
+    for (const [key, preview] of this.previews) {
+      const receipt = this.receipts.get(this.receiptKey(preview));
+      if (receipt?.lifecycle === "pending" || receipt?.lifecycle === "completed") continue;
+      if (now > Date.parse(preview.public.expiresAt)) this.previews.delete(key);
+    }
+    const removablePreviews = [...this.previews.entries()]
+      .filter(([, preview]) => !this.receipts.has(this.receiptKey(preview)))
+      .sort((a, b) => a[1].lastAccessAt - b[1].lastAccessAt);
+    for (const [key] of removablePreviews) {
+      if (this.previews.size <= this.maxPreviews) break;
+      this.previews.delete(key);
+    }
   }
 }
