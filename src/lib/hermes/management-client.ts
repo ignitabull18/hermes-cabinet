@@ -4,7 +4,7 @@ import type {
   HermesManagementSnapshot,
   HermesManagementStatus,
 } from "./types";
-import type { HermesServerConfig } from "./server-config";
+import type { HermesReadOnlyServerConfig, HermesServerConfig } from "./server-config";
 import { readOpenCliDiagnostics } from "./opencli-diagnostics";
 import {
   normalizeProjectObservation,
@@ -16,6 +16,32 @@ import {
 import { normalizeRuntimeExecution } from "./runtime-execution";
 
 type Fetch = typeof fetch;
+
+type NormalizedClientConfig = {
+  apiBaseUrl: string;
+  apiKey: string;
+  managementBaseUrl: string;
+  managementToken: string | null;
+  profile: string;
+  profileConfigured: boolean;
+  timeoutMs: number;
+  sourceStates: Record<"agent_api" | "management" | "gateway", import("./live-readonly-readiness").HermesReadinessSourceState>;
+};
+
+export type HermesManagementStatusObservation = {
+  state: "success" | "not_configured" | "authentication_failure" | "unavailable" | "endpoint_failure" | "unknown_profile";
+  checkedAt: string;
+  message: string;
+  data: (HermesManagementStatus & {
+    gateway_mode?: string;
+    gateway_state?: string;
+    gateway_running?: boolean;
+    gateway_busy?: boolean;
+    gateway_updated_at?: string;
+    active_agents?: number;
+    active_sessions?: number;
+  }) | null;
+};
 
 export class HermesManagementRequestError extends Error {
   constructor(readonly status: number | null, message: string) {
@@ -50,29 +76,53 @@ export function boundedHermesFailureSummary(input: unknown, maxLength = 240): st
 }
 
 function snapshot(
-  config: HermesServerConfig,
+  config: NormalizedClientConfig,
   status: HermesHealthSnapshot["status"],
   message: string,
-  values: Partial<Pick<HermesHealthSnapshot, "version" | "gatewayState">> = {}
+  values: Partial<Pick<HermesHealthSnapshot, "version" | "gatewayState" | "profile" | "profileSource" | "observationSource">> = {}
 ): HermesHealthSnapshot {
   return {
     enabled: true,
     status,
     version: values.version ?? null,
-    profile: config.profile,
+    profile: values.profile ?? null,
+    profileSource: values.profileSource ?? null,
     gatewayState: values.gatewayState ?? null,
     checkedAt: new Date().toISOString(),
+    observationSource: values.observationSource ?? "GET /health/detailed",
     message,
   };
 }
 
 export class HermesManagementClient {
+  private readonly config: NormalizedClientConfig;
+
   constructor(
-    private readonly config: HermesServerConfig,
-    private readonly fetchImpl: Fetch = fetch
-  ) {}
+    config: HermesServerConfig | HermesReadOnlyServerConfig,
+    private readonly fetchImpl: Fetch = fetch,
+  ) {
+    this.config = {
+      apiBaseUrl: config.apiBaseUrl ?? "",
+      apiKey: config.apiKey ?? "",
+      managementBaseUrl: config.managementBaseUrl ?? "",
+      managementToken: config.managementToken,
+      profile: config.profile ?? "unknown",
+      profileConfigured: Boolean(config.profile),
+      timeoutMs: config.timeoutMs,
+      sourceStates: "sourceStates" in config
+        ? config.sourceStates
+        : { agent_api: "ready_to_probe", management: "ready_to_probe", gateway: "ready_to_probe" },
+    };
+  }
 
   async health(): Promise<HermesHealthSnapshot> {
+    if (!this.config.apiBaseUrl || !this.config.apiKey) {
+      return snapshot(
+        this.config,
+        "misconfigured",
+        "Hermes Agent API is not configured: CABINET_HERMES_API_URL and CABINET_HERMES_API_KEY are required.",
+      );
+    }
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.config.timeoutMs);
 
@@ -85,6 +135,7 @@ export class HermesManagementClient {
             Accept: "application/json",
           },
           cache: "no-store",
+          redirect: "error",
           signal: controller.signal,
         }
       );
@@ -99,50 +150,29 @@ export class HermesManagementClient {
       if (!healthResponse.ok) {
         return snapshot(
           this.config,
-          "offline",
-          `Hermes health request failed with HTTP ${healthResponse.status}.`
+          "probe_unavailable",
+          `Hermes Agent health probe failed with HTTP ${healthResponse.status}.`
         );
       }
 
       const health = (await healthResponse.json()) as HermesApiHealth;
       const version = text(health.version);
       const gatewayState = text(health.gateway_state);
-
-      const profileResponse = await this.fetchImpl(
-        `${this.config.managementBaseUrl}/api/status`,
-        {
-          headers: { Accept: "application/json" },
-          cache: "no-store",
-          signal: controller.signal,
-        }
-      );
-      if (!profileResponse.ok) {
-        return snapshot(
-          this.config,
-          "offline",
-          `Hermes profile discovery failed with HTTP ${profileResponse.status}.`,
-          { version, gatewayState }
-        );
+      const observedProfile = text(health.active_profile) ?? text(health.profile);
+      const reportedState = text(health.status)?.toLowerCase();
+      if (reportedState && ["offline", "stopped", "not_running"].includes(reportedState)) {
+        return snapshot(this.config, "offline", "Hermes Agent explicitly reported that the runtime is stopped.", {
+          version,
+          gatewayState,
+          profile: observedProfile,
+          profileSource: observedProfile ? "GET /health/detailed" : null,
+        });
       }
-
-      const management = (await profileResponse.json()) as HermesManagementStatus;
-      const profiles = Array.isArray(management.profiles)
-        ? management.profiles.filter((profile): profile is string =>
-            typeof profile === "string"
-          )
-        : [];
-      if (!profiles.includes(this.config.profile)) {
-        return snapshot(
-          this.config,
-          "unavailable_profile",
-          `Configured Hermes profile ${JSON.stringify(this.config.profile)} is unavailable.`,
-          { version, gatewayState }
-        );
-      }
-
-      return snapshot(this.config, "online", "Hermes is online.", {
+      return snapshot(this.config, "online", "Hermes Agent API is online.", {
         version,
         gatewayState,
+        profile: observedProfile,
+        profileSource: observedProfile ? "GET /health/detailed" : null,
       });
     } catch (error) {
       const timedOut =
@@ -150,19 +180,69 @@ export class HermesManagementClient {
         (error.name === "AbortError" || error.name === "TimeoutError");
       return snapshot(
         this.config,
-        "offline",
+        timedOut ? "probe_timeout" : "probe_unavailable",
         timedOut
-          ? "Hermes health request timed out."
-          : "Hermes is unreachable."
+          ? "Hermes Agent health probe timed out."
+          : "Hermes Agent health probe is temporarily unreachable."
       );
     } finally {
       clearTimeout(timeoutId);
     }
   }
 
+  async managementStatus(): Promise<HermesManagementStatusObservation> {
+    const checkedAt = new Date().toISOString();
+    if (this.config.sourceStates.management !== "ready_to_probe" || !this.config.managementBaseUrl || !this.config.managementToken || !this.config.profileConfigured) {
+      return {
+        state: "not_configured",
+        checkedAt,
+        message: "Hermes Management is not configured for this review.",
+        data: null,
+      };
+    }
+    try {
+      const raw = record(await this.managementRequest("/api/status"));
+      const profiles = Array.isArray(raw.profiles)
+        ? raw.profiles.filter((profile): profile is string => typeof profile === "string")
+        : null;
+      const data: NonNullable<HermesManagementStatusObservation["data"]> = {
+        profiles: profiles ?? [],
+        ...(value(raw.gateway_mode) ? { gateway_mode: value(raw.gateway_mode)! } : {}),
+        ...(value(raw.gateway_state) ? { gateway_state: value(raw.gateway_state)! } : {}),
+        ...(typeof raw.gateway_running === "boolean" ? { gateway_running: raw.gateway_running } : {}),
+        ...(typeof raw.gateway_busy === "boolean" ? { gateway_busy: raw.gateway_busy } : {}),
+        ...(timestamp(raw.gateway_updated_at) ? { gateway_updated_at: timestamp(raw.gateway_updated_at)! } : {}),
+        ...(typeof raw.active_agents === "number" && Number.isFinite(raw.active_agents) ? { active_agents: integer(raw.active_agents) } : {}),
+        ...(typeof raw.active_sessions === "number" && Number.isFinite(raw.active_sessions) ? { active_sessions: integer(raw.active_sessions) } : {}),
+      };
+      if (!profiles || !profiles.includes(this.config.profile)) {
+        return {
+          state: "unknown_profile",
+          checkedAt,
+          message: "Hermes management did not confirm the selected profile.",
+          data,
+        };
+      }
+      return { state: "success", checkedAt, message: "Hermes management status responded.", data };
+    } catch (error) {
+      if (error instanceof HermesManagementRequestError) {
+        if (error.status === 401 || error.status === 403) {
+          return { state: "authentication_failure", checkedAt, message: "Hermes management rejected the configured server credential.", data: null };
+        }
+        if (error.status === 502 || error.status === 504 || error.status === null) {
+          return { state: "unavailable", checkedAt, message: "Hermes management is unavailable.", data: null };
+        }
+        return { state: "endpoint_failure", checkedAt, message: `Hermes management status failed with HTTP ${error.status}.`, data: null };
+      }
+      return { state: "unavailable", checkedAt, message: "Hermes management is unavailable.", data: null };
+    }
+  }
+
   async snapshot(healthOverride?: HermesHealthSnapshot): Promise<HermesManagementSnapshot> {
     const diagnostics: HermesManagementSnapshot["diagnostics"] = [];
+    const managementReady = this.config.sourceStates.management === "ready_to_probe" && Boolean(this.config.managementBaseUrl && this.config.managementToken && this.config.profileConfigured);
     const read = async (area: string, path: string, fallback: unknown) => {
+      if (!managementReady) return fallback;
       try {
         return await this.managementRequest(path);
       } catch (error) {
@@ -174,7 +254,8 @@ export class HermesManagementClient {
         return fallback;
       }
     };
-    const [health, profilesRaw, manifestRaw, skillsRaw, jobsRaw, memoryRaw, mcpRaw, toolsetsRaw, pluginsRaw, openCli, runtimeRaw, workersRaw, boardRaw, messagingRaw, sessionsRaw, graphRaw, modelRaw, modelOptionsRaw, filesRaw, usageRaw] =
+    const statusPromise = this.managementStatus();
+    const [health, profilesRaw, manifestRaw, skillsRaw, jobsRaw, memoryRaw, mcpRaw, toolsetsRaw, pluginsRaw, openCli, runtimeStatus, workersRaw, boardRaw, messagingRaw, sessionsRaw, graphRaw, modelRaw, modelOptionsRaw, filesRaw, usageRaw] =
       await Promise.all([
         healthOverride ?? this.health(),
         read("profiles", "/api/profiles", { profiles: [] }),
@@ -185,8 +266,20 @@ export class HermesManagementClient {
         read("mcp", this.profilePath("/api/mcp/servers"), { servers: [] }),
         read("toolsets", this.profilePath("/api/tools/toolsets"), []),
         read("plugins", this.profilePath("/api/dashboard/plugins"), []),
-        readOpenCliDiagnostics(),
-        read("runtime status", "/api/status", {}),
+        managementReady
+          ? readOpenCliDiagnostics()
+          : Promise.resolve({
+              available: false,
+              version: null,
+              daemon: "unknown" as const,
+              extension: "unknown" as const,
+              profiles: [],
+              binaryLocation: null,
+              capabilities: { screenshot: false, domRead: false, formInteraction: false, download: false },
+              invocation: "terminal" as const,
+              message: "OpenCLI was not probed because its supporting Hermes management source is unavailable for this partial review.",
+            }),
+        statusPromise,
         read("active agents", "/api/plugins/kanban/workers/active", { workers: [], unavailable: true }),
         read("recent agents", "/api/plugins/kanban/board", { columns: [], unavailable: true }),
         read("messaging", "/api/messaging/platforms", { platforms: [] }),
@@ -197,8 +290,16 @@ export class HermesManagementClient {
         read("artifacts", "/api/files", { entries: [], unavailable: true }),
         read("usage analytics", `/api/analytics/usage?days=30&profile=${encodeURIComponent(this.config.profile)}`, { totals: {}, unavailable: true }),
       ]);
+    const runtimeRaw = runtimeStatus.data ?? {};
+    if (!managementReady) {
+      diagnostics.push({ area: "management source", status: "degraded", message: "Hermes Management is not configured for this review." });
+    } else if (runtimeStatus.state !== "success") {
+      diagnostics.push({ area: "runtime status", status: "degraded", message: runtimeStatus.message });
+    }
 
-    const developerRepository = await this.readDeveloperRepository(sessionsRaw, diagnostics);
+    const developerRepository = managementReady
+      ? await this.readDeveloperRepository(sessionsRaw, diagnostics)
+      : unavailableDeveloperRepositorySnapshot(this.config.profile, new Date().toISOString(), "Hermes Management is not configured for this review.");
     const runtimeExecution = normalizeRuntimeExecution({
       sessions: sessionsRaw,
       workers: workersRaw,
@@ -411,7 +512,10 @@ export class HermesManagementClient {
     return {
       checkedAt: new Date().toISOString(),
       profile: this.config.profile,
-      compatibility: { version: health.version, adapter: "desktop-0.18" },
+      compatibility: {
+        version: health.version,
+        adapter: managementReady ? "installed-management-contract" : "source-specific",
+      },
       developerRepository,
       runtimeExecution,
       profiles,
@@ -587,7 +691,9 @@ export class HermesManagementClient {
   }
 
   private async managementRequest(path: string, options: { method?: string; body?: unknown } = {}): Promise<unknown> {
-    if (!this.config.managementToken) throw new Error("Missing server configuration: CABINET_HERMES_MANAGEMENT_TOKEN");
+    if (!this.config.managementBaseUrl || !this.config.managementToken || !this.config.profileConfigured) {
+      throw new HermesManagementRequestError(null, "Hermes management authentication and profile configuration are incomplete.");
+    }
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.config.timeoutMs);
     try {
@@ -600,17 +706,20 @@ export class HermesManagementClient {
         },
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
         cache: "no-store",
+        redirect: "error",
         signal: controller.signal,
       });
       if (!response.ok) {
-        let detail = `Hermes management request failed with HTTP ${response.status}.`;
-        try { detail = value(record(await response.json()).detail) ?? detail; } catch {}
-        throw new HermesManagementRequestError(response.status, boundedHermesFailureSummary(detail) ?? `Hermes management request failed with HTTP ${response.status}.`);
+        throw new HermesManagementRequestError(
+          response.status,
+          `Hermes management request failed with HTTP ${response.status}.`,
+        );
       }
       return await response.json();
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") throw new HermesManagementRequestError(504, "Hermes management request timed out.");
-      throw error;
+      if (error instanceof HermesManagementRequestError) throw error;
+      throw new HermesManagementRequestError(502, "Hermes management is unreachable.");
     } finally { clearTimeout(timeoutId); }
   }
 }

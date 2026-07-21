@@ -14,9 +14,9 @@ function json(body: unknown, status = 200): Response {
 }
 
 test("run client starts, polls, approves by stable identity, and stops", async () => {
-  const calls: Array<{ url: string; body: string }> = [];
+  const calls: Array<{ url: string; body: string; redirect: RequestRedirect | undefined }> = [];
   const fetchImpl: typeof fetch = async (input, init) => {
-    const url = String(input); calls.push({ url, body: String(init?.body ?? "") });
+    const url = String(input); calls.push({ url, body: String(init?.body ?? ""), redirect: init?.redirect });
     if (url.endsWith("/v1/runs")) return json({ run_id: "run_1", status: "started" }, 202);
     if (url.endsWith("/approval")) return json({ run_id: "run_1", choice: "once", resolved: 1 });
     if (url.endsWith("/stop")) return json({ run_id: "run_1", status: "stopping" });
@@ -29,6 +29,7 @@ test("run client starts, polls, approves by stable identity, and stops", async (
   assert.equal((await client.approve("run_1", "req_1", "once")).resolved, 1);
   assert.equal((await client.stop("run_1")).status, "stopping");
   assert.ok(calls.every((call) => !call.body.includes("server-secret")));
+  assert.ok(calls.every((call) => call.redirect === "error"));
 });
 
 test("run client rejects stale approval identity before writing", async () => {
@@ -45,8 +46,12 @@ test("run client assigns projection order to SSE and supports reconnect offsets"
 });
 
 test("run client normalizes retryable and authentication failures", async () => {
-  const auth = new HermesRunClient(config, async () => json({ error: { message: "bad key" } }, 401));
-  await assert.rejects(() => auth.get("run_1"), (error: unknown) => error instanceof HermesRunError && error.code === "authentication_failure" && !error.retryable);
+  const errorSecret = "run-error-secret-canary";
+  const auth = new HermesRunClient(config, async () => json({ error: { message: errorSecret } }, 401));
+  await assert.rejects(
+    () => auth.get("run_1"),
+    (error: unknown) => error instanceof HermesRunError && error.code === "authentication_failure" && !error.retryable && !error.message.includes(errorSecret),
+  );
   const retry = new HermesRunClient(config, async () => json({}, 503));
   await assert.rejects(() => retry.get("run_1"), (error: unknown) => error instanceof HermesRunError && error.code === "retryable" && error.retryable);
   const profile = new HermesRunClient(config, async () => json({ error: { message: "Unknown or unconfigured profile" } }, 404));

@@ -1,0 +1,77 @@
+{
+  "classification": "Live runtime",
+  "capturedAt": "2026-07-20T23:51:43.030Z",
+  "artifactGeneratedAt": "2026-07-20T23:49:07.743Z",
+  "implementationRevision": "9c887115128904c3ca7d6ae8ed5d4fb1a9789b55",
+  "runtimeCabinetRevision": "9c887115128904c3ca7d6ae8ed5d4fb1a9789b55",
+  "observedRunningAgent": {
+    "version": "0.19.0",
+    "source": "GET /health/detailed",
+    "commit": null
+  },
+  "detectedAgentCheckout": {
+    "commit": "d7b36070ef80",
+    "source": "local installation metadata"
+  },
+  "configuredProfile": "operator-os",
+  "observedActiveProfile": null,
+  "observedProfileSource": null,
+  "configuredSourceGroups": [
+    {
+      "id": "agent_api",
+      "state": "ready_to_probe",
+      "safeEndpointIdentity": "http://127.0.0.1:8642"
+    }
+  ],
+  "unavailableSourceGroups": [
+    {
+      "id": "management",
+      "state": "unavailable",
+      "requests": 0
+    },
+    {
+      "id": "gateway",
+      "state": "unavailable",
+      "requests": 0
+    }
+  ],
+  "interventionsEnabled": false,
+  "variables": [
+    {
+      "name": "CABINET_HERMES_API_URL",
+      "status": "present"
+    },
+    {
+      "name": "CABINET_HERMES_API_KEY",
+      "status": "present"
+    },
+    {
+      "name": "CABINET_HERMES_PROFILE",
+      "status": "present"
+    },
+    {
+      "name": "CABINET_HERMES_INTERVENTIONS_ENABLED",
+      "status": "present"
+    },
+    {
+      "name": "CABINET_HERMES_MANAGEMENT_URL",
+      "status": "absent"
+    },
+    {
+      "name": "CABINET_HERMES_MANAGEMENT_TOKEN",
+      "status": "absent"
+    },
+    {
+      "name": "CABINET_HERMES_GATEWAY_URL",
+      "status": "absent"
+    },
+    {
+      "name": "CABINET_HERMES_GATEWAY_TOKEN",
+      "status": "absent"
+    }
+  ],
+  "liveReadOnlyEndpointsReached": [
+    "GET /health/detailed"
+  ],
+  "mutationCalls": 0
+}

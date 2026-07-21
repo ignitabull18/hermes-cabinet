@@ -151,13 +151,28 @@ export type HermesParityMetrics = {
   liveProven: HermesParityMetric;
 };
 
+export type HermesLiveProvenAttribution = {
+  capabilityId: string;
+  evidenceOrigin: HermesEvidenceOrigin;
+  proofKind: HermesProofKind;
+  proofScope: HermesProofScope;
+  source: string;
+  interface: string;
+  observedAt: string;
+  classification: "current" | "historical";
+};
+
 export type HermesProjectionProvenance =
   | { kind: "live_runtime"; label: "Live runtime projection"; capturedAt: string; fixtureId: null }
   | { kind: "acceptance_fixture"; label: "Acceptance fixture — not live runtime" | "Acceptance fixture — no live mutation performed"; capturedAt: string; fixtureId: string };
 
 export type HermesInstalledRuntime = {
   installation: HermesInstallationDetection;
+  /** Legacy fixture/profile context. Never use as an observed runtime fact. */
   profile: string;
+  configuredProfile: string;
+  observedActiveProfile: string | null;
+  observedProfileSource: string | null;
   adapter: string;
   provenance: HermesProjectionProvenance;
   live: {
@@ -220,6 +235,19 @@ export type HermesControlCenterSnapshot = {
     backendCommit: string | null;
     cabinetCommit: string | null;
     adapter: string;
+    observedRunningAgentVersion: string | null;
+    observedRunningAgentVersionSource: string | null;
+    observedRunningAgentObservedAt: string | null;
+    observedRunningAgentCommit: string | null;
+    observedRunningAgentCommitSource: string | null;
+    detectedAgentCheckoutCommit: string | null;
+    detectedAgentCheckoutCommitSource: string | null;
+    contracts: {
+      agentApiHealth: string;
+      management: string;
+      gateway: string;
+      desktop: string;
+    };
     upstreamAudit: {
       auditedAt: string;
       auditedCommit: string;
@@ -228,15 +256,28 @@ export type HermesControlCenterSnapshot = {
       stale: boolean;
     };
   };
-  health: { runtime: string; gateway: string; profile: string; openCli: string };
+  health: {
+    runtime: string;
+    gateway: string;
+    /** Legacy display field; equals observedActiveProfile or unknown. */
+    profile: string;
+    configuredProfile: string;
+    observedActiveProfile: string | null;
+    observedProfileSource: string | null;
+    openCli: string;
+  };
   exceptions: Array<{
-    capabilityId: string;
+    kind: "capability" | "source_group";
+    capabilityId: string | null;
+    sourceGroup: "management" | "gateway" | null;
+    dependentCount: number | null;
     title: string;
     health: Extract<HermesOperationalHealth, "degraded" | "conflicting_evidence" | "unavailable">;
     summary: string;
   }>;
   summary: Record<HermesCapabilityStatus, number>;
   parity: HermesParityMetrics & { byAudience: Record<HermesCapabilityAudience, HermesParityMetrics> };
+  liveProvenAttribution: HermesLiveProvenAttribution[];
   capabilities: HermesCapabilityProjection[];
   live: HermesInstalledRuntime["live"];
   developerRepository: {

@@ -26,6 +26,13 @@ test("represents a project with no repository as connected-empty association con
     assert.equal(active.repositoryAssociated, false);
 });
 
+test("keeps an unavailable sessions source distinct from connected-empty project context", () => {
+  const unavailable = normalizeProjectObservation({ sessions: [], unavailable: true }, "operator-os", observedAt);
+  assert.equal(unavailable.state, "unavailable");
+  assert.equal(unavailable.repositoryAssociated, false);
+  assert.match(unavailable.summary, /unavailable/i);
+});
+
 test("deduplicates worktrees and preserves detached and multiple-current ambiguity", () => {
     const result = normalizeWorktreeObservation([
       { path: "/Users/private/main", branch: "main", current: true },

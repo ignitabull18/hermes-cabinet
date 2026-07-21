@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireApiAuth } from "@/lib/auth/request-gate";
 import { getCabinetRuntimeMode } from "@/lib/runtime/runtime-config";
 import { HermesManagementClient } from "@/lib/hermes/management-client";
-import { HermesConfigurationError, readHermesServerConfig } from "@/lib/hermes/server-config";
+import { HermesConfigurationError, readHermesReadOnlyServerConfig, readHermesServerConfig } from "@/lib/hermes/server-config";
 
 export const dynamic = "force-dynamic";
 
-function client(): HermesManagementClient {
+function strictClient(): HermesManagementClient {
   return new HermesManagementClient(readHermesServerConfig());
+}
+
+function readOnlyClient(): HermesManagementClient {
+  return new HermesManagementClient(readHermesReadOnlyServerConfig());
 }
 
 const operationKey = Symbol.for("cabinet.hermes.management-operations");
@@ -19,7 +23,7 @@ export async function GET(request: NextRequest) {
   const unauthorized = await requireApiAuth(request);
   if (unauthorized) return unauthorized;
   if (getCabinetRuntimeMode() !== "hermes") return NextResponse.json({ error: "Hermes runtime mode is disabled." }, { status: 404 });
-  try { return NextResponse.json(await client().snapshot(), { headers: { "Cache-Control": "no-store" } }); }
+  try { return NextResponse.json(await readOnlyClient().snapshot(), { headers: { "Cache-Control": "no-store" } }); }
   catch (error) {
     const status = error instanceof HermesConfigurationError ? 503 : 502;
     return NextResponse.json({ error: error instanceof Error ? error.message : "Hermes management is unavailable." }, { status });
@@ -45,7 +49,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "The idempotency key is already bound to a different Hermes change." }, { status: 409 });
     }
     if (!operation) {
-      operation = { action: body.action, payload: serializedPayload, promise: client().perform(body.action, payload) };
+      operation = { action: body.action, payload: serializedPayload, promise: strictClient().perform(body.action, payload) };
       operations().set(key, operation);
     }
     const result = await operation.promise;

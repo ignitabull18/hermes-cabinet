@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ShieldAlert, TriangleAlert } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -27,7 +27,20 @@ type ApiResponse = {
   preview?: HermesRuntimeInterventionPreview;
   result?: HermesRuntimeInterventionResult;
   error?: string;
+  enabled?: boolean;
 };
+
+let interventionStatusPromise: Promise<boolean> | null = null;
+
+function readInterventionStatus(): Promise<boolean> {
+  interventionStatusPromise ??= fetch("/api/hermes/runtime-interventions", { cache: "no-store" })
+    .then(async (response) => {
+      const body = await response.json() as ApiResponse;
+      return response.ok && body.enabled === true;
+    })
+    .catch(() => false);
+  return interventionStatusPromise;
+}
 
 function fixturePreview(run: HermesExecutionRun, snapshot: HermesControlCenterSnapshot, reason: string): HermesRuntimeInterventionPreview {
   return {
@@ -107,6 +120,13 @@ export function RuntimeInterventionPanel({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const isFixture = snapshot.provenance.kind === "acceptance_fixture";
+  const [interventionsEnabled, setInterventionsEnabled] = useState<boolean | null>(isFixture ? false : null);
+  useEffect(() => {
+    if (isFixture) return;
+    let active = true;
+    void readInterventionStatus().then((enabled) => { if (active) setInterventionsEnabled(enabled); });
+    return () => { active = false; };
+  }, [isFixture]);
   if (!run.intervention) return null;
 
   const reset = () => {
@@ -189,8 +209,15 @@ export function RuntimeInterventionPanel({
         <h3 className="text-sm font-semibold">Governed intervention</h3>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">One run only. Preview first, then Jeremy explicitly commits.</p>
       </div>
-      <Button variant="outline" onClick={() => setOpen(true)}>
-        <ShieldAlert data-icon="inline-start" />{isFixture ? "Review safety preview" : "Prepare termination"}
+      {!isFixture && interventionsEnabled === false ? (
+        <Alert data-testid="hermes-interventions-disabled">
+          <ShieldAlert aria-hidden="true" />
+          <AlertTitle>Owner enablement required</AlertTitle>
+          <AlertDescription>Governed interventions are disabled. Read-only Hermes visibility remains available.</AlertDescription>
+        </Alert>
+      ) : null}
+      <Button variant="outline" onClick={() => setOpen(true)} disabled={!isFixture && interventionsEnabled !== true}>
+        <ShieldAlert data-icon="inline-start" />{isFixture ? "Review safety preview" : interventionsEnabled === true ? "Prepare termination" : interventionsEnabled === false ? "Owner enablement required" : "Checking owner enablement..."}
       </Button>
       <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) reset(); }}>
         <DialogContent className="sm:max-w-lg" data-testid="hermes-intervention-dialog">

@@ -2,29 +2,12 @@
 
 import { AlertTriangle, CircleDot, Loader2, XCircle } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { hermesHealthDisplay } from "@/lib/hermes/health-status";
 import type { HermesHealthSnapshot } from "@/lib/hermes/types";
-
-type ViewState = "connecting" | HermesHealthSnapshot["status"];
-
-function label(status: ViewState): string {
-  switch (status) {
-    case "connecting":
-      return "Hermes connecting";
-    case "online":
-      return "Hermes online";
-    case "authentication_failure":
-      return "Hermes authentication failed";
-    case "unavailable_profile":
-      return "Hermes profile unavailable";
-    case "misconfigured":
-      return "Hermes setup incomplete";
-    case "offline":
-      return "Hermes offline";
-  }
-}
 
 export function HermesConnectionStatus() {
   const [snapshot, setSnapshot] = useState<HermesHealthSnapshot | null>(null);
+  const [lastConfirmed, setLastConfirmed] = useState<HermesHealthSnapshot | null>(null);
   const [connecting, setConnecting] = useState(true);
 
   const refresh = useCallback(async () => {
@@ -32,15 +15,18 @@ export function HermesConnectionStatus() {
       const response = await fetch("/api/hermes/health", { cache: "no-store" });
       const data = (await response.json()) as HermesHealthSnapshot;
       setSnapshot(data);
+      if (data.status === "online") setLastConfirmed(data);
     } catch {
       setSnapshot({
         enabled: true,
-        status: "offline",
+        status: "probe_unavailable",
         version: null,
         profile: null,
+        profileSource: null,
         gatewayState: null,
         checkedAt: new Date().toISOString(),
-        message: "Cabinet could not reach the Hermes health bridge.",
+        observationSource: "GET /api/hermes/health",
+        message: "Cabinet could not reach the Hermes status route.",
       });
     } finally {
       setConnecting(false);
@@ -55,14 +41,12 @@ export function HermesConnectionStatus() {
 
   if (snapshot?.enabled === false) return null;
 
-  const state: ViewState = connecting ? "connecting" : snapshot?.status ?? "offline";
-  const online = state === "online";
-  const failure = state === "offline" || state === "authentication_failure";
-  const title = connecting
-    ? "Checking Hermes connectivity"
-    : [snapshot?.message, snapshot?.version && `Version ${snapshot.version}`, snapshot?.profile && `Profile ${snapshot.profile}`]
-        .filter(Boolean)
-        .join(" · ");
+  const display = hermesHealthDisplay(connecting ? null : snapshot, lastConfirmed);
+  const online = display.tone === "healthy";
+  const failure = display.tone === "failure";
+  const title = [display.detail, snapshot?.version && `Version ${snapshot.version}`, snapshot?.profile && `Profile ${snapshot.profile}`]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <button
@@ -81,7 +65,10 @@ export function HermesConnectionStatus() {
               : "text-amber-500 hover:bg-amber-500/10"
       }`}
       title={title}
-      aria-label={`${label(state)}. ${title}`}
+      aria-label={`${display.label}. ${title}`}
+      data-hermes-probe-source={display.currentSource}
+      data-hermes-probe-observed-at={display.currentObservedAt}
+      data-hermes-last-confirmed-at={display.lastConfirmedAt ?? undefined}
     >
       {connecting ? (
         <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
@@ -92,7 +79,7 @@ export function HermesConnectionStatus() {
       ) : (
         <AlertTriangle className="h-3 w-3" aria-hidden="true" />
       )}
-      <span className="@max-[920px]:hidden">{label(state)}</span>
+      <span className="@max-[920px]:hidden">{display.label}</span>
     </button>
   );
 }

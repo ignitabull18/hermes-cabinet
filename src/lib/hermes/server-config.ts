@@ -1,3 +1,6 @@
+import { assessHermesLiveReadiness, type HermesReadinessSourceState } from "./live-readonly-readiness";
+import { validateHermesUpstreamUrl } from "./upstream-url";
+
 export type HermesServerConfig = {
   apiBaseUrl: string;
   apiKey: string;
@@ -8,6 +11,25 @@ export type HermesServerConfig = {
   profile: string;
   timeoutMs: number;
 };
+
+export type HermesReadOnlyServerConfig = {
+  apiBaseUrl: string | null;
+  apiKey: string | null;
+  managementBaseUrl: string | null;
+  managementToken: string | null;
+  gatewayBaseUrl: string | null;
+  gatewayToken: string | null;
+  profile: string | null;
+  timeoutMs: number;
+  sourceStates: Record<"agent_api" | "management" | "gateway", HermesReadinessSourceState>;
+};
+
+/** Consequential Hermes runtime interventions are opt-in and server-only. */
+export function hermesInterventionsEnabled(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): boolean {
+  return env.CABINET_HERMES_INTERVENTIONS_ENABLED?.trim().toLowerCase() === "true";
+}
 
 export function hermesGatewayWebSocketUrl(config: HermesServerConfig): string {
   const url = new URL(config.gatewayBaseUrl);
@@ -46,23 +68,13 @@ function optional(value: string | undefined): string | null {
 
 function baseUrl(name: string, value: string | undefined): string {
   const raw = required(name, value);
-  let parsed: URL;
   try {
-    parsed = new URL(raw);
-  } catch {
+    return validateHermesUpstreamUrl(name, raw).baseUrl;
+  } catch (error) {
     throw new HermesConfigurationError(
-      `Invalid server configuration: ${name} must be an HTTP(S) URL`
+      error instanceof Error ? error.message : `Invalid server configuration: ${name} is not an approved loopback URL.`
     );
   }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new HermesConfigurationError(
-      `Invalid server configuration: ${name} must be an HTTP(S) URL`
-    );
-  }
-  parsed.pathname = parsed.pathname.replace(/\/+$/, "");
-  parsed.search = "";
-  parsed.hash = "";
-  return parsed.toString().replace(/\/$/, "");
 }
 
 function timeout(value: string | undefined): number {
@@ -97,5 +109,42 @@ export function readHermesServerConfig(
     ),
     profile: required("CABINET_HERMES_PROFILE", env.CABINET_HERMES_PROFILE),
     timeoutMs: timeout(env.CABINET_HERMES_TIMEOUT_MS),
+  };
+}
+
+/**
+ * Builds only complete, valid read-only source groups. Missing or invalid
+ * groups stay null and cannot borrow credentials or endpoints from another
+ * source. The strict mutation configuration above remains all-or-nothing.
+ */
+export function readHermesReadOnlyServerConfig(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): HermesReadOnlyServerConfig {
+  const readiness = assessHermesLiveReadiness(env);
+  const state = (id: "agent_api" | "management" | "gateway") =>
+    readiness.sources.find((source) => source.id === id)?.state ?? "unavailable";
+  const apiReady = state("agent_api") === "ready_to_probe";
+  const managementReady = state("management") === "ready_to_probe";
+  const gatewayReady = state("gateway") === "ready_to_probe";
+  return {
+    apiBaseUrl: apiReady ? validateHermesUpstreamUrl("CABINET_HERMES_API_URL", env.CABINET_HERMES_API_URL!).baseUrl : null,
+    apiKey: apiReady ? env.CABINET_HERMES_API_KEY!.trim() : null,
+    managementBaseUrl: managementReady
+      ? validateHermesUpstreamUrl("CABINET_HERMES_MANAGEMENT_URL", env.CABINET_HERMES_MANAGEMENT_URL!).baseUrl
+      : null,
+    managementToken: managementReady
+      ? (env.CABINET_HERMES_MANAGEMENT_TOKEN ?? env.HERMES_DASHBOARD_SESSION_TOKEN)!.trim()
+      : null,
+    gatewayBaseUrl: gatewayReady
+      ? validateHermesUpstreamUrl("CABINET_HERMES_GATEWAY_URL", env.CABINET_HERMES_GATEWAY_URL!).baseUrl
+      : null,
+    gatewayToken: gatewayReady ? env.CABINET_HERMES_GATEWAY_TOKEN!.trim() : null,
+    profile: optional(env.CABINET_HERMES_PROFILE),
+    timeoutMs: timeout(env.CABINET_HERMES_TIMEOUT_MS),
+    sourceStates: {
+      agent_api: state("agent_api"),
+      management: state("management"),
+      gateway: state("gateway"),
+    },
   };
 }
