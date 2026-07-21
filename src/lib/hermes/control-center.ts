@@ -108,6 +108,8 @@ function collectHermesObservations(
     for (const id of input.ids) add(id, input.source, input.interface, outcome, summary, { facts: typeof input.count === "number" ? { count: input.count } : undefined });
   };
   const developerOutcome = (state: typeof management.developerRepository.project.state): HermesEvidenceOutcome => state;
+  const agentOutcome = (state: typeof management.agentApi.sessions.state): HermesEvidenceOutcome =>
+    state === "authentication_failure" ? "failure" : state;
 
   add(
     "command-center",
@@ -123,10 +125,24 @@ function collectHermesObservations(
     }
   );
   endpoint({ ids: ["profiles"], area: "profiles", source: "Hermes profiles", interface: "/api/profiles", count: management.profiles.length, emptyOutcome: "not_configured" });
-  endpoint({ ids: ["skills"], area: "skills", source: "Hermes skills", interface: "/api/skills", count: management.skills.length });
+  const agentSkills = management.agentApi.skills;
+  if (managementReady) {
+    endpoint({ ids: ["skills"], area: "skills", source: "Hermes skills", interface: "/api/skills", count: management.skills.length });
+  } else {
+    add("skills", "Hermes Agent API skill catalog", agentSkills.interface, agentOutcome(agentSkills.state), agentSkills.summary, {
+      observedAt: agentSkills.observedAt,
+      facts: {
+        count: agentSkills.items.length,
+        skills: agentSkills.items,
+        sourceGroup: "agent_api",
+        partialClaim: true,
+        limitation: "GET /v1/skills reports available names and categories but does not report per-skill enabled state or provenance.",
+      },
+      installedBackendVersion: health.version,
+      installedBackendCommit: null,
+    });
+  }
   endpoint({ ids: ["cron"], area: "cron", source: "Hermes cron jobs", interface: "/api/cron/jobs", count: management.jobs.length });
-  const agentOutcome = (state: typeof management.agentApi.sessions.state): HermesEvidenceOutcome =>
-    state === "authentication_failure" ? "failure" : state;
   const agentSessions = management.agentApi.sessions;
   if (managementReady) {
     endpoint({ ids: ["chat", "archived-chats", "session-pinning"], area: "sessions", source: "Hermes sessions", interface: "/api/sessions", count: management.operator.sessions.length });
@@ -192,7 +208,23 @@ function collectHermesObservations(
   }
   endpoint({ ids: ["mcp"], area: "mcp", source: "Hermes MCP servers", interface: "/api/mcp/servers", count: management.mcpServers.length });
   endpoint({ ids: ["plugins"], area: "plugins", source: "Hermes dashboard plugins", interface: "/api/dashboard/plugins", count: management.plugins.length });
-  endpoint({ ids: ["executor", "api-keys-tools"], area: "toolsets", source: "Hermes toolsets", interface: "/api/tools/toolsets", count: management.toolsets.length });
+  const agentToolsets = management.agentApi.toolsets;
+  if (managementReady) {
+    endpoint({ ids: ["executor", "api-keys-tools"], area: "toolsets", source: "Hermes toolsets", interface: "/api/tools/toolsets", count: management.toolsets.length });
+  } else {
+    add("executor", "Hermes Agent API toolset catalog", agentToolsets.interface, agentOutcome(agentToolsets.state), "The Agent toolset catalog is visible but does not prove Executor operational health.", {
+      observedAt: agentToolsets.observedAt,
+      facts: { count: agentToolsets.items.length, toolsets: agentToolsets.items, sourceGroup: "agent_api", partialClaim: true, limitation: "Catalog presence does not prove Executor health or active execution." },
+      installedBackendVersion: health.version,
+      installedBackendCommit: null,
+    });
+    add("api-keys-tools", "Hermes Agent API toolset catalog", agentToolsets.interface, agentOutcome(agentToolsets.state), "The Agent toolset catalog is visible but does not prove API-key configuration.", {
+      observedAt: agentToolsets.observedAt,
+      facts: { count: agentToolsets.items.length, toolsets: agentToolsets.items, sourceGroup: "agent_api", partialClaim: true, limitation: "Catalog configuration flags do not expose or prove canonical API-key state." },
+      installedBackendVersion: health.version,
+      installedBackendCommit: null,
+    });
+  }
 
   const execution = management.runtimeExecution;
   const executionOutcome = (state: typeof execution.runSource.state): HermesEvidenceOutcome => state;
@@ -427,6 +459,8 @@ export async function getHermesControlCenterSnapshot(): Promise<HermesControlCen
       memoryNamespace: management.memory.namespace,
       diagnostics: management.diagnostics,
       sessionCollection: management.agentApi.sessions,
+      skillCatalog: management.agentApi.skills,
+      toolsetCatalog: management.agentApi.toolsets,
       operator: management.operator,
     },
   };

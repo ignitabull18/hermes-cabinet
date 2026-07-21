@@ -150,6 +150,8 @@ const installedRuntime: HermesInstalledRuntime = {
       identitySummary: "Page item labels identify only the current loaded page and may change when its ordering changes.",
       items: [],
     },
+    skillCatalog: { state: "unavailable", observedAt: HERMES_ACCEPTANCE_FIXTURE_CAPTURED_AT, summary: "Agent skill catalog not exercised by this fixture.", interface: "/v1/skills", totalCount: 0, duplicateCount: 0, truncated: false, items: [] },
+    toolsetCatalog: { state: "unavailable", observedAt: HERMES_ACCEPTANCE_FIXTURE_CAPTURED_AT, summary: "Agent toolset catalog not exercised by this fixture.", interface: "/v1/toolsets", platform: null, totalCount: 0, duplicateCount: 0, truncated: false, items: [] },
     operator: {
       runtime: { gatewayMode: "local", gatewayState: "stopped", gatewayRunning: false, gatewayBusy: false, lastConnection: HERMES_ACCEPTANCE_FIXTURE_CAPTURED_AT, observedAt: HERMES_ACCEPTANCE_FIXTURE_CAPTURED_AT, activeAgentCount: 1, activeSessionCount: 1 },
       agents: { available: true, active: [{ id: "worker-1", parentSessionId: "session-1", runId: "run-1", task: "Review projection integrity", profile: "operator-os", state: "running", currentAction: "Reading capability observations", startedAt: HERMES_ACCEPTANCE_FIXTURE_CAPTURED_AT, result: "session_token=fixture-secret-result", error: "api_key=fixture-secret-agent", canInterrupt: true }], recent: [] },

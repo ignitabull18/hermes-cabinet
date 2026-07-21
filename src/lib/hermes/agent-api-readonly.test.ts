@@ -14,6 +14,12 @@ function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
+function emptyCatalogResponse(url: string): Response | null {
+  if (url.endsWith("/v1/skills")) return response({ object: "list", data: [] });
+  if (url.endsWith("/v1/toolsets")) return response({ object: "list", platform: "api_server", data: [] });
+  return null;
+}
+
 test("Agent API read-only collector uses Bearer auth, blocks redirects, and calls no mutation or content endpoints", async () => {
   const requests: Array<{ url: string; method: string; redirect: RequestRedirect | undefined; auth: string | null }> = [];
   const result = await collectAgentApiReadOnly(config, async (input, init) => {
@@ -22,13 +28,17 @@ test("Agent API read-only collector uses Bearer auth, blocks redirects, and call
     if (url.endsWith("/v1/capabilities")) return response({ object: "capabilities", features: { session_resources: true } });
     if (url.includes("/api/sessions?")) return response({ object: "list", data: [], has_more: false });
     if (url.endsWith("/v1/models")) return response({ object: "list", data: [] });
+    const catalog = emptyCatalogResponse(url);
+    if (catalog) return catalog;
     throw new Error("unexpected endpoint");
   });
 
   assert.equal(result.sessions.state, "connected_empty");
   assert.equal(result.sessions.coverage, "complete");
   assert.equal(result.models.state, "connected_empty");
-  assert.equal(requests.length, 3);
+  assert.equal(result.skills.state, "connected_empty");
+  assert.equal(result.toolsets.state, "connected_empty");
+  assert.equal(requests.length, 5);
   assert.ok(requests.every((item) => item.method === "GET" && item.redirect === "error" && item.auth === `Bearer ${secret}`));
   assert.ok(requests.every((item) => !/messages|events|runs\//.test(item.url)));
   assert.doesNotMatch(JSON.stringify(result), new RegExp(`${secret}|configured-profile-is-not-observed`, "i"));
@@ -46,6 +56,8 @@ test("session projection preserves bounded lineage and usage while removing raw 
     const url = String(input);
     if (url.endsWith("/v1/capabilities")) return response({ object: "capabilities" });
     if (url.endsWith("/v1/models")) return response({ data: [{ id: "model-a", owned_by: "Hermes" }] });
+    const catalog = emptyCatalogResponse(url);
+    if (catalog) return catalog;
     return response({ data: [
       { id: canaries.id, title: canaries.title, preview: canaries.preview, user_id: canaries.user, source: "api", model: "model-a", started_at: "2026-07-20T10:00:00Z", last_active: "2026-07-20T10:10:00Z", message_count: 3, tool_call_count: 2, input_tokens: 100, output_tokens: 20 },
       { id: canaries.child, parent_session_id: canaries.id, source: "api", model: "model-a", started_at: "2026-07-20T10:05:00Z", ended_at: "2026-07-20T10:09:00Z", actual_cost_usd: 0.02 },
@@ -67,6 +79,8 @@ test("missing parent becomes a nonsecret earlier-session label and oversized/con
     const url = String(input);
     if (url.endsWith("/v1/capabilities")) return response({});
     if (url.endsWith("/v1/models")) return response({ data: [{ id: `\u001b[31m${"x".repeat(300)}`, owned_by: "Hermes\nowner" }] });
+    const catalog = emptyCatalogResponse(url);
+    if (catalog) return catalog;
     return response({ data: [{ id: "child", parent_session_id: "absent-parent-secret", source: `\u001b[31m${"s".repeat(200)}` }] });
   });
   assert.equal(result.sessions.items[0]?.parentDisplayId, null);
@@ -81,6 +95,8 @@ test("session coverage preserves pagination truth and bounds malformed or oversi
     const url = String(input);
     if (url.endsWith("/v1/capabilities")) return response({});
     if (url.endsWith("/v1/models")) return response({ data: [] });
+    const catalog = emptyCatalogResponse(url);
+    if (catalog) return catalog;
     return response(body);
   });
   const partial = await collect({ data: Array.from({ length: 100 }, (_, index) => ({ id: `20260720_120000_${index.toString(16).padStart(6, "0")}` })), has_more: true, limit: 100, offset: 0 });
@@ -102,6 +118,8 @@ test("page-local labels remain honest while deduplication is deterministic and l
     const url = String(input);
     if (url.endsWith("/v1/capabilities")) return response({});
     if (url.endsWith("/v1/models")) return response({ data: [] });
+    const catalog = emptyCatalogResponse(url);
+    if (catalog) return catalog;
     return response({ data, has_more: true });
   });
   const older = { id: "20260720_120000_abcdef", source: "older", last_active: "2026-07-20T12:00:00Z" };
@@ -126,7 +144,14 @@ test("page-local labels remain honest while deduplication is deterministic and l
 test("equal-time duplicate conflicts are visible without letting array order select the winner", async () => {
   const left = { id: "duplicate", source: "alpha", last_active: "2026-07-20T12:00:00Z" };
   const right = { id: "duplicate", source: "zeta", last_active: "2026-07-20T12:00:00Z" };
-  const collect = (data: unknown[]) => collectAgentApiReadOnly(config, async (input) => String(input).endsWith("/v1/capabilities") ? response({}) : String(input).endsWith("/v1/models") ? response({ data: [] }) : response({ data, has_more: false }));
+  const collect = (data: unknown[]) => collectAgentApiReadOnly(config, async (input) => {
+    const url = String(input);
+    if (url.endsWith("/v1/capabilities")) return response({});
+    if (url.endsWith("/v1/models")) return response({ data: [] });
+    const catalog = emptyCatalogResponse(url);
+    if (catalog) return catalog;
+    return response({ data, has_more: false });
+  });
   const a = await collect([left, right]);
   const b = await collect([right, left]);
   assert.equal(a.sessions.items[0]?.source, b.sessions.items[0]?.source);
@@ -144,6 +169,59 @@ test("source failures stay independent and never borrow overall Agent health", a
   assert.equal(result.contract.state, "success");
   assert.equal(result.sessions.state, "failure");
   assert.equal(result.models.state, "unavailable");
+  assert.equal(result.skills.state, "failure");
+  assert.equal(result.toolsets.state, "failure");
+});
+
+test("skill and toolset catalogs expose only bounded safe metadata and counts", async () => {
+  const canaries = [
+    "Authorization: Bearer catalog-secret",
+    "https://user:token@example.test/tool?token=secret",
+    "/Users/private/.config/credentials.json",
+    "run-command; rm -rf /",
+    "SECRET DESCRIPTION SHOULD NEVER EGRESS",
+    "tool_payload_secret",
+  ];
+  const result = await collectAgentApiReadOnly(config, async (input) => {
+    const url = String(input);
+    if (url.endsWith("/v1/capabilities")) return response({ endpoints: { skills: { path: "/v1/skills" }, toolsets: { path: "/v1/toolsets" } } });
+    if (url.includes("/api/sessions?")) return response({ data: [], has_more: false });
+    if (url.endsWith("/v1/models")) return response({ data: [] });
+    if (url.endsWith("/v1/skills")) return response({ data: [
+      { name: "research", category: "productivity", description: canaries[4], path: canaries[2] },
+      { name: "research", category: "duplicate", description: "duplicate" },
+      { name: canaries[0], category: canaries[2], description: canaries[1] },
+    ] });
+    return response({ platform: "api_server", data: [
+      { name: "browser", label: "Browser", enabled: true, configured: false, tools: ["read", canaries[5]], description: canaries[4], command: canaries[3], url: canaries[1], headers: { Authorization: canaries[0] } },
+      { name: "browser", label: "Browser duplicate", enabled: false, configured: true, tools: [] },
+      { name: "unsafe", label: canaries[3], enabled: true, configured: true, tools: [canaries[5]] },
+    ] });
+  });
+  assert.equal(result.skills.totalCount, 3);
+  assert.equal(result.skills.duplicateCount, 1);
+  assert.equal(result.toolsets.totalCount, 3);
+  assert.equal(result.toolsets.duplicateCount, 1);
+  assert.equal(result.toolsets.items[0]?.toolCount, 2);
+  assert.equal("description" in (result.skills.items[0] ?? {}), false);
+  assert.equal("tools" in (result.toolsets.items[0] ?? {}), false);
+  const serialized = JSON.stringify(result);
+  for (const canary of canaries) assert.equal(serialized.includes(canary), false);
+  assert.doesNotMatch(serialized, /tool_payload_secret|rm -rf|example\.test|\/Users\/private/);
+});
+
+test("catalog connected-empty, unavailable, and source failures remain independent", async () => {
+  const result = await collectAgentApiReadOnly(config, async (input) => {
+    const url = String(input);
+    if (url.endsWith("/v1/capabilities")) return response({});
+    if (url.includes("/api/sessions?")) return response({ data: [], has_more: false });
+    if (url.endsWith("/v1/models")) return response({ data: [] });
+    if (url.endsWith("/v1/skills")) return response({ data: [] });
+    return response({}, 404);
+  });
+  assert.equal(result.skills.state, "connected_empty");
+  assert.equal(result.toolsets.state, "unavailable");
+  assert.equal(result.sessions.state, "connected_empty");
 });
 
 test("authentication failure never includes response payloads or credentials", async () => {

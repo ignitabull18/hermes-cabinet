@@ -1,4 +1,5 @@
 import type { HermesReadOnlyServerConfig, HermesServerConfig } from "./server-config";
+import { sanitizeHermesText } from "./control-center-sanitizer";
 
 export type HermesAgentApiSourceState =
   | "success"
@@ -66,6 +67,27 @@ export type HermesAgentApiReadOnlySnapshot = {
     interface: "/v1/models";
     items: Array<{ displayId: string; ownedBy: string | null }>;
   };
+  skills: {
+    state: HermesAgentApiSourceState;
+    observedAt: string;
+    summary: string;
+    interface: "/v1/skills";
+    totalCount: number;
+    duplicateCount: number;
+    truncated: boolean;
+    items: Array<{ displayId: string; name: string; category: string | null; provenance: null; enabled: null }>;
+  };
+  toolsets: {
+    state: HermesAgentApiSourceState;
+    observedAt: string;
+    summary: string;
+    interface: "/v1/toolsets";
+    platform: string | null;
+    totalCount: number;
+    duplicateCount: number;
+    truncated: boolean;
+    items: Array<{ displayId: string; label: string; enabled: boolean | null; configured: boolean | null; toolCount: number | null; provenance: string | null }>;
+  };
 };
 
 type Fetch = typeof fetch;
@@ -95,6 +117,8 @@ export type HermesKnownRunRead = {
 const MAX_SESSIONS = 100;
 const MAX_DISPLAYED_SESSIONS = 50;
 const MAX_MODELS = 100;
+const MAX_SKILLS = 200;
+const MAX_TOOLSETS = 100;
 
 function record(input: unknown): Record<string, unknown> {
   return input && typeof input === "object" && !Array.isArray(input) ? input as Record<string, unknown> : {};
@@ -109,6 +133,19 @@ function bounded(input: unknown, fallback: string, max = 96): string {
   const clean = input.replace(/[\u0000-\u001f\u007f-\u009f\u001b]/g, " ").replace(/\s+/g, " ").trim();
   if (!clean) return fallback;
   return clean.length > max ? `${clean.slice(0, max - 1).trimEnd()}…` : clean;
+}
+
+function catalogLabel(input: unknown, fallback: string, max = 96): string {
+  const value = bounded(input, fallback, max);
+  const sanitized = sanitizeHermesText(value, max);
+  if (
+    sanitized.includes("[redacted")
+    || /(?:https?|file):\/\//i.test(sanitized)
+    || /^(?:[a-z]:[\\/]|[/~\\])/i.test(sanitized)
+    || /(?:authorization|proxy-authorization)\s*:/i.test(sanitized)
+    || /[;$`]|\$\(|\|\||&&/.test(sanitized)
+  ) return fallback;
+  return sanitized;
 }
 
 function timestamp(input: unknown): string | null {
@@ -162,6 +199,8 @@ function unavailableSnapshot(now: string, state: HermesAgentApiSourceState, summ
       items: [],
     },
     models: { state, observedAt: now, summary, interface: "/v1/models", items: [] },
+    skills: { state, observedAt: now, summary, interface: "/v1/skills", totalCount: 0, duplicateCount: 0, truncated: false, items: [] },
+    toolsets: { state, observedAt: now, summary, interface: "/v1/toolsets", platform: null, totalCount: 0, duplicateCount: 0, truncated: false, items: [] },
   };
 }
 
@@ -202,10 +241,12 @@ export async function collectAgentApiReadOnly(
     }
   };
 
-  const [contractRaw, sessionsRaw, modelsRaw] = await Promise.all([
+  const [contractRaw, sessionsRaw, modelsRaw, skillsRaw, toolsetsRaw] = await Promise.all([
     request("/v1/capabilities"),
     request(`/api/sessions?limit=${MAX_SESSIONS}&offset=0&include_children=true`),
     request("/v1/models"),
+    request("/v1/skills"),
+    request("/v1/toolsets"),
   ]);
 
   const sessionEnvelope = record(sessionsRaw.value);
@@ -293,6 +334,75 @@ export async function collectAgentApiReadOnly(
     ownedBy: typeof item.owned_by === "string" ? bounded(item.owned_by, "Hermes", 64) : null,
   }));
 
+  const normalizeCatalog = <T>(
+    input: unknown,
+    max: number,
+    identity: (item: Record<string, unknown>) => string | null,
+    project: (item: Record<string, unknown>, displayId: string) => T,
+    quality: (item: Record<string, unknown>) => number,
+    prefix: string,
+  ): { items: T[]; totalCount: number; duplicateCount: number; truncated: boolean } => {
+    const raw = array(record(input).data);
+    const boundedRows = raw.slice(0, max).map(record);
+    const grouped = new Map<string, Record<string, unknown>[]>();
+    const anonymous: Record<string, unknown>[] = [];
+    for (const item of boundedRows) {
+      const id = identity(item);
+      if (id) grouped.set(id, [...(grouped.get(id) ?? []), item]);
+      else anonymous.push(item);
+    }
+    let duplicateCount = 0;
+    const selected = [...grouped.entries()].map(([id, rows]) => {
+      duplicateCount += Math.max(0, rows.length - 1);
+      const item = rows.toSorted((left, right) => {
+        const qualityDifference = quality(right) - quality(left);
+        if (qualityDifference) return qualityDifference;
+        const safeLeft = JSON.stringify(project(left, `${prefix} candidate`));
+        const safeRight = JSON.stringify(project(right, `${prefix} candidate`));
+        return safeLeft.localeCompare(safeRight);
+      })[0];
+      return { id, item };
+    }).toSorted((left, right) => left.id.localeCompare(right.id));
+    const rows = [...selected.map((entry) => entry.item), ...anonymous];
+    return {
+      items: rows.map((item, index) => project(item, `${prefix} ${index + 1}`)),
+      totalCount: raw.length,
+      duplicateCount,
+      truncated: raw.length > max,
+    };
+  };
+  const skills = normalizeCatalog(
+    skillsRaw.value,
+    MAX_SKILLS,
+    (item) => typeof item.name === "string" ? item.name.trim().toLowerCase() || null : null,
+    (item, displayId) => ({
+      displayId,
+      name: catalogLabel(item.name, displayId, 96),
+      category: typeof item.category === "string" ? catalogLabel(item.category, "Uncategorized", 64) : null,
+      provenance: null,
+      enabled: null,
+    }),
+    (item) => Number(typeof item.category === "string" && Boolean(item.category.trim())),
+    "Skill",
+  );
+  const toolsets = normalizeCatalog(
+    toolsetsRaw.value,
+    MAX_TOOLSETS,
+    (item) => typeof item.name === "string" ? item.name.trim().toLowerCase() || null : null,
+    (item, displayId) => ({
+      displayId,
+      label: catalogLabel(item.label ?? item.name, displayId, 96),
+      enabled: typeof item.enabled === "boolean" ? item.enabled : null,
+      configured: typeof item.configured === "boolean" ? item.configured : null,
+      toolCount: Array.isArray(item.tools) ? Math.min(item.tools.length, 10_000) : null,
+      provenance: typeof record(toolsetsRaw.value).platform === "string" ? catalogLabel(record(toolsetsRaw.value).platform, "Hermes Agent", 48) : null,
+    }),
+    (item) => Number(typeof item.enabled === "boolean")
+      + Number(typeof item.configured === "boolean")
+      + (Array.isArray(item.tools) ? Math.min(item.tools.length, 10_000) : 0),
+    "Toolset",
+  );
+
   const hasMore = typeof sessionEnvelope.has_more === "boolean" ? sessionEnvelope.has_more : null;
   const responseLimit = integer(sessionEnvelope.limit);
   const responseOffset = integer(sessionEnvelope.offset);
@@ -340,6 +450,21 @@ export async function collectAgentApiReadOnly(
       summary: modelsRaw.state === "success" ? `Hermes Agent advertised ${models.length} model identities.` : modelsRaw.summary,
       interface: "/v1/models",
       items: models,
+    },
+    skills: {
+      state: skillsRaw.state === "success" ? (skills.items.length ? "success" : "connected_empty") : skillsRaw.state,
+      observedAt: skillsRaw.observedAt,
+      summary: skillsRaw.state === "success" ? `Hermes Agent reported ${skills.items.length} bounded skill catalog records.` : skillsRaw.summary,
+      interface: "/v1/skills",
+      ...skills,
+    },
+    toolsets: {
+      state: toolsetsRaw.state === "success" ? (toolsets.items.length ? "success" : "connected_empty") : toolsetsRaw.state,
+      observedAt: toolsetsRaw.observedAt,
+      summary: toolsetsRaw.state === "success" ? `Hermes Agent reported ${toolsets.items.length} bounded toolset catalog records.` : toolsetsRaw.summary,
+      interface: "/v1/toolsets",
+      platform: typeof record(toolsetsRaw.value).platform === "string" ? catalogLabel(record(toolsetsRaw.value).platform, "Hermes Agent", 48) : null,
+      ...toolsets,
     },
   };
 }
