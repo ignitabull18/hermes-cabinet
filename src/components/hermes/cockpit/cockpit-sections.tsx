@@ -157,6 +157,7 @@ export function DailyMomentum({ cockpit }: { cockpit: DailyBusinessCockpit }) {
 export function NextBestMove({
   card,
   busy,
+  managementAvailable,
   resumeStep,
   onOpen,
   onChooseAnother,
@@ -164,6 +165,7 @@ export function NextBestMove({
 }: {
   card: CockpitCard | null;
   busy: LoadingState;
+  managementAvailable: boolean;
   resumeStep?: string;
   onOpen: (card: CockpitCard) => void;
   onChooseAnother: () => void;
@@ -181,6 +183,7 @@ export function NextBestMove({
     );
   }
   const action = primaryAction(card);
+  const actionUnavailable = action === "schedule" && !managementAvailable;
   return (
     <section className="relative min-h-0 overflow-hidden rounded-2xl bg-card p-3 shadow-sm ring-1 ring-command/25 sm:min-h-40 sm:p-4" data-testid="cockpit-next-best-move">
       <div className="absolute inset-y-0 start-0 w-1 bg-command" aria-hidden="true" />
@@ -196,7 +199,7 @@ export function NextBestMove({
       {resumeStep ? <p className="mt-1 truncate text-[11px] text-command">Last completed step: {resumeStep}</p> : null}
       <p className="mt-1.5 line-clamp-1 text-sm text-muted-foreground">{cardConsequence(card)}</p>
       <div className="mt-2.5 flex flex-wrap items-center gap-2 sm:mt-3">
-        <Button className="bg-command text-white hover:bg-command/90" disabled={busy !== null} onClick={() => void onAction(action, card)}>
+        <Button className="bg-command text-white hover:bg-command/90" disabled={busy !== null || actionUnavailable} title={actionUnavailable ? "Hermes Management is unavailable." : undefined} onClick={() => void onAction(action, card)}>
           {action === "investigate" ? <FileSearch data-icon="inline-start" /> : <Check data-icon="inline-start" />}
           {ACTION_LABELS[action]}
         </Button>
@@ -285,6 +288,17 @@ export function SystemFailureAlert({ cockpit, onReauthenticate }: { cockpit: Dai
       <AlertTitle>{failures.length + (hermesFailed ? 1 : 0)} system exception{failures.length + (hermesFailed ? 1 : 0) === 1 ? "" : "s"}</AlertTitle>
       <AlertDescription className="hidden sm:block">{failures.map(([name]) => name).join(", ") || "Hermes"} needs attention. Current evidence remains clearly separated from failed sources.</AlertDescription>
       {invalidGrant ? <AlertAction><Button size="sm" variant="outline" onClick={onReauthenticate}><KeyRound data-icon="inline-start" />Reauthenticate</Button></AlertAction> : null}
+    </Alert>
+  );
+}
+
+export function ManagementAvailabilityNotice({ cockpit }: { cockpit: DailyBusinessCockpit }) {
+  if (cockpit.management.status === "success") return null;
+  return (
+    <Alert className="border-warning/30 bg-warning/5" data-testid="cockpit-management-unavailable">
+      <AlertTriangle className="text-warning" />
+      <AlertTitle>Hermes Management unavailable</AlertTitle>
+      <AlertDescription>{cockpit.management.message}</AlertDescription>
     </Alert>
   );
 }

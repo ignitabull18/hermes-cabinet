@@ -10,6 +10,13 @@ export const COCKPIT_CARD_KINDS = [
 export type CockpitCardKind = (typeof COCKPIT_CARD_KINDS)[number];
 export type CockpitSourceKind = "gmail" | "calendar" | "hermes_job" | "manual_risk" | "hermes_run" | "memory";
 export type CockpitSourceStatus = "connected" | "connected_empty" | "partial" | "unavailable" | "error";
+export type CockpitManagementStatus =
+  | "success"
+  | "not_configured"
+  | "authentication_failure"
+  | "unavailable"
+  | "endpoint_failure"
+  | "unknown_profile";
 export type CockpitUrgency = "critical" | "high" | "normal" | "low";
 export type CockpitApprovalState = "not_required" | "pending" | "approved" | "rejected";
 
@@ -164,6 +171,11 @@ export type DailyBusinessCockpit = {
   shadowMode: true;
   profile: string;
   health: HermesHealthSnapshot;
+  management: {
+    status: CockpitManagementStatus;
+    message: string;
+    checkedAt: string;
+  };
   memory: {
     namespace: string;
     provider: string;

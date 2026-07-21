@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
-import { HermesManagementClient } from "./management-client";
+import { HermesManagementClient, type HermesManagementStatusObservation } from "./management-client";
 import { HermesRunClient } from "./run-client";
 import { getHermesRunBridge } from "./run-bridge";
-import { readHermesServerConfig } from "./server-config";
+import { readHermesReadOnlyServerConfig, readHermesRunServerConfig } from "./server-config";
 import { buildIntakePrompt, parseCockpitActionOutcome, parseCockpitIntake } from "./cockpit-contract";
 import {
   addManualRisk,
@@ -32,12 +32,31 @@ import {
 import type { HermesManagementSnapshot, HermesRunProjection } from "./types";
 
 function bridge() {
-  return getHermesRunBridge(() => new HermesRunClient(readHermesServerConfig()));
+  return getHermesRunBridge(() => new HermesRunClient(readHermesRunServerConfig()));
 }
 
 function clients() {
-  const config = readHermesServerConfig();
+  const config = readHermesReadOnlyServerConfig();
   return { management: new HermesManagementClient(config), config };
+}
+
+function managementMessage(state: HermesManagementStatusObservation["state"]): string {
+  if (state === "not_configured") {
+    return "Hermes Management is not configured. Management-backed intelligence is unavailable.";
+  }
+  if (state === "authentication_failure") {
+    return "Hermes Management authentication failed. Management-backed intelligence is unavailable.";
+  }
+  if (state === "unavailable") {
+    return "Hermes Management endpoint is unavailable. Management-backed intelligence is unavailable.";
+  }
+  if (state === "endpoint_failure") {
+    return "Hermes Management endpoint failed. Management-backed intelligence is unavailable.";
+  }
+  if (state === "unknown_profile") {
+    return "Hermes Management did not confirm the active profile. Management-backed intelligence is unavailable.";
+  }
+  return "Hermes Management is connected.";
 }
 
 function compact(value: string | null, fallback: string): string {
@@ -46,18 +65,26 @@ function compact(value: string | null, fallback: string): string {
   return oneLine.length > 240 ? `${oneLine.slice(0, 237)}...` : oneLine;
 }
 
-function sourceDefaults(management: HermesManagementSnapshot, manualRiskCount: number): CockpitSourceCoverage {
+function sourceDefaults(
+  management: HermesManagementSnapshot,
+  managementStatus: HermesManagementStatusObservation["state"],
+  manualRiskCount: number,
+): CockpitSourceCoverage {
+  const managementAvailable = managementStatus === "success";
+  const unavailableMessage = managementMessage(managementStatus);
   const memoryHealthy = management.memory.recallHealth === "healthy" && management.memory.captureState === "active";
   return {
     gmail: { status: "unavailable", message: "No completed intake has verified Gmail access yet.", evidenceCount: 0 },
     calendar: { status: "unavailable", message: "No completed intake has verified Calendar access yet.", evidenceCount: 0 },
-    hermesJobs: { status: management.jobs.length ? "connected" : "connected_empty", message: `${management.jobs.length} canonical Hermes jobs inspected.`, evidenceCount: management.jobs.length },
+    hermesJobs: managementAvailable
+      ? { status: management.jobs.length ? "connected" : "connected_empty", message: `${management.jobs.length} canonical Hermes jobs inspected.`, evidenceCount: management.jobs.length }
+      : { status: "unavailable", message: unavailableMessage, evidenceCount: 0 },
     manualRisks: { status: manualRiskCount ? "connected" : "connected_empty", message: `${manualRiskCount} open manual risks inspected.`, evidenceCount: manualRiskCount },
-    supermemory: {
+    supermemory: managementAvailable ? {
       status: memoryHealthy ? "connected" : "partial",
       message: `${management.memory.namespace}; capture ${management.memory.captureState}; recall ${management.memory.recallHealth}.`,
       evidenceCount: memoryHealthy ? 1 : 0,
-    },
+    } : { status: "unavailable", message: unavailableMessage, evidenceCount: 0 },
   };
 }
 
@@ -137,7 +164,11 @@ async function ingestCompletedIntakes(runs: HermesRunProjection[]): Promise<void
 
 export async function getDailyBusinessCockpit(): Promise<DailyBusinessCockpit> {
   const { management, config } = clients();
-  const [health, managementSnapshot] = await Promise.all([management.health(), management.snapshot()]);
+  const [health, managementStatus] = await Promise.all([
+    management.health(),
+    management.managementStatus(),
+  ]);
+  const managementSnapshot = await management.snapshot(health, managementStatus);
   const allRuns = bridge().list();
   await ingestCompletedIntakes(allRuns);
   await ingestCompletedCockpitActions(allRuns);
@@ -162,10 +193,13 @@ export async function getDailyBusinessCockpit(): Promise<DailyBusinessCockpit> {
     const rank = { critical: 0, high: 1, normal: 2, low: 3 } as const;
     return rank[a.urgency] - rank[b.urgency] || b.createdAt.localeCompare(a.createdAt);
   });
-  const sourceCoverage = latest?.sourceCoverage ?? sourceDefaults(managementSnapshot, openRisks.length);
-  sourceCoverage.hermesJobs = sourceDefaults(managementSnapshot, openRisks.length).hermesJobs;
-  sourceCoverage.manualRisks = sourceDefaults(managementSnapshot, openRisks.length).manualRisks;
-  sourceCoverage.supermemory = sourceDefaults(managementSnapshot, openRisks.length).supermemory;
+  const defaults = sourceDefaults(managementSnapshot, managementStatus.state, openRisks.length);
+  const sourceCoverage: CockpitSourceCoverage = {
+    ...(latest?.sourceCoverage ?? defaults),
+    hermesJobs: defaults.hermesJobs,
+    manualRisks: defaults.manualRisks,
+    supermemory: defaults.supermemory,
+  };
   const cockpitRuns = allRuns.filter((run) => run.context.startsWith("cockpit:"));
   const views = state.actions.filter((item) => item.action === "viewed").length;
   const actionsStarted = state.actions.filter((item) => item.outcome === "started").length;
@@ -177,8 +211,13 @@ export async function getDailyBusinessCockpit(): Promise<DailyBusinessCockpit> {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
     shadowMode: true,
-    profile: config.profile,
+    profile: config.profile ?? "Unknown profile",
     health,
+    management: {
+      status: managementStatus.state,
+      message: managementMessage(managementStatus.state),
+      checkedAt: managementStatus.checkedAt,
+    },
     memory: {
       namespace: managementSnapshot.memory.namespace,
       provider: managementSnapshot.memory.activeProvider,
@@ -231,7 +270,7 @@ export async function startDailyIntake(idempotencyKey: string, timezone: string)
     capability: "daily-business-intake",
     idempotencyKey,
   });
-  await recordCockpitAction({ cardId: "intake", action: "intake_started", actor: "Jeremy", runId: run.runId, requestId: null, outcome: "started", detail: `Read-only intake started for ${config.profile}.` });
+  await recordCockpitAction({ cardId: "intake", action: "intake_started", actor: "Jeremy", runId: run.runId, requestId: null, outcome: "started", detail: `Read-only intake started for ${config.profile ?? "the configured profile"}.` });
   return run;
 }
 
@@ -299,6 +338,8 @@ export async function performCockpitAction(input: {
     const schedule = input.schedule?.trim();
     if (!schedule) throw new Error("A Hermes schedule is required.");
     const { management } = clients();
+    const managementStatus = await management.managementStatus();
+    if (managementStatus.state !== "success") throw new Error(managementMessage(managementStatus.state));
     const result = await management.perform("job.create", {
       name: `Cockpit: ${card.title}`.slice(0, 120),
       prompt: actionPrompt("investigate", card),

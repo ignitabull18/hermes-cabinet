@@ -1,4 +1,4 @@
-import type { HermesServerConfig } from "./server-config";
+import type { HermesRunServerConfig } from "./server-config";
 import type {
   HermesRunDecision,
   HermesRunEvent,
@@ -98,7 +98,7 @@ function normalizeStatus(value: unknown): HermesRunStatus {
 
 export class HermesRunClient {
   constructor(
-    private readonly config: HermesServerConfig,
+    private readonly config: HermesRunServerConfig,
     private readonly fetchImpl: Fetch = fetch
   ) {}
 

@@ -31,6 +31,7 @@ import {
   CockpitNavigation,
   DailyMomentum,
   HistoryView,
+  ManagementAvailabilityNotice,
   NextBestMove,
   RadarModule,
   RadarView,
@@ -145,6 +146,7 @@ export function DailyBusinessCockpit() {
   const upNext = queue.filter((card) => card.id !== nextBest?.id).slice(0, 3);
   const resumeCard = resume ? cards.find((card) => card.id === resume.cardId) ?? null : null;
   const allSystemsHealthy = cockpit ? Object.values(cockpit.sourceCoverage).every((source) => source.status === "connected" || source.status === "connected_empty") && cockpit.health.status === "online" : false;
+  const managementAvailable = cockpit?.management.status === "success";
 
   function persistResume(card: CockpitCard, lastStep: string) {
     const value = { cardId: card.id, lastStep };
@@ -256,11 +258,12 @@ export function DailyBusinessCockpit() {
 
         {cockpit && view === "today" ? (
           <div className="cockpit-first-view mx-auto flex max-w-6xl flex-col gap-3">
+            <ManagementAvailabilityNotice cockpit={cockpit} />
             <SystemFailureAlert cockpit={cockpit} onReauthenticate={startGoogleWorkspaceReauthentication} />
             {resumeCard && resume && resumeCard.id !== nextBest?.id ? <ResumeBanner card={resumeCard} lastStep={resume.lastStep} onResume={() => openCard(resumeCard)} /> : null}
             <div className="grid gap-3 lg:grid-cols-[minmax(280px,0.78fr)_minmax(0,1.22fr)]">
               <DailyMomentum cockpit={cockpit} />
-              <NextBestMove card={nextBest} busy={busy} resumeStep={resumeCard?.id === nextBest?.id ? resume?.lastStep : undefined} onOpen={openCard} onChooseAnother={() => setMissionOffset((value) => queue.length ? (value + 1) % queue.length : 0)} onAction={onAction} />
+              <NextBestMove card={nextBest} busy={busy} managementAvailable={managementAvailable} resumeStep={resumeCard?.id === nextBest?.id ? resume?.lastStep : undefined} onOpen={openCard} onChooseAnother={() => setMissionOffset((value) => queue.length ? (value + 1) % queue.length : 0)} onAction={onAction} />
             </div>
 
             <section className="flex flex-col gap-2" aria-labelledby="up-next-title">
@@ -270,7 +273,7 @@ export function DailyBusinessCockpit() {
               </div>
               {upNext.length ? upNext.map((card, index) => (
                 <div key={card.id} className={index === 2 ? "hidden sm:block" : undefined}>
-                  <CockpitQueueRow card={card} freshness={cockpit.telemetry.lastIntakeAt} busy={busy} compact exiting={clearingCardId === card.id} onOpen={openCard} onAction={onAction} />
+                  <CockpitQueueRow card={card} freshness={cockpit.telemetry.lastIntakeAt} busy={busy} managementAvailable={managementAvailable} compact exiting={clearingCardId === card.id} onOpen={openCard} onAction={onAction} />
                 </div>
               )) : <p className="rounded-xl bg-muted/35 px-4 py-3 text-sm text-muted-foreground">Nothing else is competing for attention.</p>}
             </section>
@@ -288,7 +291,7 @@ export function DailyBusinessCockpit() {
         {cockpit && view === "queue" ? (
           <section className="mx-auto flex max-w-4xl flex-col gap-3" data-testid="cockpit-queue-view">
             <div className="flex items-end justify-between gap-3"><div><h2 className="text-2xl font-semibold tracking-tight">Queue</h2><p className="mt-1 text-sm text-muted-foreground">One ordered path through decisions and exceptions.</p></div><span className="text-sm font-medium text-muted-foreground">{queue.length} open</span></div>
-            <div className="flex flex-col gap-2">{queue.map((card) => <CockpitQueueRow key={card.id} card={card} freshness={cockpit.telemetry.lastIntakeAt} busy={busy} exiting={clearingCardId === card.id} onOpen={openCard} onAction={onAction} />)}</div>
+            <div className="flex flex-col gap-2">{queue.map((card) => <CockpitQueueRow key={card.id} card={card} freshness={cockpit.telemetry.lastIntakeAt} busy={busy} managementAvailable={managementAvailable} exiting={clearingCardId === card.id} onOpen={openCard} onAction={onAction} />)}</div>
           </section>
         ) : null}
 
@@ -323,7 +326,7 @@ export function DailyBusinessCockpit() {
         {cockpit && view === "history" ? <div className="mx-auto max-w-4xl"><HistoryView cockpit={cockpit} /></div> : null}
       </main>
 
-      {cockpit ? <CockpitInspector card={selectedCard} cockpit={cockpit} busy={busy} onClose={() => setSelectedCardId(null)} onAction={onAction} /> : null}
+      {cockpit ? <CockpitInspector card={selectedCard} cockpit={cockpit} busy={busy} managementAvailable={managementAvailable} onClose={() => setSelectedCardId(null)} onAction={onAction} /> : null}
     </div>
   );
 }

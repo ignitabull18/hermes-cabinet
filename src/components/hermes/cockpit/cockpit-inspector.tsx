@@ -54,17 +54,20 @@ export function CockpitInspector({
   card,
   cockpit,
   busy,
+  managementAvailable,
   onClose,
   onAction,
 }: {
   card: CockpitCard | null;
   cockpit: DailyBusinessCockpit;
   busy: LoadingState;
+  managementAvailable: boolean;
   onClose: () => void;
   onAction: (action: CockpitAction, card: CockpitCard) => Promise<void>;
 }) {
   const run = card ? associatedRun(card, cockpit.runs) : undefined;
   const action = card ? primaryAction(card) : "investigate";
+  const actionUnavailable = action === "schedule" && !managementAvailable;
 
   return (
     <Sheet open={card !== null} onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -192,7 +195,7 @@ export function CockpitInspector({
             </ScrollArea>
 
             <SheetFooter className="absolute inset-x-0 bottom-0 border-t border-border bg-popover/95 backdrop-blur-sm">
-              <Button size="lg" className="bg-command text-white hover:bg-command/90" disabled={busy !== null} onClick={() => void onAction(action, card)}>
+              <Button size="lg" className="bg-command text-white hover:bg-command/90" disabled={busy !== null || actionUnavailable} title={actionUnavailable ? "Hermes Management is unavailable." : undefined} onClick={() => void onAction(action, card)}>
                 {action === "investigate" ? <FileSearch data-icon="inline-start" /> : <CircleCheck data-icon="inline-start" />}
                 {ACTION_LABELS[action]}
               </Button>

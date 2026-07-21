@@ -4,6 +4,7 @@ import {
   HermesConfigurationError,
   hermesInterventionsEnabled,
   readHermesReadOnlyServerConfig,
+  readHermesRunServerConfig,
   readHermesServerConfig,
 } from "./server-config";
 
@@ -110,4 +111,24 @@ test("read-only configuration keeps source groups independent while strict mutat
     CABINET_HERMES_API_URL: valid.CABINET_HERMES_API_URL,
     CABINET_HERMES_API_KEY: valid.CABINET_HERMES_API_KEY,
   }), /CABINET_HERMES_MANAGEMENT_URL/);
+});
+
+test("Hermes run configuration depends only on the Agent API and profile", () => {
+  const run = readHermesRunServerConfig({
+    CABINET_HERMES_API_URL: valid.CABINET_HERMES_API_URL,
+    CABINET_HERMES_API_KEY: valid.CABINET_HERMES_API_KEY,
+    CABINET_HERMES_PROFILE: valid.CABINET_HERMES_PROFILE,
+  });
+  assert.deepEqual(run, {
+    apiBaseUrl: "http://127.0.0.1:8642",
+    apiKey: valid.CABINET_HERMES_API_KEY,
+    profile: "operator-os",
+    timeoutMs: 3_000,
+  });
+  assert.throws(
+    () => readHermesRunServerConfig({ CABINET_HERMES_PROFILE: "operator-os" }),
+    (error: unknown) => error instanceof HermesConfigurationError
+      && error.message === "Hermes Agent API run service is not configured."
+      && !error.message.includes("CABINET_HERMES"),
+  );
 });
