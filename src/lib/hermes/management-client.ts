@@ -239,7 +239,10 @@ export class HermesManagementClient {
     }
   }
 
-  async snapshot(healthOverride?: HermesHealthSnapshot): Promise<HermesManagementSnapshot> {
+  async snapshot(
+    healthOverride?: HermesHealthSnapshot,
+    managementStatusOverride?: HermesManagementStatusObservation,
+  ): Promise<HermesManagementSnapshot> {
     const diagnostics: HermesManagementSnapshot["diagnostics"] = [];
     const managementReady = this.config.sourceStates.management === "ready_to_probe" && Boolean(this.config.managementBaseUrl && this.config.managementToken && this.config.profileConfigured);
     const read = async (area: string, path: string, fallback: unknown) => {
@@ -255,7 +258,9 @@ export class HermesManagementClient {
         return fallback;
       }
     };
-    const statusPromise = this.managementStatus();
+    const statusPromise = managementStatusOverride
+      ? Promise.resolve(managementStatusOverride)
+      : this.managementStatus();
     const agentApiPromise = collectAgentApiReadOnly({
       apiBaseUrl: this.config.apiBaseUrl,
       apiKey: this.config.apiKey,

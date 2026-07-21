@@ -24,6 +24,11 @@ export type HermesReadOnlyServerConfig = {
   sourceStates: Record<"agent_api" | "management" | "gateway", HermesReadinessSourceState>;
 };
 
+export type HermesRunServerConfig = Pick<
+  HermesServerConfig,
+  "apiBaseUrl" | "apiKey" | "profile" | "timeoutMs"
+>;
+
 /** Consequential Hermes runtime interventions are opt-in and server-only. */
 export function hermesInterventionsEnabled(
   env: Readonly<Record<string, string | undefined>> = process.env,
@@ -146,5 +151,25 @@ export function readHermesReadOnlyServerConfig(
       management: state("management"),
       gateway: state("gateway"),
     },
+  };
+}
+
+/**
+ * The run API is an Agent API surface. It must not inherit the stricter
+ * Management and Gateway credential requirements used by consequential
+ * cross-surface management operations.
+ */
+export function readHermesRunServerConfig(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): HermesRunServerConfig {
+  const config = readHermesReadOnlyServerConfig(env);
+  if (!config.apiBaseUrl || !config.apiKey || !config.profile) {
+    throw new HermesConfigurationError("Hermes Agent API run service is not configured.");
+  }
+  return {
+    apiBaseUrl: config.apiBaseUrl,
+    apiKey: config.apiKey,
+    profile: config.profile,
+    timeoutMs: config.timeoutMs,
   };
 }

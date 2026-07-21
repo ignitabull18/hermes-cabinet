@@ -36,6 +36,7 @@ const cockpit = {
   shadowMode: true,
   profile: "operator-os",
   health: { enabled: true, status: "online", version: "0.18.2", profile: "operator-os", gatewayState: "running", checkedAt: "2026-07-18T20:00:00.000Z", message: "Hermes is online." },
+  management: { status: "success", message: "Hermes Management is connected.", checkedAt: "2026-07-18T20:00:00.000Z" },
   memory: { namespace: "operator-os:supermemory", provider: "supermemory", captureState: "active", recallHealth: "healthy" },
   sourceCoverage: coverage,
   cards: [card],
@@ -193,6 +194,42 @@ test("meaningful completion contracts the queue and advances Momentum", async ({
   await expect(row).toBeHidden();
   await expect(root.getByRole("status")).toContainText("Confirm missing business facts cleared.");
   await expect(root.getByText("1 of 2 clear")).toBeVisible();
+});
+
+test("Management-dependent actions are disabled while Agent-backed content remains available", async ({ page }) => {
+  const scheduleCard = { ...card, id: "schedule-1", recommendedAction: "schedule" };
+  const partialCockpit = {
+    ...cockpit,
+    management: {
+      status: "not_configured",
+      message: "Hermes Management is not configured. Management-backed intelligence is unavailable.",
+      checkedAt: cockpit.generatedAt,
+    },
+    sourceCoverage: {
+      ...coverage,
+      hermesJobs: { status: "unavailable", message: "Hermes Management is not configured. Management-backed intelligence is unavailable.", evidenceCount: 0 },
+      supermemory: { status: "unavailable", message: "Hermes Management is not configured. Management-backed intelligence is unavailable.", evidenceCount: 0 },
+    },
+    cards: [scheduleCard],
+  };
+  let actionCalls = 0;
+  await page.route("**/api/hermes/cockpit", async (route) => {
+    if (route.request().method() === "POST") return route.fulfill({ json: { ok: true } });
+    return route.fulfill({ json: partialCockpit });
+  });
+  await page.route("**/api/hermes/cockpit/actions", async (route) => {
+    actionCalls += 1;
+    await route.fulfill({ json: { ok: true } });
+  });
+
+  await enterCockpit(page);
+  const root = page.getByTestId("daily-business-cockpit");
+  await expect(root.getByTestId("cockpit-management-unavailable")).toBeVisible();
+  await expect(root.getByText(scheduleCard.title)).toBeVisible();
+  await expect(root.getByTestId("cockpit-next-best-move").getByRole("button", { name: "Schedule" })).toBeDisabled();
+  await root.getByRole("button", { name: "Open details" }).click();
+  await expect(page.getByTestId("cockpit-inspector").getByRole("button", { name: "Schedule" })).toBeDisabled();
+  expect(actionCalls).toBe(0);
 });
 
 test("390px Today has no horizontal overflow and uses a full-height detail sheet", async ({ page }) => {

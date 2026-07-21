@@ -64,6 +64,8 @@ export interface BootOptions {
   files?: Record<string, string>;
   /** Product-mode environment overrides applied to both child processes. */
   env?: Partial<NodeJS.ProcessEnv>;
+  /** Start the isolated Cabinet daemon. Defaults to true. */
+  startDaemon?: boolean;
 }
 
 export interface CabinetInstance {
@@ -133,12 +135,14 @@ export async function bootCabinet(options: BootOptions = {}): Promise<CabinetIns
   };
 
   const children: ChildProcess[] = [];
-  const daemon = spawn("npx", ["tsx", "server/cabinet-daemon.ts"], {
-    cwd: REPO_ROOT,
-    env,
-    stdio: "pipe",
-  });
-  children.push(daemon);
+  if (options.startDaemon !== false) {
+    const daemon = spawn("npx", ["tsx", "server/cabinet-daemon.ts"], {
+      cwd: REPO_ROOT,
+      env,
+      stdio: "pipe",
+    });
+    children.push(daemon);
+  }
 
   const app = spawn("npx", ["next", "start", "-p", String(appPort)], {
     cwd: REPO_ROOT,
@@ -175,7 +179,7 @@ export async function bootCabinet(options: BootOptions = {}): Promise<CabinetIns
   try {
     // Poll readiness rather than sleeping — sleeps are how e2e suites get flaky.
     await Promise.all([
-      waitForOk(`${daemonUrl}/health`),
+      ...(options.startDaemon === false ? [] : [waitForOk(`${daemonUrl}/health`)]),
       waitForOk(appUrl),
     ]);
   } catch (error) {

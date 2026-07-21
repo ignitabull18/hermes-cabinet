@@ -31,6 +31,7 @@ export function CockpitQueueRow({
   busy,
   compact = false,
   exiting = false,
+  managementAvailable,
   onOpen,
   onAction,
 }: {
@@ -39,10 +40,12 @@ export function CockpitQueueRow({
   busy: LoadingState;
   compact?: boolean;
   exiting?: boolean;
+  managementAvailable: boolean;
   onOpen: (card: CockpitCard) => void;
   onAction: (action: CockpitAction, card: CockpitCard) => Promise<void>;
 }) {
   const action = primaryAction(card);
+  const actionUnavailable = action === "schedule" && !managementAvailable;
   const pending = card.approval.state === "pending";
   const snoozed = Boolean(
     card.snoozedUntil &&
@@ -94,7 +97,8 @@ export function CockpitQueueRow({
         <Button
           size="sm"
           className="bg-command text-white hover:bg-command/90"
-          disabled={busy !== null}
+          disabled={busy !== null || actionUnavailable}
+          title={actionUnavailable ? "Hermes Management is unavailable." : undefined}
           onClick={() => void onAction(action, card)}
           data-testid={`cockpit-primary-${card.id}`}
         >
@@ -111,6 +115,7 @@ export function CockpitQueueRow({
               {secondary.map((item) => (
                 <DropdownMenuItem
                   key={item}
+                  disabled={item === "schedule" && !managementAvailable}
                   variant={item === "reject" ? "destructive" : "default"}
                   onClick={() => void onAction(item, card)}
                 >
