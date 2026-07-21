@@ -132,7 +132,8 @@ export async function collectAgentApiReadOnly(
   fetchImpl: Fetch = fetch,
 ): Promise<HermesAgentApiReadOnlySnapshot> {
   const now = new Date().toISOString();
-  if (!config.apiBaseUrl || !config.apiKey || config.sourceStates.agent_api !== "ready_to_probe") {
+  const agentReady = "sourceStates" in config ? config.sourceStates.agent_api === "ready_to_probe" : Boolean(config.apiBaseUrl && config.apiKey);
+  if (!config.apiBaseUrl || !config.apiKey || !agentReady) {
     return unavailableSnapshot(now, "unavailable", "Hermes Agent API is not configured for this review.");
   }
 
@@ -243,7 +244,8 @@ export async function readKnownAgentRun(
   const observedAt = new Date().toISOString();
   if (!/^[a-zA-Z0-9_-]{1,128}$/.test(knownRunId)) throw new Error("A bounded known Hermes run identity is required.");
   const base = { observedAt, interface: "/v1/runs/{run_id}" as const, runId: knownRunId };
-  if (!config.apiBaseUrl || !config.apiKey || config.sourceStates.agent_api !== "ready_to_probe") {
+  const agentReady = "sourceStates" in config ? config.sourceStates.agent_api === "ready_to_probe" : Boolean(config.apiBaseUrl && config.apiKey);
+  if (!config.apiBaseUrl || !config.apiKey || !agentReady) {
     return { ...base, state: "unavailable", lifecycle: null, createdAt: null, updatedAt: null, inputTokens: null, outputTokens: null, totalTokens: null, hasResult: false, hasFailure: false, summary: "Hermes Agent API is not configured for this known-run read." };
   }
   const controller = new AbortController();
