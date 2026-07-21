@@ -105,6 +105,7 @@ export type HermesManagementSnapshot = {
   profile: string;
   compatibility: { version: string | null; adapter: string };
   agentApi: import("./agent-api-readonly").HermesAgentApiReadOnlySnapshot;
+  localMemory: import("./local-memory-observation").HermesLocalMemoryObservation;
   developerRepository: import("./developer-repository").HermesDeveloperRepositorySnapshot;
   runtimeExecution: import("./runtime-execution").HermesRuntimeExecutionSnapshot;
   profiles: Array<{

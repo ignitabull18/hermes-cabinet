@@ -92,6 +92,35 @@ test("configured profile never becomes an observed active profile without explic
   assert.equal(snapshot.health.observedProfileSource, null);
 });
 
+test("configured-profile memory metadata remains non-operational and earns no live credit", () => {
+  const snapshot = buildWith((input) => {
+    input.installedRuntime.provenance = { kind: "live_runtime", label: "Live runtime projection", capturedAt: NOW, fixtureId: null };
+    replaceObservation(input, "memory-context", [observed("memory-context", "unknown", {
+      source: "Hermes local memory configuration",
+      interface: "Hermes configured-profile metadata + installed plugin manifest metadata",
+      proofKind: "detected_metadata",
+      proofScope: "configured_profile_metadata",
+      facts: {
+        configuredProfile: "operator-os",
+        observedActiveProfile: null,
+        configuredProviderSelection: "supermemory",
+        detectedPluginManifest: true,
+        observedLoadedProvider: null,
+        observedRuntimeAvailability: "unknown",
+        credentialState: "Not inspected — credentials remain owned by Hermes",
+        liveDataExposed: false,
+        partialClaim: true,
+      },
+    })]);
+  });
+  const memory = capability(snapshot, "memory-context");
+  assert.equal(memory.operationalHealth, "unknown");
+  assert.equal(memory.credit.liveVisibility, false);
+  assert.equal(memory.credit.liveProven, false);
+  assert.equal(memory.evidence[0]?.proofScope, "configured_profile_metadata");
+  assert.equal(memory.evidence[0]?.facts?.credentialState, "Not inspected — credentials remain owned by Hermes");
+});
+
 test("shared Management unavailability produces one derived source-group exception", () => {
   const snapshot = buildWith((input) => {
     for (const capabilityId of ["profiles", "skills"]) replaceObservation(input, capabilityId, [observed(capabilityId, "unavailable", {
@@ -102,6 +131,7 @@ test("shared Management unavailability produces one derived source-group excepti
   const grouped = snapshot.exceptions.filter((item) => item.kind === "source_group" && item.sourceGroup === "management");
   assert.equal(grouped.length, 1);
   assert.equal(grouped[0]?.dependentCount, 2);
+  assert.equal(grouped[0]?.severity, "warning");
   assert.equal(snapshot.exceptions.some((item) => item.capabilityId === "profiles" || item.capabilityId === "skills"), false);
 });
 
@@ -240,6 +270,7 @@ test("proof authority validator enforces complete origin, provenance, kind, and 
   const valid = [
     ["raw_observation", "live_runtime", "live", "live_runtime_operation"],
     ["raw_observation", "live_runtime", "live", "cabinet_local_surface"],
+    ["raw_observation", "live_runtime", "detected_metadata", "configured_profile_metadata"],
     ["raw_observation", "acceptance_fixture", "exact_fixture", "exact_fixture_path"],
     ["raw_observation", "acceptance_fixture", "exact_fixture", "cabinet_local_surface"],
     ["approved_evidence_catalog", "live_runtime", "historical_audit", "source_audit"],
@@ -257,6 +288,7 @@ test("proof authority validator enforces complete origin, provenance, kind, and 
     ["raw_observation", "live_runtime", "live", "exact_fixture_path"],
     ["raw_observation", "live_runtime", "historical_audit", "source_audit"],
     ["raw_observation", "live_runtime", "historical_audit", "historical_live_acceptance"],
+    ["raw_observation", "acceptance_fixture", "detected_metadata", "configured_profile_metadata"],
     ["approved_evidence_catalog", "live_runtime", "live", "live_runtime_operation"],
   ] as const;
   for (const [origin, provenanceKind, proofKind, proofScope] of invalid) {
@@ -494,19 +526,23 @@ test("Gateway ignores unknown, unavailable, stale, and invalid-time disagreement
 });
 
 test("one genuine fresh Gateway disagreement preserves all evidence and opposing summary", () => {
-  const gateway = capability(buildHermesAcceptanceFixtureProjection(), "gateway");
+  const snapshot = buildHermesAcceptanceFixtureProjection();
+  const gateway = capability(snapshot, "gateway");
   assert.equal(gateway.operationalHealth, "conflicting_evidence");
   assert.match(gateway.operationalDetail, /health bridge observed running.*management status observed stopped/i);
   assert.equal(gateway.evidence.some((item) => item.facts?.state === "running"), true);
   assert.equal(gateway.evidence.some((item) => item.facts?.state === "stopped"), true);
+  assert.equal(snapshot.exceptions.find((item) => item.capabilityId === "gateway")?.severity, "critical");
 });
 
 test("Messaging remains platform-derived and Telegram fatal stays degraded", () => {
   assert.equal(messagingHealth([{ configured: true, lastError: "Fatal polling conflict" }]), "degraded");
   assert.equal(messagingHealth([]), "not_configured");
-  const messaging = capability(buildHermesAcceptanceFixtureProjection(), "messaging");
+  const snapshot = buildHermesAcceptanceFixtureProjection();
+  const messaging = capability(snapshot, "messaging");
   assert.equal(messaging.evidence.find((item) => item.proofScope === "exact_fixture_path")?.outcome, "failure");
   assert.equal(messaging.credit.liveProven, false);
+  assert.equal(snapshot.exceptions.find((item) => item.capabilityId === "messaging")?.severity, "critical");
 });
 
 test("diagnostic-only and Cabinet-local notification semantics remain intact", () => {
@@ -543,6 +579,22 @@ test("recursive sanitization prevents credential and secret-bearing URL egress",
   for (const secret of secrets) assert.equal(serialized.includes(secret), false, `secret escaped: ${secret}`);
   assert.doesNotMatch(serialized, /api\.telegram\.org\/bot|access_token=|Bearer diagnostic|Basic gateway/i);
   assert.match(serialized, /redacted/);
+});
+
+test("the fixed nonsecret credential-ownership status survives while arbitrary credential state is redacted", () => {
+  const safe = buildWith((input) => {
+    replaceObservation(input, "memory-context", [observed("memory-context", "unknown", {
+      facts: { credentialState: "Not inspected — credentials remain owned by Hermes" },
+    })]);
+  });
+  assert.equal(capability(safe, "memory-context").evidence[0]?.facts?.credentialState, "Not inspected — credentials remain owned by Hermes");
+
+  const unsafe = buildWith((input) => {
+    replaceObservation(input, "memory-context", [observed("memory-context", "unknown", {
+      facts: { credentialState: "token-value-that-must-not-egress" },
+    })]);
+  });
+  assert.equal(capability(unsafe, "memory-context").evidence[0]?.facts?.credentialState, "[redacted]");
 });
 
 test("raw observation envelopes are assembled rather than trusted", () => {

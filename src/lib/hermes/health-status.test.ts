@@ -22,7 +22,8 @@ function snapshot(status: HermesHealthSnapshot["status"], overrides: Partial<Her
 
 test("successful health displays its source and observation time", () => {
   const result = hermesHealthDisplay(snapshot("online", { version: "0.19.0" }), null, observedAt);
-  assert.equal(result.label, "Hermes online");
+  assert.equal(result.label, "Hermes connected");
+  assert.equal(result.state, "connected");
   assert.equal(result.tone, "healthy");
   assert.match(result.detail, /GET \/health\/detailed/);
   assert.match(result.detail, new RegExp(observedAt));
@@ -32,6 +33,7 @@ test("initial poll timeout remains unknown and never claims offline", () => {
   const result = hermesHealthDisplay(snapshot("probe_timeout", { message: "Hermes Agent health probe timed out." }), null, "2026-07-20T23:00:14.000Z");
   assert.equal(result.label, "Hermes health probe timed out");
   assert.equal(result.tone, "warning");
+  assert.equal(result.state, "probe_timeout");
   assert.match(result.detail, /runtime state is unknown/i);
   assert.doesNotMatch(`${result.label} ${result.detail}`, /Hermes offline/i);
 });
@@ -46,6 +48,7 @@ test("a timeout after success retains timestamped last-known evidence as stale",
   assert.match(result.detail, /Agent 0\.19\.0 was last confirmed 14 seconds ago/);
   assert.match(result.detail, /evidence is stale/i);
   assert.equal(result.lastConfirmedAt, observedAt);
+  assert.equal(result.state, "stale");
 });
 
 test("browser route failure is source-specific and not offline", () => {
@@ -59,12 +62,20 @@ test("browser route failure is source-specific and not offline", () => {
 });
 
 test("authentication and missing configuration remain distinct", () => {
-  assert.equal(hermesHealthDisplay(snapshot("authentication_failure"), null, observedAt).label, "Hermes authentication failed");
-  assert.equal(hermesHealthDisplay(snapshot("misconfigured"), null, observedAt).label, "Hermes setup incomplete");
+  assert.equal(hermesHealthDisplay(snapshot("authentication_failure"), null, observedAt).state, "authentication_failure");
+  assert.equal(hermesHealthDisplay(snapshot("misconfigured"), null, observedAt).state, "not_configured");
 });
 
 test("offline wording requires an authoritative stopped snapshot", () => {
   const result = hermesHealthDisplay(snapshot("offline", { message: "Hermes Agent explicitly reported that the runtime is stopped." }), null, observedAt);
   assert.equal(result.label, "Hermes stopped");
+  assert.equal(result.state, "authoritative_offline");
   assert.equal(result.tone, "failure");
+});
+
+test("a successful but aged Agent observation becomes stale instead of staying green", () => {
+  const result = hermesHealthDisplay(snapshot("online", { version: "0.19.0" }), null, "2026-07-20T23:00:31.000Z");
+  assert.equal(result.state, "stale");
+  assert.equal(result.tone, "warning");
+  assert.match(result.statusText, /last confirmed 31 seconds ago/i);
 });

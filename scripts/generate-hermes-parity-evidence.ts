@@ -30,7 +30,7 @@ export const REPORT_ATTRIBUTION_START = "<!-- GENERATED:HERMES_LIVE_PROVEN_ATTRI
 export const REPORT_ATTRIBUTION_END = "<!-- GENERATED:HERMES_LIVE_PROVEN_ATTRIBUTION:END -->";
 const documentPath = path.resolve("docs/plans/hermes-desktop-capability-parity.md");
 const OUTCOMES = new Set(["success", "connected_empty", "not_configured", "unavailable", "failure", "conflict", "unknown"]);
-const PROOF_KINDS = new Set(["live", "exact_fixture", "historical_audit"]);
+const PROOF_KINDS = new Set(["live", "detected_metadata", "exact_fixture", "historical_audit"]);
 const FRESHNESS = new Set(["fresh", "stale", "unknown"]);
 const PROHIBITED_OBSERVATION_FIELDS = new Set(["status", "surfaceState", "operationalHealth", "exceptions", "parity", "credit", "percentage"]);
 

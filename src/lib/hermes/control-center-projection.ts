@@ -59,6 +59,8 @@ export function effectiveHermesFreshness(
     ? SOURCE_CLASS_MAX_AGE_MS.exact_fixture
     : observation.proofScope === "cabinet_local_surface"
       ? SOURCE_CLASS_MAX_AGE_MS.cabinet_local
+      : observation.proofScope === "configured_profile_metadata"
+        ? SOURCE_CLASS_MAX_AGE_MS.installation_metadata
       : observation.source === "OpenCLI doctor"
         ? SOURCE_CLASS_MAX_AGE_MS.local_diagnostic
         : observation.source === "Installed Hermes metadata"
@@ -124,6 +126,7 @@ function evidenceFromObservation(observation: PreparedObservation): HermesCapabi
 
 function isOperationalScope(observation: PreparedObservation, provenance: HermesProjectionProvenance): boolean {
   if (!observation.authorityValid || observation.origin === "approved_evidence_catalog") return false;
+  if (observation.proofScope === "configured_profile_metadata") return false;
   if (observation.proofScope === "cabinet_local_surface") return true;
   return provenance.kind === "live_runtime"
     ? observation.proofScope === "live_runtime_operation"
@@ -430,6 +433,7 @@ export function buildHermesControlCenterProjection(input: HermesControlCenterPro
         dependentCount: managementUnavailableCapabilityIds.size,
         title: "Management unavailable",
         health: "unavailable",
+        severity: "warning",
         summary: `${managementUnavailableCapabilityIds.size} dependent capability observations were not collected. Hermes Management is not configured for this review.`,
       }]
     : [];
@@ -446,6 +450,9 @@ export function buildHermesControlCenterProjection(input: HermesControlCenterPro
       dependentCount: null,
       title: capability.name,
       health: capability.operationalHealth as "degraded" | "conflicting_evidence" | "unavailable",
+      severity: capability.operationalHealth === "conflicting_evidence" || (
+        capability.id === "messaging" && abnormal.some((item) => item.outcome === "failure")
+      ) ? "critical" as const : "warning" as const,
       summary: capability.operationalDetail,
     }];
   });

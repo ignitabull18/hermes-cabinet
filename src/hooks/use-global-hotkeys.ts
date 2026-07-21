@@ -9,7 +9,7 @@ import { useFindStore } from "@/stores/find-store";
 import { ROOT_CABINET_PATH } from "@/lib/cabinets/paths";
 import { isEditableTarget } from "@/lib/keys";
 
-export function useGlobalHotkeys(): void {
+export function useGlobalHotkeys(terminalEnabled = true): void {
   useEffect(() => {
     const handle = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
@@ -55,6 +55,7 @@ export function useGlobalHotkeys(): void {
       // Ctrl+` — toggle terminal (VS Code / iTerm2 convention; avoids Cmd+`
       // which is "Cycle windows of same app" at macOS system level)
       if (e.ctrlKey && !e.metaKey && !e.shiftKey && e.key === "`") {
+        if (!terminalEnabled) return;
         e.preventDefault();
         useAppStore.getState().toggleTerminal();
         return;
@@ -176,5 +177,5 @@ export function useGlobalHotkeys(): void {
       window.removeEventListener("keydown", handle);
       window.removeEventListener("keydown", handleAltArrow);
     };
-  }, []);
+  }, [terminalEnabled]);
 }

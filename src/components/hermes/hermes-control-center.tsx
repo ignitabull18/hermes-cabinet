@@ -312,6 +312,9 @@ function RepositoryEvidenceFacts({ capability }: { capability: HermesCapabilityP
 }
 
 function CapabilityInspector({ capability, snapshot }: { capability: HermesCapabilityProjection; snapshot: HermesControlCenterSnapshot }) {
+  const memoryMetadata = capability.id === "memory-context"
+    ? capability.evidence.find((item) => item.proofScope === "configured_profile_metadata")
+    : null;
   const detailRows = [
     { id: "surface-state", label: "Surface state", value: capability.surfaceState },
     { id: "installed-support", label: "Installed support", value: capability.installedSupport.detail },
@@ -348,6 +351,25 @@ function CapabilityInspector({ capability, snapshot }: { capability: HermesCapab
               </div>
             ))}
           </dl>
+          {memoryMetadata?.facts ? (
+            <>
+              <Separator />
+              <section className="flex flex-col gap-2" data-testid="hermes-memory-truth-boundary">
+                <h3 className="text-sm font-semibold">Supermemory truth boundary</h3>
+                <dl className="grid gap-2 text-xs sm:grid-cols-2">
+                  <div><dt className="text-muted-foreground">Configured profile</dt><dd className="font-medium">{String(memoryMetadata.facts.configuredProfile ?? "Unknown")}</dd></div>
+                  <div><dt className="text-muted-foreground">Observed active profile</dt><dd className="font-medium">Unknown — Management is unavailable</dd></div>
+                  <div><dt className="text-muted-foreground">Configured provider selection</dt><dd className="font-medium">{memoryMetadata.facts.configuredProviderSelection === "supermemory" ? "Supermemory — detected in the configured profile metadata" : "Not selected"}</dd></div>
+                  <div><dt className="text-muted-foreground">Plugin metadata</dt><dd className="font-medium">{memoryMetadata.facts.detectedPluginManifest === true ? "Detected in the local Hermes installation" : "Not detected"}</dd></div>
+                  <div><dt className="text-muted-foreground">Observed loaded provider</dt><dd className="font-medium">Unknown — no safe runtime contract</dd></div>
+                  <div><dt className="text-muted-foreground">Runtime provider status</dt><dd className="font-medium">Unknown — no Hermes-native status interface confirmed it</dd></div>
+                  <div><dt className="text-muted-foreground">Credential state</dt><dd className="font-medium">Not inspected — credentials remain owned by Hermes</dd></div>
+                  <div><dt className="text-muted-foreground">Live memory data</dt><dd className="font-medium">Not exposed by the installed Agent API</dd></div>
+                </dl>
+                <p className="text-xs text-muted-foreground">Configuration metadata is not live runtime proof and earns no Current Live Visibility or Live-Proven credit.</p>
+              </section>
+            </>
+          ) : null}
           <Separator />
           <section className="flex flex-col gap-2" data-testid="hermes-runtime-identity">
             <h3 className="text-sm font-semibold">Runtime identity</h3>
@@ -509,7 +531,7 @@ export function HermesControlCenter() {
   const selectedRun = snapshot?.runtimeExecution.runs.find((item) => item.id === selectedRunId) ?? null;
   const derivedExceptions: HermesControlCenterSnapshot["exceptions"] = snapshot?.capabilities.flatMap((capability) =>
     capability.surfaceState !== "unsupported" && ["degraded", "conflicting_evidence", "unavailable"].includes(capability.operationalHealth)
-      ? [{ kind: "capability" as const, capabilityId: capability.id, sourceGroup: null, dependentCount: null, title: capability.name, health: capability.operationalHealth as "degraded" | "conflicting_evidence" | "unavailable", summary: capability.operationalDetail }]
+      ? [{ kind: "capability" as const, capabilityId: capability.id, sourceGroup: null, dependentCount: null, title: capability.name, health: capability.operationalHealth as "degraded" | "conflicting_evidence" | "unavailable", severity: capability.operationalHealth === "conflicting_evidence" ? "critical" as const : "warning" as const, summary: capability.operationalDetail }]
       : []
   ) ?? [];
   const operationalExceptions = snapshot?.exceptions?.length ? snapshot.exceptions : derivedExceptions;
@@ -543,7 +565,7 @@ export function HermesControlCenter() {
         </div>
         {snapshot ? (
           <div className="flex items-center gap-2 overflow-x-auto text-xs text-muted-foreground" data-testid="hermes-version-strip">
-            <Badge variant={snapshot.health.runtime === "healthy" ? "default" : "destructive"}>Running Agent {snapshot.installed.observedRunningAgentVersion ?? "unknown"}</Badge>
+            <Badge variant={snapshot.health.runtime === "healthy" ? "default" : "outline"}>Running Agent {snapshot.installed.observedRunningAgentVersion ?? "unknown"}</Badge>
             <Badge variant="outline">Desktop {snapshot.installed.desktopVersion ?? "Unknown"}</Badge>
             <span className="whitespace-nowrap">Gateway {snapshot.health.gateway}</span>
             <span className="whitespace-nowrap">Configured profile {snapshot.health.configuredProfile}</span>
@@ -608,7 +630,15 @@ export function HermesControlCenter() {
                     </div>
                     {operationalExceptions.map((exception) => (
                       <button key={`${exception.kind}-${exception.capabilityId ?? exception.sourceGroup}`} type="button" className="block w-full text-left" disabled={!exception.capabilityId} onClick={() => { if (exception.capabilityId) setSelectedId(exception.capabilityId); setSelectedRunId(null); }}>
-                        <Alert variant="destructive" className="transition-colors hover:bg-destructive/5">
+                        <Alert
+                          variant={exception.severity === "critical" ? "destructive" : "default"}
+                          className={cn(
+                            "transition-colors",
+                            exception.severity === "critical"
+                              ? "hover:bg-destructive/5"
+                              : "border-warning/30 bg-warning/5 hover:bg-warning/10",
+                          )}
+                        >
                           <TriangleAlert aria-hidden="true" />
                           <AlertTitle>{exception.title} · {HEALTH_LABELS[exception.health]}</AlertTitle>
                           <AlertDescription className="line-clamp-2">{exception.summary}</AlertDescription>

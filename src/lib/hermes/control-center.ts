@@ -55,15 +55,15 @@ function collectHermesObservations(
     interfaceIdentity: string,
     outcome: HermesEvidenceOutcome,
     summary: string,
-    options: Partial<Pick<HermesCapabilityObservation, "observedAt" | "assertedFreshness" | "facts" | "installedBackendVersion" | "installedBackendCommit">> = {}
+    options: Partial<Pick<HermesCapabilityObservation, "observedAt" | "assertedFreshness" | "facts" | "installedBackendVersion" | "installedBackendCommit" | "proofKind" | "proofScope">> = {}
   ) => observations.push({
     capabilityId,
     source,
     interface: interfaceIdentity,
     observedAt: options.observedAt ?? observedAt,
     assertedFreshness: options.assertedFreshness ?? "fresh",
-    proofKind: "live",
-    proofScope: "live_runtime_operation",
+    proofKind: options.proofKind ?? "live",
+    proofScope: options.proofScope ?? "live_runtime_operation",
     outcome,
     summary,
     installedBackendVersion: options.installedBackendVersion === undefined ? installed.backendVersion : options.installedBackendVersion,
@@ -178,7 +178,38 @@ function collectHermesObservations(
       { observedAt: agentSessions.observedAt, facts: { sourceGroup: "agent_api" }, installedBackendVersion: health.version, installedBackendCommit: null },
     );
   }
-  endpoint({ ids: ["memory-context"], area: "memory", source: "Hermes memory", interface: "/api/memory", count: management.memory.providers.length, successSummary: `Hermes memory reported provider ${management.memory.activeProvider}.` });
+  if (managementReady) {
+    endpoint({ ids: ["memory-context"], area: "memory", source: "Hermes memory", interface: "/api/memory", count: management.memory.providers.length, successSummary: `Hermes memory reported provider ${management.memory.activeProvider}.` });
+  } else {
+    const memory = management.localMemory;
+    add(
+      "memory-context",
+      "Hermes local memory configuration",
+      memory.interface,
+      memory.state === "metadata_detected" ? "unknown" : memory.state === "not_selected" ? "not_configured" : memory.state,
+      memory.summary,
+      {
+        observedAt: memory.observedAt,
+        facts: {
+          configuredProfile: memory.configuredProfile,
+          observedActiveProfile: memory.observedActiveProfile,
+          configuredProviderSelection: memory.configuredProviderSelection,
+          detectedPluginManifest: memory.detectedPluginManifest,
+          observedLoadedProvider: memory.observedLoadedProvider,
+          observedRuntimeAvailability: memory.observedRuntimeAvailability,
+          credentialState: "Not inspected — credentials remain owned by Hermes",
+          liveDataExposed: false,
+          partialClaim: true,
+          limitation: memory.summary,
+          sourceGroup: "local_hermes_configuration",
+        },
+        proofKind: "detected_metadata",
+        proofScope: "configured_profile_metadata",
+        installedBackendVersion: installed.backendVersion,
+        installedBackendCommit: installed.backendCommit,
+      },
+    );
+  }
   endpoint({ ids: ["starmap"], area: "memory graph", source: "Hermes memory graph", interface: "/api/learning/graph", count: management.operator.memoryGraph.stats.nodes });
   endpoint({ ids: ["providers", "provider-accounts"], area: "model options", source: "Hermes model options", interface: "/api/model/options", count: management.operator.providers.length, emptyOutcome: "not_configured" });
   const agentModels = management.agentApi.models;

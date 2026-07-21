@@ -20,8 +20,9 @@ import { useLocale } from "@/i18n/use-locale";
 import { useUserProfile } from "@/hooks/use-user-profile";
 import { useVisibleInterval } from "@/hooks/use-visible-interval";
 import type { TFunction } from "i18next";
-import { HermesConnectionStatus } from "@/components/layout/hermes-connection-status";
+import { HermesConnectionStatus, useHermesConnectionStatus } from "@/components/layout/hermes-connection-status";
 import { useHermesMode } from "@/hooks/use-cabinet-runtime-mode";
+import { deriveStatusBarOperationalState } from "@/components/layout/status-bar-health";
 
 const DISCORD_SUPPORT_URL = "https://discord.gg/hJa5TRTbTH";
 const GITHUB_REPO_URL = "https://github.com/cabinetai/cabinet";
@@ -122,6 +123,7 @@ function formatRelativeSavedAgo(ts: number, now: number, t: TFunction): string {
 
 export function StatusBar() {
   const hermesMode = useHermesMode();
+  const hermesConnection = useHermesConnectionStatus(hermesMode);
   const { t } = useLocale();
   const profileState = useUserProfile();
   // First name only — a warm, personal "thanks" beats a sterile
@@ -247,8 +249,8 @@ export function StatusBar() {
   // show "Checking…" rather than flashing green. After that, daemon needs
   // two consecutive misses to flip — single dropped polls during fast
   // refresh used to thrash the indicator.
-  const checkingHealth = appLevel === "unknown" || daemonLevel === "unknown";
   const appAlive = appLevel !== "down";
+  const appResponding = appLevel === "ok";
   const daemonAlive = daemonLevel !== "down";
 
   const [showServerPopup, setShowServerPopup] = useState(false);
@@ -304,7 +306,21 @@ export function StatusBar() {
     () => !providersLoaded || providerStatuses.some((p) => p.available && p.authenticated),
     [providersLoaded, providerStatuses],
   );
-  const anyProviderReady = hermesMode || legacyProviderReady;
+  const anyProviderReady = legacyProviderReady;
+  const overallState = deriveStatusBarOperationalState({
+    hermesMode,
+    appLevel,
+    daemonLevel,
+    legacyProviderReady,
+    hermesAgentState: hermesConnection.display.state,
+  });
+  const checkingHealth = overallState === "checking";
+  const coreOperational = overallState === "operational";
+  const operationalFailure = !appAlive || (hermesMode && hermesConnection.display.tone === "failure");
+  const failureTitle = !appAlive ? t("status:server.appNotResponding") : hermesConnection.display.statusText;
+  const failureLabel = hermesMode && appAlive && hermesConnection.display.state === "authentication_failure"
+    ? "Authentication failed"
+    : t("status:server.offline");
 
   const fetchProviderStatus = useCallback(async () => {
     try {
@@ -318,7 +334,10 @@ export function StatusBar() {
     } catch { /* ignore */ }
   }, []);
 
-  useEffect(() => startHealthPolling(), [startHealthPolling]);
+  useEffect(
+    () => startHealthPolling({ includeDaemon: !hermesMode }),
+    [startHealthPolling, hermesMode],
+  );
 
   // Fetch provider status once on mount
   useEffect(() => {
@@ -440,7 +459,7 @@ export function StatusBar() {
       className="@container relative flex items-center justify-between px-3 py-1 text-[11px] text-muted-foreground bg-transparent"
     >
       <div className="flex min-w-0 items-center gap-3">
-        <HermesConnectionStatus />
+        {hermesMode ? <HermesConnectionStatus controller={hermesConnection} /> : null}
         <div className="relative">
           <button
             onClick={() => {
@@ -452,22 +471,24 @@ export function StatusBar() {
             className={`flex items-center gap-1.5 rounded-md px-1.5 py-0.5 transition-colors cursor-pointer ${
               checkingHealth
                 ? "text-muted-foreground hover:bg-muted/40"
-                : appAlive && daemonAlive && anyProviderReady
+                : coreOperational
                 ? "text-green-500 hover:bg-green-500/10"
-                : !appAlive
+                : operationalFailure
                 ? "text-red-500 hover:bg-red-500/10"
                 : "text-amber-500 hover:bg-amber-500/10"
             }`}
             title={
               checkingHealth
                 ? t("status:server.checking")
-                : appAlive && daemonAlive && anyProviderReady
-                ? t("status:server.allRunning")
-                : !appAlive
-                ? t("status:server.appNotResponding")
-                : !daemonAlive && !anyProviderReady
+                : coreOperational
+                ? hermesMode ? "Cabinet and Hermes Agent are connected" : t("status:server.allRunning")
+                : operationalFailure
+                ? failureTitle
+                : hermesMode
+                ? hermesConnection.display.statusText
+                : !hermesMode && !daemonAlive && !anyProviderReady
                 ? t("status:server.daemonDownNoProviders")
-                : !daemonAlive
+                : !hermesMode && !daemonAlive
                 ? t("status:server.daemonDown")
                 : t("status:server.noProviders")
             }
@@ -480,9 +501,9 @@ export function StatusBar() {
                 readers. */}
             {checkingHealth ? (
               <Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" aria-hidden="true" />
-            ) : appAlive && daemonAlive && anyProviderReady ? (
+            ) : coreOperational ? (
               <CircleDot className="h-3 w-3 shrink-0 text-green-500" aria-hidden="true" />
-            ) : !appAlive ? (
+            ) : operationalFailure ? (
               <XCircle className="h-3 w-3 shrink-0 text-red-500 animate-pulse" aria-hidden="true" />
             ) : (
               <AlertTriangle className="h-3 w-3 shrink-0 text-amber-500 animate-pulse" aria-hidden="true" />
@@ -490,61 +511,74 @@ export function StatusBar() {
             <span className="@max-[820px]:hidden">
               {checkingHealth
                 ? t("status:server.checkingShort")
-                : appAlive && daemonAlive && anyProviderReady
+                : coreOperational
                 ? t("status:server.online")
-                : !appAlive
-                ? t("status:server.offline")
+                : operationalFailure
+                ? failureLabel
                 : t("status:server.degraded")}
             </span>
           </button>
           {showServerPopup && (
             <div className={`absolute bottom-full start-0 mb-2 z-50 w-80 rounded-lg border bg-background p-3 shadow-lg ${
-              appAlive && daemonAlive && anyProviderReady
+              coreOperational
                 ? "border-green-500/30"
-                : !appAlive
+                : operationalFailure
                 ? "border-red-500/30"
                 : "border-amber-500/30"
             }`}>
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 space-y-2.5">
                   <p className={`text-xs font-medium ${
-                    appAlive && daemonAlive && anyProviderReady
+                    coreOperational
                       ? "text-green-500"
-                      : !appAlive
+                      : operationalFailure
                       ? "text-red-500"
                       : "text-amber-500"
                   }`}>
-                    {appAlive && daemonAlive && anyProviderReady
-                      ? t("status:server.allSystemsRunning")
+                    {coreOperational
+                      ? hermesMode ? "Cabinet and Hermes Agent are connected" : t("status:server.allSystemsRunning")
                       : t("status:server.serviceDisruption")}
                   </p>
 
                   {/* App Server */}
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-2 text-[11px]">
-                      <span className={`inline-block h-1.5 w-1.5 rounded-full shrink-0 ${appAlive ? "bg-green-500" : "bg-red-500"}`} />
+                      <span className={`inline-block h-1.5 w-1.5 rounded-full shrink-0 ${appResponding ? "bg-green-500" : appAlive ? "bg-amber-500" : "bg-red-500"}`} />
                       <span className="font-medium text-foreground/80">{t("status:server.appServer")}</span>
-                      <span className={`ml-auto ${appAlive ? "text-green-500" : "text-red-500"}`}>{appAlive ? t("status:server.running") : t("status:server.down")}</span>
+                      <span className={`ml-auto ${appResponding ? "text-green-500" : appAlive ? "text-amber-500" : "text-red-500"}`}>{appResponding ? t("status:server.running") : appAlive ? t("status:server.degraded") : t("status:server.down")}</span>
                     </div>
                     <p className="text-[10px] text-muted-foreground/70 pl-3.5">
-                      {appAlive
+                      {appResponding
                         ? t("status:server.appWorking")
-                        : t("status:server.appDown")}
+                        : appAlive
+                          ? "The latest Cabinet app health probe did not confirm a successful response."
+                          : t("status:server.appDown")}
                     </p>
                     <p className="text-[10px] text-muted-foreground/50 pl-3.5">
                       {t("status:server.lastSeen", { when: formatRelativeAgo(lastAppOkAt, popupNow, t) })}
                     </p>
                   </div>
 
+                  {hermesMode && <div className="space-y-0.5" data-testid="status-hermes-agent-row">
+                    <div className="flex items-center gap-2 text-[11px]">
+                      <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${hermesConnection.display.tone === "healthy" ? "bg-green-500" : hermesConnection.display.tone === "failure" ? "bg-red-500" : "bg-amber-500"}`} />
+                      <span className="font-medium text-foreground/80">Hermes Agent</span>
+                      <span className={`ml-auto ${hermesConnection.display.tone === "healthy" ? "text-green-500" : hermesConnection.display.tone === "failure" ? "text-red-500" : "text-amber-500"}`}>
+                        {hermesConnection.display.statusText}
+                      </span>
+                    </div>
+                    <p className="pl-3.5 text-[10px] text-muted-foreground/70">{hermesConnection.display.detail}</p>
+                  </div>}
+
                   {/* Daemon */}
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-2 text-[11px]">
-                      <span className={`inline-block h-1.5 w-1.5 rounded-full shrink-0 ${daemonAlive ? "bg-green-500" : "bg-red-500"}`} />
-                      <span className="font-medium text-foreground/80">{t("status:server.daemon")}</span>
-                      <span className={`ml-auto ${daemonAlive ? "text-green-500" : "text-red-500"}`}>{daemonAlive ? t("status:server.running") : t("status:server.down")}</span>
+                      <span className={`inline-block h-1.5 w-1.5 rounded-full shrink-0 ${hermesMode ? "bg-muted-foreground/50" : daemonAlive ? "bg-green-500" : "bg-red-500"}`} />
+                      <span className="font-medium text-foreground/80">{hermesMode ? "Legacy Cabinet daemon" : t("status:server.daemon")}</span>
+                      <span className={`ml-auto ${hermesMode ? "text-muted-foreground" : daemonAlive ? "text-green-500" : "text-red-500"}`}>{hermesMode ? "Not running — daemon-only features unavailable" : daemonAlive ? t("status:server.running") : t("status:server.down")}</span>
                       {/* One-click recovery where a supervisor can respawn the
                           daemon; restart-by-exit, the health poll confirms. */}
-                      {!daemonAlive && appAlive && canRestartBackend && (
+                      {!hermesMode && !daemonAlive && appAlive && canRestartBackend && (
                         <button
                           type="button"
                           onClick={requestBackendRestart}
@@ -557,13 +591,15 @@ export function StatusBar() {
                       )}
                     </div>
                     <p className="text-[10px] text-muted-foreground/70 pl-3.5">
-                      {daemonAlive
-                        ? t("status:server.daemonWorking")
-                        : t("status:server.daemonDownDescription")}
+                      {hermesMode
+                        ? "Legacy daemon state is contextual only and does not affect Hermes-mode operability."
+                        : daemonAlive
+                          ? t("status:server.daemonWorking")
+                          : t("status:server.daemonDownDescription")}
                     </p>
-                    <p className="text-[10px] text-muted-foreground/50 pl-3.5">
+                    {!hermesMode && <p className="text-[10px] text-muted-foreground/50 pl-3.5">
                       {t("status:server.lastSeen", { when: formatRelativeAgo(lastDaemonOkAt, popupNow, t) })}
-                    </p>
+                    </p>}
                   </div>
 
                   {/* Agent Providers */}
@@ -620,10 +656,10 @@ export function StatusBar() {
                   </div>}
 
                   {/* Troubleshooting tips */}
-                  {(!appAlive || !daemonAlive || !anyProviderReady) && (
+                  {(!appAlive || (!hermesMode && !daemonAlive) || !anyProviderReady) && (
                     <div className="pt-1.5 border-t border-border space-y-1">
                       <p className="text-[10px] font-medium text-foreground/70">{t("status:server.howToFix")}</p>
-                      {(!appAlive || !daemonAlive) && (
+                      {(!appAlive || (!hermesMode && !daemonAlive)) && (
                         isCloudEdition ? (
                           <p className="text-[10px] text-muted-foreground">
                             {!appAlive
@@ -683,10 +719,10 @@ export function StatusBar() {
                   )}
 
                   {/* All good state */}
-                  {appAlive && daemonAlive && anyProviderReady && (
+                  {coreOperational && (
                     <p className="text-[10px] text-muted-foreground/60 pt-1 border-t border-border">
                       {hermesMode
-                        ? "Cabinet is connected to the Hermes Operator."
+                        ? "Cabinet is responding and fresh Hermes Agent health is confirmed."
                         : "Cabinet is fully operational. All features are available."}
                     </p>
                   )}
@@ -993,7 +1029,16 @@ export function StatusBar() {
             <span className="@max-[820px]:hidden">{t("status:git2.sync")}</span>
           </button>
         )}
-        <button
+        {hermesMode ? (
+          <span
+            data-testid="hermes-terminal-unavailable"
+            className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-muted-foreground/60"
+            title="Terminal is unavailable in Hermes mode because it depends on the legacy Cabinet daemon."
+          >
+            <Terminal className="h-3 w-3" />
+            <span className="@max-[820px]:hidden">Terminal unavailable</span>
+          </span>
+        ) : <button
           onClick={toggleTerminal}
           aria-label={terminalOpen ? t("status:git2.newTerminalTab") : t("status:git2.openTerminal")}
           title={terminalOpen ? t("status:git2.newTerminalTab") : t("status:git2.openTerminal")}
@@ -1001,7 +1046,7 @@ export function StatusBar() {
         >
           <Terminal className="h-3 w-3" />
           <span className="@max-[820px]:hidden">{t("status:git2.terminal")}</span>
-        </button>
+        </button>}
       </div>
       {/* Audit #018: status-bar carries live state on the left (status pill,
           uncommitted, save state, sync). Help / Discord / Contribute /

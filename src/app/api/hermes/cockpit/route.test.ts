@@ -3,6 +3,7 @@ import test, { afterEach, beforeEach } from "node:test";
 import { NextRequest } from "next/server";
 
 import { GET } from "./route";
+import { SUPERMEMORY_LIMITATION } from "@/lib/hermes/local-memory-observation";
 
 const originalFetch = globalThis.fetch;
 const managedEnv = [
@@ -83,7 +84,13 @@ test("cockpit renders a partial projection when Management is not configured", a
     "Hermes Management is not configured. Management-backed intelligence is unavailable.",
   );
   assert.equal(body.sourceCoverage.hermesJobs.status, "unavailable");
-  assert.equal(body.sourceCoverage.supermemory.status, "unavailable");
+  assert.ok(["partial", "unavailable"].includes(body.sourceCoverage.supermemory.status));
+  if (body.sourceCoverage.supermemory.status === "partial") {
+    assert.equal(
+      body.sourceCoverage.supermemory.message,
+      SUPERMEMORY_LIMITATION,
+    );
+  }
   assert.ok(["connected", "connected_empty"].includes(body.sourceCoverage.manualRisks.status));
   assert.equal(body.profile, "operator-os");
   assert.doesNotMatch(serialized, /Missing server configuration|CABINET_HERMES_MANAGEMENT|cockpit-route-secret/);
