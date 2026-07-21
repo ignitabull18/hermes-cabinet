@@ -147,9 +147,9 @@ Gateway reconciliation groups evidence by source and interface, retains the late
 <!-- GENERATED:HERMES_TRUTH_STATE:START -->
 ## Generated per-capability truth-state evidence
 
-Generated at 2026-07-20T00:37:00.000Z. Acceptance fixture — not live runtime. Fixture ID: `hermes-phase-2a2-proof-integrity-v1`. Captured: 2026-07-19T22:15:00.000Z.
+Generated at 2026-07-20T02:15:00.000Z. Acceptance fixture — not live runtime. Fixture ID: `hermes-phase-2b-repository-visibility-v1`. Captured: 2026-07-19T22:15:00.000Z.
 
-Implementation revision: `f5921b9c4898c759442815dff6c85c136dcd68f6`. Artifact generated at: 2026-07-20T00:37:00.000Z.
+Implementation revision: `4bbfab176239254a004a3409ea3b6ead4b5fbf69`. Artifact generated at: 2026-07-20T02:15:00.000Z.
 
 Installed Desktop source commit: **unknown**. The commit `311a5b0a552be78f5c58807e2be1db02e3badcb0` is historical Desktop source-audit evidence only.
 
@@ -190,9 +190,9 @@ Overall credits: Discoverability 48/48 (100%); Current Live Visibility 0/48 (0%)
 | Advanced configuration | supported | `diagnostic_only` | `unknown` | exact_fixture / exact_fixture_path / unknown | Phase 2A.2 acceptance observation | capability-specific source not exercised by this fixture | 2026-07-19T22:15:00.000Z | fresh / fresh | no | D:yes L:no M:no P:no |
 | Files | supported | `mapped` | `unknown` | exact_fixture / exact_fixture_path / unknown | Phase 2A.2 acceptance observation | capability-specific source not exercised by this fixture | 2026-07-19T22:15:00.000Z | fresh / fresh | no | D:yes L:no M:no P:no |
 | Terminal | supported | `mapped` | `unknown` | exact_fixture / exact_fixture_path / unknown | Phase 2A.2 acceptance observation | capability-specific source not exercised by this fixture | 2026-07-19T22:15:00.000Z | fresh / fresh | no | D:yes L:no M:no P:no |
-| Source-control review | supported | `mapped` | `unknown` | exact_fixture / exact_fixture_path / unknown | Phase 2A.2 acceptance observation | capability-specific source not exercised by this fixture | 2026-07-19T22:15:00.000Z | fresh / fresh | no | D:yes L:no M:no P:no |
-| Projects | supported | `mapped` | `unknown` | exact_fixture / exact_fixture_path / unknown | Phase 2A.2 acceptance observation | capability-specific source not exercised by this fixture | 2026-07-19T22:15:00.000Z | fresh / fresh | no | D:yes L:no M:no P:no |
-| Worktrees | supported | `visible_read_only` | `unknown` | exact_fixture / exact_fixture_path / unknown | Phase 2A.2 acceptance observation | capability-specific source not exercised by this fixture | 2026-07-19T22:15:00.000Z | fresh / fresh | no | D:yes L:no M:no P:no |
+| Source-control review | supported | `mapped` | `degraded` | exact_fixture / exact_fixture_path / success | Hermes Git status | /api/git/status | 2026-07-19T22:15:00.000Z | fresh / fresh | yes | D:yes L:no M:no P:no |
+| Projects | supported | `mapped` | `healthy` | exact_fixture / exact_fixture_path / success | Hermes session project association | /api/sessions?limit=100 | 2026-07-19T22:15:00.000Z | fresh / fresh | yes | D:yes L:no M:no P:no |
+| Worktrees | supported | `visible_read_only` | `healthy` | exact_fixture / exact_fixture_path / success | Hermes Git worktrees | /api/git/worktrees | 2026-07-19T22:15:00.000Z | fresh / fresh | yes | D:yes L:no M:no P:no |
 | Session tabs | supported | `mapped` | `unknown` | exact_fixture / exact_fixture_path / unknown | Phase 2A.2 acceptance observation | capability-specific source not exercised by this fixture | 2026-07-19T22:15:00.000Z | fresh / fresh | no | D:yes L:no M:no P:no |
 | Session pinning | supported | `visible_read_only` | `healthy` | exact_fixture / exact_fixture_path / success | Hermes sessions | /api/sessions | 2026-07-19T22:15:00.000Z | fresh / fresh | yes | D:yes L:no M:no P:no |
 | Command palette | supported | `mapped` | `unknown` | exact_fixture / exact_fixture_path / unknown | Phase 2A.2 acceptance observation | capability-specific source not exercised by this fixture | 2026-07-19T22:15:00.000Z | fresh / fresh | no | D:yes L:no M:no P:no |
