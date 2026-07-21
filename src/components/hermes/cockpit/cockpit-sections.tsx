@@ -39,6 +39,7 @@ import {
   formatRelativeTime,
   historyLabel,
   isBrokenStatus,
+  isCriticalHermesStatus,
   momentum,
   primaryAction,
   radarCategory,
@@ -268,7 +269,7 @@ export function SystemsStrip({ cockpit, onOpen }: { cockpit: DailyBusinessCockpi
     <button type="button" onClick={onOpen} className="flex w-full min-w-0 self-start flex-wrap items-center gap-x-3 gap-y-2 rounded-xl bg-muted/35 px-3 py-2.5 text-xs text-muted-foreground xl:w-auto xl:max-w-[28rem]" data-testid="cockpit-systems-strip">
       {items.map(([label, status]) => (
         <span key={label} className="inline-flex items-center gap-1.5">
-          {status === "connected" ? <Check className="size-3.5 text-success" /> : status === "connected_empty" ? <Circle className="size-3.5" /> : <AlertTriangle className="size-3.5 text-destructive" />}
+          {status === "connected" ? <Check className="size-3.5 text-success" /> : status === "error" ? <AlertTriangle className="size-3.5 text-destructive" /> : status === "partial" ? <AlertTriangle className="size-3.5 text-warning" /> : <Circle className="size-3.5" />}
           {label}{status === "connected_empty" ? " empty" : ""}
         </span>
       ))}
@@ -282,11 +283,14 @@ export function SystemFailureAlert({ cockpit, onReauthenticate }: { cockpit: Dai
   const hermesFailed = cockpit.health.status !== "online";
   if (!failures.length && !hermesFailed) return null;
   const invalidGrant = failures.some(([, source]) => source.message.toLowerCase().includes("invalid_grant"));
+  const hermesCritical = isCriticalHermesStatus(cockpit.health.status);
+  const critical = hermesCritical || failures.some(([, source]) => source.status === "error");
+  const count = failures.length + (hermesFailed ? 1 : 0);
   return (
-    <Alert variant="destructive">
-      <AlertTriangle />
-      <AlertTitle>{failures.length + (hermesFailed ? 1 : 0)} system exception{failures.length + (hermesFailed ? 1 : 0) === 1 ? "" : "s"}</AlertTitle>
-      <AlertDescription className="hidden sm:block">{failures.map(([name]) => name).join(", ") || "Hermes"} needs attention. Current evidence remains clearly separated from failed sources.</AlertDescription>
+    <Alert variant={critical ? "destructive" : "default"} className={critical ? undefined : "border-warning/30 bg-warning/5"}>
+      <AlertTriangle className={critical ? undefined : "text-warning"} />
+      <AlertTitle>{count} system {critical ? "exception" : "coverage note"}{count === 1 ? "" : "s"}</AlertTitle>
+      <AlertDescription className="hidden sm:block">{failures.map(([name]) => name).join(", ") || "Hermes"} {critical ? "needs attention" : failures.length === 1 ? "has limited live visibility" : "have limited live visibility"}. Current evidence remains clearly separated from unavailable sources.</AlertDescription>
       {invalidGrant ? <AlertAction><Button size="sm" variant="outline" onClick={onReauthenticate}><KeyRound data-icon="inline-start" />Reauthenticate</Button></AlertAction> : null}
     </Alert>
   );
@@ -329,7 +333,7 @@ export function SystemsView({ cockpit, onReauthenticate }: { cockpit: DailyBusin
       {Object.entries(cockpit.sourceCoverage).map(([name, source]) => (
         <article key={name} className="flex flex-col gap-2 rounded-xl bg-card p-4 shadow-sm ring-1 ring-card-edge sm:flex-row sm:items-center sm:justify-between">
           <div><h3 className="text-sm font-semibold capitalize">{name.replace(/([A-Z])/g, " $1")}</h3><p className="mt-1 text-xs text-muted-foreground">{source.message}</p></div>
-          <div className="shrink-0 text-left sm:text-right"><Badge variant={isBrokenStatus(source.status) ? "destructive" : source.status === "connected_empty" ? "outline" : "secondary"}>{source.status.replaceAll("_", "-")}</Badge><p className="mt-1 text-[11px] text-muted-foreground">{formatRelativeTime(cockpit.telemetry.lastIntakeAt)} · {formatExactTime(cockpit.telemetry.lastIntakeAt)}</p></div>
+          <div className="shrink-0 text-left sm:text-right"><Badge variant={source.status === "error" ? "destructive" : ["unavailable", "connected_empty"].includes(source.status) ? "outline" : "secondary"}>{source.status.replaceAll("_", "-")}</Badge><p className="mt-1 text-[11px] text-muted-foreground">{formatRelativeTime(cockpit.telemetry.lastIntakeAt)} · {formatExactTime(cockpit.telemetry.lastIntakeAt)}</p></div>
         </article>
       ))}
     </section>

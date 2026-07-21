@@ -178,7 +178,34 @@ function collectHermesObservations(
       { observedAt: agentSessions.observedAt, facts: { sourceGroup: "agent_api" }, installedBackendVersion: health.version, installedBackendCommit: null },
     );
   }
-  endpoint({ ids: ["memory-context"], area: "memory", source: "Hermes memory", interface: "/api/memory", count: management.memory.providers.length, successSummary: `Hermes memory reported provider ${management.memory.activeProvider}.` });
+  if (managementReady) {
+    endpoint({ ids: ["memory-context"], area: "memory", source: "Hermes memory", interface: "/api/memory", count: management.memory.providers.length, successSummary: `Hermes memory reported provider ${management.memory.activeProvider}.` });
+  } else {
+    const memory = management.localMemory;
+    add(
+      "memory-context",
+      "Hermes local memory configuration",
+      memory.interface,
+      memory.state === "configured" ? "success" : memory.state === "not_configured" ? "not_configured" : memory.state,
+      memory.summary,
+      {
+        observedAt: memory.observedAt,
+        facts: {
+          provider: memory.provider,
+          profile: memory.profile,
+          configured: memory.state === "configured",
+          installedPlugin: memory.installedPlugin,
+          credentialConfigured: memory.credentialConfigured,
+          liveDataExposed: false,
+          partialClaim: true,
+          limitation: memory.summary,
+          sourceGroup: "local_hermes_configuration",
+        },
+        installedBackendVersion: installed.backendVersion,
+        installedBackendCommit: installed.backendCommit,
+      },
+    );
+  }
   endpoint({ ids: ["starmap"], area: "memory graph", source: "Hermes memory graph", interface: "/api/learning/graph", count: management.operator.memoryGraph.stats.nodes });
   endpoint({ ids: ["providers", "provider-accounts"], area: "model options", source: "Hermes model options", interface: "/api/model/options", count: management.operator.providers.length, emptyOutcome: "not_configured" });
   const agentModels = management.agentApi.models;

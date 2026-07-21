@@ -509,7 +509,7 @@ export function HermesControlCenter() {
   const selectedRun = snapshot?.runtimeExecution.runs.find((item) => item.id === selectedRunId) ?? null;
   const derivedExceptions: HermesControlCenterSnapshot["exceptions"] = snapshot?.capabilities.flatMap((capability) =>
     capability.surfaceState !== "unsupported" && ["degraded", "conflicting_evidence", "unavailable"].includes(capability.operationalHealth)
-      ? [{ kind: "capability" as const, capabilityId: capability.id, sourceGroup: null, dependentCount: null, title: capability.name, health: capability.operationalHealth as "degraded" | "conflicting_evidence" | "unavailable", summary: capability.operationalDetail }]
+      ? [{ kind: "capability" as const, capabilityId: capability.id, sourceGroup: null, dependentCount: null, title: capability.name, health: capability.operationalHealth as "degraded" | "conflicting_evidence" | "unavailable", severity: capability.operationalHealth === "conflicting_evidence" ? "critical" as const : "warning" as const, summary: capability.operationalDetail }]
       : []
   ) ?? [];
   const operationalExceptions = snapshot?.exceptions?.length ? snapshot.exceptions : derivedExceptions;
@@ -543,7 +543,7 @@ export function HermesControlCenter() {
         </div>
         {snapshot ? (
           <div className="flex items-center gap-2 overflow-x-auto text-xs text-muted-foreground" data-testid="hermes-version-strip">
-            <Badge variant={snapshot.health.runtime === "healthy" ? "default" : "destructive"}>Running Agent {snapshot.installed.observedRunningAgentVersion ?? "unknown"}</Badge>
+            <Badge variant={snapshot.health.runtime === "healthy" ? "default" : "outline"}>Running Agent {snapshot.installed.observedRunningAgentVersion ?? "unknown"}</Badge>
             <Badge variant="outline">Desktop {snapshot.installed.desktopVersion ?? "Unknown"}</Badge>
             <span className="whitespace-nowrap">Gateway {snapshot.health.gateway}</span>
             <span className="whitespace-nowrap">Configured profile {snapshot.health.configuredProfile}</span>
@@ -608,7 +608,15 @@ export function HermesControlCenter() {
                     </div>
                     {operationalExceptions.map((exception) => (
                       <button key={`${exception.kind}-${exception.capabilityId ?? exception.sourceGroup}`} type="button" className="block w-full text-left" disabled={!exception.capabilityId} onClick={() => { if (exception.capabilityId) setSelectedId(exception.capabilityId); setSelectedRunId(null); }}>
-                        <Alert variant="destructive" className="transition-colors hover:bg-destructive/5">
+                        <Alert
+                          variant={exception.severity === "critical" ? "destructive" : "default"}
+                          className={cn(
+                            "transition-colors",
+                            exception.severity === "critical"
+                              ? "hover:bg-destructive/5"
+                              : "border-warning/30 bg-warning/5 hover:bg-warning/10",
+                          )}
+                        >
                           <TriangleAlert aria-hidden="true" />
                           <AlertTitle>{exception.title} · {HEALTH_LABELS[exception.health]}</AlertTitle>
                           <AlertDescription className="line-clamp-2">{exception.summary}</AlertDescription>

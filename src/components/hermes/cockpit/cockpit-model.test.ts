@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CockpitCard, DailyBusinessCockpit } from "@/lib/hermes/cockpit-types";
-import { momentum, primaryAction } from "./cockpit-model";
+import { isCriticalHermesStatus, momentum, primaryAction } from "./cockpit-model";
 
 const card: CockpitCard = {
   id: "card-1",
@@ -24,6 +24,14 @@ const card: CockpitCard = {
 test("primary action uses the governed recommendation and preserves approval boundaries", () => {
   assert.equal(primaryAction(card), "draft_response");
   assert.equal(primaryAction({ ...card, recommendedAction: "schedule", approval: { state: "pending", runId: "run-1", requestId: "request-1" } }), "approve");
+});
+
+test("Hermes uncertainty stays noncritical while confirmed outage and authentication failure are critical", () => {
+  for (const status of ["online", "probe_unavailable", "probe_timeout", "misconfigured", "unavailable_profile"] as const) {
+    assert.equal(isCriticalHermesStatus(status), false);
+  }
+  assert.equal(isCriticalHermesStatus("offline"), true);
+  assert.equal(isCriticalHermesStatus("authentication_failure"), true);
 });
 
 test("Momentum reads only the frozen plan, not queue size or free-text history", () => {

@@ -276,6 +276,7 @@ export type HermesControlCenterSnapshot = {
     dependentCount: number | null;
     title: string;
     health: Extract<HermesOperationalHealth, "degraded" | "conflicting_evidence" | "unavailable">;
+    severity: "critical" | "warning";
     summary: string;
   }>;
   summary: Record<HermesCapabilityStatus, number>;

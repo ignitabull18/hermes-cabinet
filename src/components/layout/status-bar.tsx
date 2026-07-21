@@ -247,7 +247,7 @@ export function StatusBar() {
   // show "Checking…" rather than flashing green. After that, daemon needs
   // two consecutive misses to flip — single dropped polls during fast
   // refresh used to thrash the indicator.
-  const checkingHealth = appLevel === "unknown" || daemonLevel === "unknown";
+  const checkingHealth = appLevel === "unknown" || (!hermesMode && daemonLevel === "unknown");
   const appAlive = appLevel !== "down";
   const daemonAlive = daemonLevel !== "down";
 
@@ -305,6 +305,7 @@ export function StatusBar() {
     [providersLoaded, providerStatuses],
   );
   const anyProviderReady = hermesMode || legacyProviderReady;
+  const coreOperational = appAlive && (hermesMode || daemonAlive) && anyProviderReady;
 
   const fetchProviderStatus = useCallback(async () => {
     try {
@@ -452,7 +453,7 @@ export function StatusBar() {
             className={`flex items-center gap-1.5 rounded-md px-1.5 py-0.5 transition-colors cursor-pointer ${
               checkingHealth
                 ? "text-muted-foreground hover:bg-muted/40"
-                : appAlive && daemonAlive && anyProviderReady
+                : coreOperational
                 ? "text-green-500 hover:bg-green-500/10"
                 : !appAlive
                 ? "text-red-500 hover:bg-red-500/10"
@@ -461,13 +462,13 @@ export function StatusBar() {
             title={
               checkingHealth
                 ? t("status:server.checking")
-                : appAlive && daemonAlive && anyProviderReady
-                ? t("status:server.allRunning")
+                : coreOperational
+                ? hermesMode ? "Hermes-backed operation is available" : t("status:server.allRunning")
                 : !appAlive
                 ? t("status:server.appNotResponding")
-                : !daemonAlive && !anyProviderReady
+                : !hermesMode && !daemonAlive && !anyProviderReady
                 ? t("status:server.daemonDownNoProviders")
-                : !daemonAlive
+                : !hermesMode && !daemonAlive
                 ? t("status:server.daemonDown")
                 : t("status:server.noProviders")
             }
@@ -480,7 +481,7 @@ export function StatusBar() {
                 readers. */}
             {checkingHealth ? (
               <Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" aria-hidden="true" />
-            ) : appAlive && daemonAlive && anyProviderReady ? (
+            ) : coreOperational ? (
               <CircleDot className="h-3 w-3 shrink-0 text-green-500" aria-hidden="true" />
             ) : !appAlive ? (
               <XCircle className="h-3 w-3 shrink-0 text-red-500 animate-pulse" aria-hidden="true" />
@@ -490,7 +491,7 @@ export function StatusBar() {
             <span className="@max-[820px]:hidden">
               {checkingHealth
                 ? t("status:server.checkingShort")
-                : appAlive && daemonAlive && anyProviderReady
+                : coreOperational
                 ? t("status:server.online")
                 : !appAlive
                 ? t("status:server.offline")
@@ -499,7 +500,7 @@ export function StatusBar() {
           </button>
           {showServerPopup && (
             <div className={`absolute bottom-full start-0 mb-2 z-50 w-80 rounded-lg border bg-background p-3 shadow-lg ${
-              appAlive && daemonAlive && anyProviderReady
+              coreOperational
                 ? "border-green-500/30"
                 : !appAlive
                 ? "border-red-500/30"
@@ -508,14 +509,14 @@ export function StatusBar() {
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 space-y-2.5">
                   <p className={`text-xs font-medium ${
-                    appAlive && daemonAlive && anyProviderReady
+                    coreOperational
                       ? "text-green-500"
                       : !appAlive
                       ? "text-red-500"
                       : "text-amber-500"
                   }`}>
-                    {appAlive && daemonAlive && anyProviderReady
-                      ? t("status:server.allSystemsRunning")
+                    {coreOperational
+                      ? hermesMode ? "Hermes-backed operation is available" : t("status:server.allSystemsRunning")
                       : t("status:server.serviceDisruption")}
                   </p>
 
@@ -539,12 +540,12 @@ export function StatusBar() {
                   {/* Daemon */}
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-2 text-[11px]">
-                      <span className={`inline-block h-1.5 w-1.5 rounded-full shrink-0 ${daemonAlive ? "bg-green-500" : "bg-red-500"}`} />
-                      <span className="font-medium text-foreground/80">{t("status:server.daemon")}</span>
-                      <span className={`ml-auto ${daemonAlive ? "text-green-500" : "text-red-500"}`}>{daemonAlive ? t("status:server.running") : t("status:server.down")}</span>
+                      <span className={`inline-block h-1.5 w-1.5 rounded-full shrink-0 ${daemonAlive ? "bg-green-500" : hermesMode ? "bg-muted-foreground/50" : "bg-red-500"}`} />
+                      <span className="font-medium text-foreground/80">{hermesMode ? "Legacy Cabinet daemon" : t("status:server.daemon")}</span>
+                      <span className={`ml-auto ${daemonAlive ? "text-green-500" : hermesMode ? "text-muted-foreground" : "text-red-500"}`}>{daemonAlive ? t("status:server.running") : hermesMode ? "Daemon-only features disabled" : t("status:server.down")}</span>
                       {/* One-click recovery where a supervisor can respawn the
                           daemon; restart-by-exit, the health poll confirms. */}
-                      {!daemonAlive && appAlive && canRestartBackend && (
+                      {!hermesMode && !daemonAlive && appAlive && canRestartBackend && (
                         <button
                           type="button"
                           onClick={requestBackendRestart}
@@ -559,7 +560,9 @@ export function StatusBar() {
                     <p className="text-[10px] text-muted-foreground/70 pl-3.5">
                       {daemonAlive
                         ? t("status:server.daemonWorking")
-                        : t("status:server.daemonDownDescription")}
+                        : hermesMode
+                          ? "Legacy Cabinet daemon is not running. Hermes-backed features remain available; daemon-only features are disabled."
+                          : t("status:server.daemonDownDescription")}
                     </p>
                     <p className="text-[10px] text-muted-foreground/50 pl-3.5">
                       {t("status:server.lastSeen", { when: formatRelativeAgo(lastDaemonOkAt, popupNow, t) })}
@@ -620,10 +623,10 @@ export function StatusBar() {
                   </div>}
 
                   {/* Troubleshooting tips */}
-                  {(!appAlive || !daemonAlive || !anyProviderReady) && (
+                  {(!appAlive || (!hermesMode && !daemonAlive) || !anyProviderReady) && (
                     <div className="pt-1.5 border-t border-border space-y-1">
                       <p className="text-[10px] font-medium text-foreground/70">{t("status:server.howToFix")}</p>
-                      {(!appAlive || !daemonAlive) && (
+                      {(!appAlive || (!hermesMode && !daemonAlive)) && (
                         isCloudEdition ? (
                           <p className="text-[10px] text-muted-foreground">
                             {!appAlive
@@ -683,7 +686,7 @@ export function StatusBar() {
                   )}
 
                   {/* All good state */}
-                  {appAlive && daemonAlive && anyProviderReady && (
+                  {coreOperational && (
                     <p className="text-[10px] text-muted-foreground/60 pt-1 border-t border-border">
                       {hermesMode
                         ? "Cabinet is connected to the Hermes Operator."

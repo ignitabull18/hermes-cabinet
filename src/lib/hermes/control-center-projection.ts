@@ -430,6 +430,7 @@ export function buildHermesControlCenterProjection(input: HermesControlCenterPro
         dependentCount: managementUnavailableCapabilityIds.size,
         title: "Management unavailable",
         health: "unavailable",
+        severity: "warning",
         summary: `${managementUnavailableCapabilityIds.size} dependent capability observations were not collected. Hermes Management is not configured for this review.`,
       }]
     : [];
@@ -446,6 +447,9 @@ export function buildHermesControlCenterProjection(input: HermesControlCenterPro
       dependentCount: null,
       title: capability.name,
       health: capability.operationalHealth as "degraded" | "conflicting_evidence" | "unavailable",
+      severity: capability.operationalHealth === "conflicting_evidence" || (
+        capability.id === "messaging" && abnormal.some((item) => item.outcome === "failure")
+      ) ? "critical" as const : "warning" as const,
       summary: capability.operationalDetail,
     }];
   });

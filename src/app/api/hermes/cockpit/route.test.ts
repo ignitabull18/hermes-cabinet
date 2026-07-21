@@ -83,7 +83,13 @@ test("cockpit renders a partial projection when Management is not configured", a
     "Hermes Management is not configured. Management-backed intelligence is unavailable.",
   );
   assert.equal(body.sourceCoverage.hermesJobs.status, "unavailable");
-  assert.equal(body.sourceCoverage.supermemory.status, "unavailable");
+  assert.ok(["partial", "unavailable"].includes(body.sourceCoverage.supermemory.status));
+  if (body.sourceCoverage.supermemory.status === "partial") {
+    assert.equal(
+      body.sourceCoverage.supermemory.message,
+      "Supermemory is configured in Hermes. Live memory data is not exposed by the installed Hermes read-only API.",
+    );
+  }
   assert.ok(["connected", "connected_empty"].includes(body.sourceCoverage.manualRisks.status));
   assert.equal(body.profile, "operator-os");
   assert.doesNotMatch(serialized, /Missing server configuration|CABINET_HERMES_MANAGEMENT|cockpit-route-secret/);

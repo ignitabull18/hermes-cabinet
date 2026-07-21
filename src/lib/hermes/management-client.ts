@@ -15,6 +15,7 @@ import {
 } from "./developer-repository";
 import { normalizeRuntimeExecution } from "./runtime-execution";
 import { collectAgentApiReadOnly } from "./agent-api-readonly";
+import { observeHermesLocalMemory } from "./local-memory-observation";
 
 type Fetch = typeof fetch;
 
@@ -272,6 +273,7 @@ export class HermesManagementClient {
       timeoutMs: this.config.timeoutMs,
       sourceStates: this.config.sourceStates,
     }, this.fetchImpl);
+    const localMemoryPromise = observeHermesLocalMemory(this.config.profile);
     const [health, profilesRaw, manifestRaw, skillsRaw, jobsRaw, memoryRaw, mcpRaw, toolsetsRaw, pluginsRaw, openCli, runtimeStatus, workersRaw, boardRaw, messagingRaw, sessionsRaw, graphRaw, modelRaw, modelOptionsRaw, filesRaw, usageRaw] =
       await Promise.all([
         healthOverride ?? this.health(),
@@ -308,6 +310,7 @@ export class HermesManagementClient {
         read("usage analytics", `/api/analytics/usage?days=30&profile=${encodeURIComponent(this.config.profile)}`, { totals: {}, unavailable: true }),
       ]);
     const agentApi = await agentApiPromise;
+    const localMemory = await localMemoryPromise;
     const runtimeRaw = runtimeStatus.data ?? {};
     if (!managementReady) {
       diagnostics.push({ area: "management source", status: "degraded", message: "Hermes Management is not configured for this review." });
@@ -556,6 +559,7 @@ export class HermesManagementClient {
       checkedAt: new Date().toISOString(),
       profile: this.config.profile,
       agentApi,
+      localMemory,
       compatibility: {
         version: health.version,
         adapter: managementReady ? "installed-management-contract" : "source-specific",

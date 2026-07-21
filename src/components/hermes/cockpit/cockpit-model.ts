@@ -75,6 +75,10 @@ export function isBrokenStatus(status: CockpitSourceStatus): boolean {
   return status === "error" || status === "unavailable" || status === "partial";
 }
 
+export function isCriticalHermesStatus(status: DailyBusinessCockpit["health"]["status"]): boolean {
+  return status === "offline" || status === "authentication_failure";
+}
+
 export function radarCategory(item: CockpitPotentialMiss): "stale" | "owner" | "duplicate" | "suppressed" | "low-confidence" {
   const haystack = `${item.title} ${item.whyPotentiallyMissed}`.toLowerCase();
   if (haystack.includes("stale-evidence") || haystack.includes("stale evidence")) return "stale";

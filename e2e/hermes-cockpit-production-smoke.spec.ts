@@ -89,11 +89,16 @@ test("real production route keeps Today usable without Hermes Management", async
   await expect(root).not.toContainText("Missing server configuration");
   await expect(root).not.toContainText("CABINET_HERMES_MANAGEMENT_URL");
   await expect(root.getByText("The path is clear")).toBeVisible();
+  await expect(page.getByText("Cabinet agent daemon is unavailable")).toHaveCount(0);
+  await page.getByRole("button", { name: "Server status. Click for details" }).click();
+  await expect(page.getByText("Legacy Cabinet daemon is not running. Hermes-backed features remain available; daemon-only features are disabled.")).toBeVisible();
+  await page.getByRole("button", { name: "Dismiss" }).click();
 
   await root.getByRole("button", { name: "More", exact: true }).click();
   await page.getByRole("menuitem", { name: "Systems" }).click();
   await expect(root.getByTestId("cockpit-systems-view")).toContainText(/hermes jobs/i);
   await expect(root.getByTestId("cockpit-systems-view")).toContainText("unavailable");
+  await expect(root.getByTestId("cockpit-systems-view").getByRole("heading", { name: "supermemory" })).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -102,6 +107,18 @@ test("real production route keeps Today usable without Hermes Management", async
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   const firstViewItems = root.locator(".cockpit-first-view > *");
   expect(await firstViewItems.first().evaluate((element) => getComputedStyle(element).animationName)).toBe("none");
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`${cabinet.appUrl}/hermes`);
+  await expect(page.getByTestId("hermes-control-center")).toBeVisible();
+  await expect(page.getByText("Cabinet agent daemon is unavailable")).toHaveCount(0);
+  await expect(page.getByTestId("hermes-operational-exceptions")).toContainText("Management unavailable");
+  await expect(page.getByTestId("hermes-operational-exceptions").locator("[role=alert]").first()).not.toHaveClass(/border-destructive/);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await expect(page.getByTestId("hermes-control-center")).toBeVisible();
 
   expect(expectedDaemonFailures).toBeGreaterThan(0);
   expect(consoleIssues.length).toBe(expectedDaemonFailures);

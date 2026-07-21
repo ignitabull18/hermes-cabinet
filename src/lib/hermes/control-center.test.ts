@@ -102,6 +102,7 @@ test("shared Management unavailability produces one derived source-group excepti
   const grouped = snapshot.exceptions.filter((item) => item.kind === "source_group" && item.sourceGroup === "management");
   assert.equal(grouped.length, 1);
   assert.equal(grouped[0]?.dependentCount, 2);
+  assert.equal(grouped[0]?.severity, "warning");
   assert.equal(snapshot.exceptions.some((item) => item.capabilityId === "profiles" || item.capabilityId === "skills"), false);
 });
 
@@ -494,19 +495,23 @@ test("Gateway ignores unknown, unavailable, stale, and invalid-time disagreement
 });
 
 test("one genuine fresh Gateway disagreement preserves all evidence and opposing summary", () => {
-  const gateway = capability(buildHermesAcceptanceFixtureProjection(), "gateway");
+  const snapshot = buildHermesAcceptanceFixtureProjection();
+  const gateway = capability(snapshot, "gateway");
   assert.equal(gateway.operationalHealth, "conflicting_evidence");
   assert.match(gateway.operationalDetail, /health bridge observed running.*management status observed stopped/i);
   assert.equal(gateway.evidence.some((item) => item.facts?.state === "running"), true);
   assert.equal(gateway.evidence.some((item) => item.facts?.state === "stopped"), true);
+  assert.equal(snapshot.exceptions.find((item) => item.capabilityId === "gateway")?.severity, "critical");
 });
 
 test("Messaging remains platform-derived and Telegram fatal stays degraded", () => {
   assert.equal(messagingHealth([{ configured: true, lastError: "Fatal polling conflict" }]), "degraded");
   assert.equal(messagingHealth([]), "not_configured");
-  const messaging = capability(buildHermesAcceptanceFixtureProjection(), "messaging");
+  const snapshot = buildHermesAcceptanceFixtureProjection();
+  const messaging = capability(snapshot, "messaging");
   assert.equal(messaging.evidence.find((item) => item.proofScope === "exact_fixture_path")?.outcome, "failure");
   assert.equal(messaging.credit.liveProven, false);
+  assert.equal(snapshot.exceptions.find((item) => item.capabilityId === "messaging")?.severity, "critical");
 });
 
 test("diagnostic-only and Cabinet-local notification semantics remain intact", () => {

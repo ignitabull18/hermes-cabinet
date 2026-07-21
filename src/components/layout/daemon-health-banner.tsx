@@ -6,14 +6,18 @@ import {
   selectShowDaemonDownBanner,
   useHealthStore,
 } from "@/stores/health-store";
+import { useHermesMode } from "@/hooks/use-cabinet-runtime-mode";
 
 export function DaemonHealthBanner() {
   const { t } = useLocale();
+  const hermesMode = useHermesMode();
   const show = useHealthStore(selectShowDaemonDownBanner);
   const installKind = useHealthStore((s) => s.installKind);
   const dismiss = useHealthStore((s) => s.dismissBanner);
 
-  if (!show) return null;
+  // The Cabinet daemon is a legacy, feature-scoped dependency in Hermes mode.
+  // Its absence must not masquerade as a global application outage.
+  if (!show || hermesMode) return null;
 
   const fixHint =
     installKind === "electron-macos"
