@@ -19,4 +19,4 @@ This audit used the existing API-key-authenticated loopback server. No Managemen
 
 No durable global run enumeration, Agent-reported active-profile field in the observed live health response, Agent artifact index, or independent usage-history endpoint was found. The configured `operator-os` profile therefore remains configured context, not an observed Agent fact. Session usage fields are shown only when explicitly present on each returned session.
 
-The installed source refuses API-server startup without an API key. All implemented credential-bearing reads use `Authorization: Bearer` server-side, `cache: no-store`, an abort timeout, and `redirect: error`. No raw response is logged before normalization.
+The installed source refuses API-server startup without an API key. All implemented reads use server-side bearer API-key authentication, `cache: no-store`, an abort timeout, and `redirect: error`. No credential-bearing header or raw response enters generated evidence or the browser model.
