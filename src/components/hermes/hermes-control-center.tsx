@@ -312,6 +312,9 @@ function RepositoryEvidenceFacts({ capability }: { capability: HermesCapabilityP
 }
 
 function CapabilityInspector({ capability, snapshot }: { capability: HermesCapabilityProjection; snapshot: HermesControlCenterSnapshot }) {
+  const memoryMetadata = capability.id === "memory-context"
+    ? capability.evidence.find((item) => item.proofScope === "configured_profile_metadata")
+    : null;
   const detailRows = [
     { id: "surface-state", label: "Surface state", value: capability.surfaceState },
     { id: "installed-support", label: "Installed support", value: capability.installedSupport.detail },
@@ -348,6 +351,25 @@ function CapabilityInspector({ capability, snapshot }: { capability: HermesCapab
               </div>
             ))}
           </dl>
+          {memoryMetadata?.facts ? (
+            <>
+              <Separator />
+              <section className="flex flex-col gap-2" data-testid="hermes-memory-truth-boundary">
+                <h3 className="text-sm font-semibold">Supermemory truth boundary</h3>
+                <dl className="grid gap-2 text-xs sm:grid-cols-2">
+                  <div><dt className="text-muted-foreground">Configured profile</dt><dd className="font-medium">{String(memoryMetadata.facts.configuredProfile ?? "Unknown")}</dd></div>
+                  <div><dt className="text-muted-foreground">Observed active profile</dt><dd className="font-medium">Unknown — Management is unavailable</dd></div>
+                  <div><dt className="text-muted-foreground">Configured provider selection</dt><dd className="font-medium">{memoryMetadata.facts.configuredProviderSelection === "supermemory" ? "Supermemory — detected in the configured profile metadata" : "Not selected"}</dd></div>
+                  <div><dt className="text-muted-foreground">Plugin metadata</dt><dd className="font-medium">{memoryMetadata.facts.detectedPluginManifest === true ? "Detected in the local Hermes installation" : "Not detected"}</dd></div>
+                  <div><dt className="text-muted-foreground">Observed loaded provider</dt><dd className="font-medium">Unknown — no safe runtime contract</dd></div>
+                  <div><dt className="text-muted-foreground">Runtime provider status</dt><dd className="font-medium">Unknown — no Hermes-native status interface confirmed it</dd></div>
+                  <div><dt className="text-muted-foreground">Credential state</dt><dd className="font-medium">Not inspected — credentials remain owned by Hermes</dd></div>
+                  <div><dt className="text-muted-foreground">Live memory data</dt><dd className="font-medium">Not exposed by the installed Agent API</dd></div>
+                </dl>
+                <p className="text-xs text-muted-foreground">Configuration metadata is not live runtime proof and earns no Current Live Visibility or Live-Proven credit.</p>
+              </section>
+            </>
+          ) : null}
           <Separator />
           <section className="flex flex-col gap-2" data-testid="hermes-runtime-identity">
             <h3 className="text-sm font-semibold">Runtime identity</h3>

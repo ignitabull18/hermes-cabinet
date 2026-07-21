@@ -3,6 +3,7 @@ import test, { afterEach, beforeEach } from "node:test";
 import { NextRequest } from "next/server";
 
 import { GET } from "./route";
+import { SUPERMEMORY_LIMITATION } from "@/lib/hermes/local-memory-observation";
 
 const originalFetch = globalThis.fetch;
 const managedEnv = [
@@ -87,7 +88,7 @@ test("cockpit renders a partial projection when Management is not configured", a
   if (body.sourceCoverage.supermemory.status === "partial") {
     assert.equal(
       body.sourceCoverage.supermemory.message,
-      "Supermemory is configured in Hermes. Live memory data is not exposed by the installed Hermes read-only API.",
+      SUPERMEMORY_LIMITATION,
     );
   }
   assert.ok(["connected", "connected_empty"].includes(body.sourceCoverage.manualRisks.status));

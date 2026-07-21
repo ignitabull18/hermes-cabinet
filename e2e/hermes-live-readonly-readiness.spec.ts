@@ -40,7 +40,6 @@ controlledInput.observations = [
   })),
 ];
 const controlledProjection = buildHermesControlCenterProjection(controlledInput);
-const fixture = controlledProjection;
 const browserErrors = new WeakMap<Page, string[]>();
 
 async function prepare(page: Page) {
@@ -69,7 +68,7 @@ async function prepare(page: Page) {
         profileSource: null,
         observationSource: "GET /health/detailed",
         gatewayState: "running",
-        checkedAt: fixture.provenance.capturedAt,
+        checkedAt: new Date().toISOString(),
         message: "Controlled browser contract.",
       },
     }),
@@ -135,7 +134,7 @@ test("partial Agent-only review keeps configured and observed identity, grouped 
 test("a successful footer poll followed by a timeout retains stale last-known evidence without claiming offline", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const mutationCalls = await prepare(page);
-  const online = page.getByRole("button", { name: /Hermes online/ });
+  const online = page.getByRole("button", { name: /Hermes connected/ });
   await expect(online).toBeVisible();
   await page.unroute("**/api/hermes/health");
   await page.route("**/api/hermes/health", (route) => route.fulfill({

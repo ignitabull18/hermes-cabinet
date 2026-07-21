@@ -1,21 +1,31 @@
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { load } from "js-yaml";
 
 const SUPERMEMORY_LIMITATION =
-  "Supermemory is configured in Hermes. Live memory data is not exposed by the installed Hermes read-only API.";
+  "Supermemory is selected in Hermes configuration. The loaded provider and live runtime availability remain unknown because the installed read-only Agent API exposes no memory-status contract.";
 
 export type HermesLocalMemoryObservation = {
-  state: "configured" | "not_configured" | "unavailable" | "unknown";
+  state: "metadata_detected" | "not_selected" | "unavailable" | "unknown";
   observedAt: string;
-  provider: "supermemory" | null;
-  profile: string;
-  credentialConfigured: boolean;
-  installedPlugin: boolean;
+  configuredProfile: string;
+  observedActiveProfile: null;
+  configuredProviderSelection: "supermemory" | null;
+  detectedPluginManifest: boolean;
+  observedLoadedProvider: null;
+  observedRuntimeAvailability: "unknown";
+  credentialState: "not_inspected";
   liveDataExposed: false;
-  interface: "Hermes profile configuration + installed Agent API contract audit";
+  interface: "Hermes configured-profile metadata + installed plugin manifest metadata";
   summary: string;
+};
+
+type ObservationOptions = {
+  hermesHome?: string;
+  observedAt?: string;
+  readText?: (file: string) => Promise<string>;
+  fileExists?: (file: string) => Promise<boolean>;
 };
 
 function safeProfile(value: string): string {
@@ -28,61 +38,52 @@ function record(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function hasEnvField(contents: string, field: string): boolean {
-  return contents.split(/\r?\n/).some((line) => {
-    const match = /^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=/.exec(line);
-    return match?.[1] === field;
-  });
-}
-
-async function optionalRead(file: string): Promise<string | null> {
+async function defaultFileExists(file: string): Promise<boolean> {
   try {
-    return await readFile(file, "utf8");
+    await access(file);
+    return true;
   } catch {
-    return null;
+    return false;
   }
 }
 
 /**
- * Read only the minimum Hermes-owned configuration metadata needed to state
- * whether Supermemory is configured. Secret values and filesystem identities
- * never enter the returned model.
+ * Reads only non-secret Hermes configuration metadata. Environment files are
+ * deliberately outside this observer's contract: credential ownership stays
+ * with Hermes and Cabinet never inspects credential presence or value.
  */
 export async function observeHermesLocalMemory(
   profileInput: string,
-  options: { hermesHome?: string; observedAt?: string } = {},
+  options: ObservationOptions = {},
 ): Promise<HermesLocalMemoryObservation> {
   const observedAt = options.observedAt ?? new Date().toISOString();
-  const profile = safeProfile(profileInput);
-  const interfaceIdentity = "Hermes profile configuration + installed Agent API contract audit" as const;
-  if (profile === "unknown") {
-    return {
-      state: "unknown",
-      observedAt,
-      provider: null,
-      profile,
-      credentialConfigured: false,
-      installedPlugin: false,
-      liveDataExposed: false,
-      interface: interfaceIdentity,
-      summary: "Hermes memory configuration could not be inspected because the active profile identity is invalid.",
-    };
+  const configuredProfile = safeProfile(profileInput);
+  const interfaceIdentity = "Hermes configured-profile metadata + installed plugin manifest metadata" as const;
+  const base = {
+    observedAt,
+    configuredProfile,
+    observedActiveProfile: null,
+    configuredProviderSelection: null,
+    detectedPluginManifest: false,
+    observedLoadedProvider: null,
+    observedRuntimeAvailability: "unknown" as const,
+    credentialState: "not_inspected" as const,
+    liveDataExposed: false as const,
+    interface: interfaceIdentity,
+  };
+
+  if (configuredProfile === "unknown") {
+    return { ...base, state: "unknown", summary: "Hermes memory metadata could not be inspected because the configured profile identity is invalid." };
   }
 
   const hermesHome = options.hermesHome ?? path.join(homedir(), ".hermes");
-  const profileConfig = await optionalRead(path.join(hermesHome, "profiles", profile, "config.yaml"));
-  if (profileConfig === null) {
-    return {
-      state: "unavailable",
-      observedAt,
-      provider: null,
-      profile,
-      credentialConfigured: false,
-      installedPlugin: false,
-      liveDataExposed: false,
-      interface: interfaceIdentity,
-      summary: "Hermes profile memory configuration is not safely observable on this Cabinet server.",
-    };
+  const readText = options.readText ?? ((file: string) => readFile(file, "utf8"));
+  const fileExists = options.fileExists ?? defaultFileExists;
+  let profileConfig: string;
+  try {
+    profileConfig = await readText(path.join(hermesHome, "profiles", configuredProfile, "config.yaml"));
+  } catch {
+    return { ...base, state: "unavailable", summary: "Hermes configured-profile memory metadata is not safely observable on this Cabinet server." };
   }
 
   let provider: string | null = null;
@@ -91,55 +92,22 @@ export async function observeHermesLocalMemory(
     const memory = record(parsed.memory);
     provider = typeof memory.provider === "string" ? memory.provider.trim().toLowerCase() : null;
   } catch {
-    return {
-      state: "unknown",
-      observedAt,
-      provider: null,
-      profile,
-      credentialConfigured: false,
-      installedPlugin: false,
-      liveDataExposed: false,
-      interface: interfaceIdentity,
-      summary: "Hermes profile memory configuration could not be interpreted safely.",
-    };
+    return { ...base, state: "unknown", summary: "Hermes configured-profile memory metadata could not be interpreted safely." };
   }
 
   if (provider !== "supermemory") {
-    return {
-      state: "not_configured",
-      observedAt,
-      provider: null,
-      profile,
-      credentialConfigured: false,
-      installedPlugin: false,
-      liveDataExposed: false,
-      interface: interfaceIdentity,
-      summary: "Supermemory is not selected as the active Hermes memory provider.",
-    };
+    return { ...base, state: "not_selected", summary: "Supermemory is not selected in the configured Hermes profile." };
   }
 
-  const [globalEnvironment, profileEnvironment, installedPluginSource] = await Promise.all([
-    optionalRead(path.join(hermesHome, ".env")),
-    optionalRead(path.join(hermesHome, "profiles", profile, ".env")),
-    optionalRead(path.join(hermesHome, "hermes-agent", "plugins", "memory", "supermemory", "plugin.yaml")),
-  ]);
-  const credentialConfigured = [globalEnvironment, profileEnvironment]
-    .some((contents) => contents !== null && hasEnvField(contents, "SUPERMEMORY_API_KEY"));
-  const installedPlugin = installedPluginSource !== null;
-  const configured = credentialConfigured && installedPlugin;
-
+  const detectedPluginManifest = await fileExists(
+    path.join(hermesHome, "hermes-agent", "plugins", "memory", "supermemory", "plugin.yaml"),
+  );
   return {
-    state: configured ? "configured" : "not_configured",
-    observedAt,
-    provider: "supermemory",
-    profile,
-    credentialConfigured,
-    installedPlugin,
-    liveDataExposed: false,
-    interface: interfaceIdentity,
-    summary: configured
-      ? SUPERMEMORY_LIMITATION
-      : "Supermemory is selected in Hermes, but its installed configuration is incomplete.",
+    ...base,
+    state: "metadata_detected",
+    configuredProviderSelection: "supermemory",
+    detectedPluginManifest,
+    summary: SUPERMEMORY_LIMITATION,
   };
 }
 

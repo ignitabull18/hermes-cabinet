@@ -21,8 +21,9 @@ interface HealthState {
   bannerDismissedAt: number | null; // ms; reappears after 60s if still down
   subscribers: number;
   intervalId: ReturnType<typeof setInterval> | null;
-  pollOnce: () => Promise<void>;
-  startPolling: () => () => void;
+  visibilityHandler: (() => void) | null;
+  pollOnce: (options?: { includeDaemon?: boolean }) => Promise<void>;
+  startPolling: (options?: { includeDaemon?: boolean }) => () => void;
   dismissBanner: () => void;
 }
 
@@ -55,14 +56,14 @@ export const useHealthStore = create<HealthState>((set, get) => ({
   bannerDismissedAt: null,
   subscribers: 0,
   intervalId: null,
+  visibilityHandler: null,
 
-  pollOnce: async () => {
-    const [appRes, daemonRes] = await Promise.allSettled([
-      dedupFetch("/api/health", { cache: "no-store" }),
-      dedupFetch("/api/health/daemon", { cache: "no-store" }),
-    ]);
+  pollOnce: async ({ includeDaemon = true } = {}) => {
+    const [appRes, daemonRes] = await Promise.allSettled(
+      healthPollPaths(includeDaemon).map((url) => dedupFetch(url, { cache: "no-store" })),
+    );
     const appOk = appRes.status === "fulfilled" && appRes.value.ok;
-    const daemonOk = daemonRes.status === "fulfilled" && daemonRes.value.ok;
+    const daemonOk = includeDaemon && daemonRes?.status === "fulfilled" && daemonRes.value.ok;
     const now = Date.now();
 
     let nextInstallKind: InstallKind | null = null;
@@ -79,34 +80,33 @@ export const useHealthStore = create<HealthState>((set, get) => ({
 
     set((s) => ({
       appMissCount: appOk ? 0 : Math.max(s.appMissCount, 0) + 1,
-      daemonMissCount: daemonOk ? 0 : Math.max(s.daemonMissCount, 0) + 1,
+      daemonMissCount: includeDaemon ? (daemonOk ? 0 : Math.max(s.daemonMissCount, 0) + 1) : s.daemonMissCount,
       lastAppPollAt: now,
-      lastDaemonPollAt: now,
+      lastDaemonPollAt: includeDaemon ? now : s.lastDaemonPollAt,
       lastAppOkAt: appOk ? now : s.lastAppOkAt,
-      lastDaemonOkAt: daemonOk ? now : s.lastDaemonOkAt,
+      lastDaemonOkAt: includeDaemon && daemonOk ? now : s.lastDaemonOkAt,
       installKind: nextInstallKind ?? s.installKind,
     }));
   },
 
-  startPolling: () => {
+  startPolling: ({ includeDaemon = true } = {}) => {
     const { subscribers, intervalId, pollOnce } = get();
     set({ subscribers: subscribers + 1 });
 
     if (intervalId === null) {
-      void pollOnce();
+      void pollOnce({ includeDaemon });
       const id = setInterval(() => {
         if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-        void get().pollOnce();
+        void get().pollOnce({ includeDaemon });
       }, POLL_INTERVAL_MS);
       set({ intervalId: id });
 
       if (typeof document !== "undefined") {
         const onVisibility = () => {
-          if (document.visibilityState === "visible") void get().pollOnce();
+          if (document.visibilityState === "visible") void get().pollOnce({ includeDaemon });
         };
         document.addEventListener("visibilitychange", onVisibility);
-        // We don't bother removing this — startPolling is mounted for the
-        // lifetime of the app shell, and the listener is idempotent.
+        set({ visibilityHandler: onVisibility });
       }
     }
 
@@ -115,7 +115,11 @@ export const useHealthStore = create<HealthState>((set, get) => ({
       if (next <= 0) {
         const id = get().intervalId;
         if (id !== null) clearInterval(id);
-        set({ subscribers: 0, intervalId: null });
+        const visibilityHandler = get().visibilityHandler;
+        if (visibilityHandler && typeof document !== "undefined") {
+          document.removeEventListener("visibilitychange", visibilityHandler);
+        }
+        set({ subscribers: 0, intervalId: null, visibilityHandler: null });
       } else {
         set({ subscribers: next });
       }
@@ -124,6 +128,10 @@ export const useHealthStore = create<HealthState>((set, get) => ({
 
   dismissBanner: () => set({ bannerDismissedAt: Date.now() }),
 }));
+
+export function healthPollPaths(includeDaemon: boolean): string[] {
+  return includeDaemon ? ["/api/health", "/api/health/daemon"] : ["/api/health"];
+}
 
 export function selectAppLevel(s: HealthState): ServiceLevel {
   return levelFor(s.appMissCount);

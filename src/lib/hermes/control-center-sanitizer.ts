@@ -7,6 +7,7 @@ const AUTHORIZATION = /\b(?:bearer|basic)\s+[a-z0-9._~+/=\-]+/gi;
 const TELEGRAM_BOT_URL = /https?:\/\/api\.telegram\.org\/bot[^/\s?#]+[^\s]*/gi;
 const CREDENTIAL_FILE = /(?:file:\/\/)?\/[^\s"']*\/(?:credentials?|secrets?|tokens?)(?:\/[^\s"']*)?/gi;
 const HOME_PATH = /\/(?:Users|home)\/[^/\s]+/g;
+const NONSECRET_CREDENTIAL_STATUS = "Not inspected — credentials remain owned by Hermes";
 
 export function sanitizeHermesText(input: string, maxLength = MAX_BROWSER_STRING): string {
   const value = input
@@ -22,7 +23,7 @@ export function sanitizeHermesText(input: string, maxLength = MAX_BROWSER_STRING
 
 function sanitizeValue(value: unknown, key = ""): unknown {
   if (typeof value === "string") {
-    if (SECRET_KEY.test(key)) return value ? "[redacted]" : value;
+    if (SECRET_KEY.test(key)) return value === NONSECRET_CREDENTIAL_STATUS ? value : value ? "[redacted]" : value;
     const bounded = /(?:summary|message|error|result|warning|detail)$/i.test(key) ? 240 : MAX_BROWSER_STRING;
     return sanitizeHermesText(value, bounded);
   }

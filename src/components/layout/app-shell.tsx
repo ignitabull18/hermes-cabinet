@@ -70,6 +70,7 @@ import { ProviderSetupDialog } from "@/components/settings/provider-setup-dialog
 import { SystemToasts } from "@/components/layout/system-toasts";
 import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
 import { useIsMobile } from "@/hooks/use-is-mobile";
+import { useHermesMode } from "@/hooks/use-cabinet-runtime-mode";
 
 // Section components are only rendered when the user navigates to them —
 // load them on demand to keep the first-paint bundle small. Previously all of
@@ -169,7 +170,8 @@ function isOnboardingResetInProgress(): boolean {
 const useIsoLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 export function AppShell() {
-  useGlobalHotkeys();
+  const hermesMode = useHermesMode();
+  useGlobalHotkeys(!hermesMode);
   const isMobile = useIsMobile();
   const { t } = useLocale();
   const loadTree = useTreeStore((s) => s.loadTree);
@@ -1199,7 +1201,7 @@ export function AppShell() {
             <ContentSheet>{renderContent()}</ContentSheet>
           )}
         </main>
-        {terminalOpen && terminalPosition === "bottom" && <TerminalTabs />}
+        {!hermesMode && terminalOpen && terminalPosition === "bottom" && <TerminalTabs />}
         {!isMobile && (
           <div className={focusMode ? "hidden" : "animate-in fade-in duration-300 ease-out"}>
             <StatusBar />
@@ -1207,7 +1209,7 @@ export function AppShell() {
         )}
       </div>
       {!focusMode && section.type !== "cockpit" && section.type !== "hermes" ? <MobileBottomNav /> : null}
-      {terminalOpen && terminalPosition === "right" && <TerminalTabs />}
+      {!hermesMode && terminalOpen && terminalPosition === "right" && <TerminalTabs />}
       {!isMobile && (
         <div className={focusMode ? "hidden" : "contents"}>
           <TaskRail />

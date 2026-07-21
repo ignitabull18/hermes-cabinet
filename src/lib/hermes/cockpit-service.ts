@@ -84,12 +84,12 @@ function sourceDefaults(
       status: memoryHealthy ? "connected" : "partial",
       message: `${management.memory.namespace}; capture ${management.memory.captureState}; recall ${management.memory.recallHealth}.`,
       evidenceCount: memoryHealthy ? 1 : 0,
-    } : management.localMemory.state === "configured" ? {
+    } : management.localMemory.state === "metadata_detected" ? {
       status: "partial",
       message: management.localMemory.summary,
       evidenceCount: 0,
     } : {
-      status: management.localMemory.state === "not_configured" ? "partial" : "unavailable",
+      status: management.localMemory.state === "not_selected" ? "partial" : "unavailable",
       message: management.localMemory.summary,
       evidenceCount: 0,
     },

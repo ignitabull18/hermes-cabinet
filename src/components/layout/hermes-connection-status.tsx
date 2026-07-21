@@ -2,15 +2,21 @@
 
 import { AlertTriangle, CircleDot, Loader2, XCircle } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { hermesHealthDisplay } from "@/lib/hermes/health-status";
+import { hermesHealthDisplay, type HermesHealthDisplay } from "@/lib/hermes/health-status";
 import type { HermesHealthSnapshot } from "@/lib/hermes/types";
 
-export function HermesConnectionStatus() {
+export function useHermesConnectionStatus(enabled = true): {
+  snapshot: HermesHealthSnapshot | null;
+  display: HermesHealthDisplay;
+  connecting: boolean;
+  refresh: () => Promise<void>;
+} {
   const [snapshot, setSnapshot] = useState<HermesHealthSnapshot | null>(null);
   const [lastConfirmed, setLastConfirmed] = useState<HermesHealthSnapshot | null>(null);
   const [connecting, setConnecting] = useState(true);
 
   const refresh = useCallback(async () => {
+    if (!enabled) return;
     try {
       const response = await fetch("/api/hermes/health", { cache: "no-store" });
       const data = (await response.json()) as HermesHealthSnapshot;
@@ -31,17 +37,27 @@ export function HermesConnectionStatus() {
     } finally {
       setConnecting(false);
     }
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
+    if (!enabled) return;
     void refresh();
     const id = window.setInterval(() => void refresh(), 10_000);
     return () => window.clearInterval(id);
-  }, [refresh]);
-
-  if (snapshot?.enabled === false) return null;
+  }, [enabled, refresh]);
 
   const display = hermesHealthDisplay(connecting ? null : snapshot, lastConfirmed);
+  return { snapshot, display, connecting, refresh };
+}
+
+export function HermesConnectionStatus({
+  controller,
+}: {
+  controller: ReturnType<typeof useHermesConnectionStatus>;
+}) {
+  const { snapshot, display, connecting, refresh } = controller;
+  if (snapshot?.enabled === false) return null;
+
   const online = display.tone === "healthy";
   const failure = display.tone === "failure";
   const title = [display.detail, snapshot?.version && `Version ${snapshot.version}`, snapshot?.profile && `Profile ${snapshot.profile}`]
@@ -52,7 +68,6 @@ export function HermesConnectionStatus() {
     <button
       type="button"
       onClick={() => {
-        setConnecting(true);
         void refresh();
       }}
       className={`flex items-center gap-1.5 rounded-md px-1.5 py-0.5 transition-colors ${

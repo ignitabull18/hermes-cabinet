@@ -30,7 +30,7 @@ export const HERMES_OPERATIONAL_HEALTH_STATES = [
 ] as const;
 
 export type HermesOperationalHealth = (typeof HERMES_OPERATIONAL_HEALTH_STATES)[number];
-export type HermesProofKind = "live" | "exact_fixture" | "historical_audit";
+export type HermesProofKind = "live" | "detected_metadata" | "exact_fixture" | "historical_audit";
 export type HermesEvidenceOrigin = "raw_observation" | "approved_evidence_catalog" | "derived_reconciliation";
 export const HERMES_PROOF_SCOPES = [
   "live_runtime_operation",
@@ -38,6 +38,7 @@ export const HERMES_PROOF_SCOPES = [
   "source_audit",
   "exact_fixture_path",
   "cabinet_local_surface",
+  "configured_profile_metadata",
 ] as const;
 export type HermesProofScope = (typeof HERMES_PROOF_SCOPES)[number];
 export type HermesEvidenceOutcome =

@@ -34,6 +34,7 @@ import { useEditorStore } from "@/stores/editor-store";
 import { useAppStore } from "@/stores/app-store";
 import { useRoomsStore } from "@/stores/rooms-store";
 import { useLocale } from "@/i18n/use-locale";
+import { useHermesMode } from "@/hooks/use-cabinet-runtime-mode";
 
 type FlatEntry =
   | { kind: "page"; key: string; hit: PageHit }
@@ -204,6 +205,7 @@ function highlight(text: string, query: string): React.ReactNode {
 }
 
 export function SearchPalette() {
+  const hermesMode = useHermesMode();
   const { t } = useLocale();
   const open = useSearchStore((s) => s.open);
   const query = useSearchStore((s) => s.query);
@@ -305,9 +307,11 @@ export function SearchPalette() {
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     // Audit #038: skip the search API call entirely when in command mode.
-    if (isCommandMode) {
+    if (isCommandMode || hermesMode) {
+      abortRef.current?.abort();
       setLoading(false);
       setResults(null);
+      setServiceError(null);
       return;
     }
     debounceRef.current = setTimeout(() => {
@@ -316,7 +320,7 @@ export function SearchPalette() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [query, scope, performSearch, isCommandMode, setLoading, setResults]);
+  }, [query, scope, performSearch, isCommandMode, hermesMode, setLoading, setResults, setServiceError]);
 
   useEffect(() => {
     if (open) {
@@ -451,9 +455,10 @@ export function SearchPalette() {
   }, [query, setAiPending, setAiResult]);
 
   const hasAnyResults = flat.length > 0;
+  const daemonSearchUnavailable = hermesMode && !isCommandMode;
   const showZeroState =
-    !isCommandMode && !loading && query.trim().length > 0 && !hasAnyResults && !serviceError;
-  const showRecents = !query.trim() && !loading;
+    !daemonSearchUnavailable && !isCommandMode && !loading && query.trim().length > 0 && !hasAnyResults && !serviceError;
+  const showRecents = !daemonSearchUnavailable && !query.trim() && !loading;
 
   return (
     <Dialog.Root
@@ -511,7 +516,7 @@ export function SearchPalette() {
           </div>
 
           {/* Scope tabs */}
-          <div className="flex items-center gap-1 border-b border-border px-3 py-1.5">
+          <div className={`flex items-center gap-1 border-b border-border px-3 py-1.5 ${daemonSearchUnavailable ? "opacity-50" : ""}`}>
             {SCOPES.map((s) => {
               const count =
                 results == null
@@ -527,6 +532,7 @@ export function SearchPalette() {
                 <button
                   key={s.id}
                   onClick={() => setScope(s.id)}
+                  disabled={daemonSearchUnavailable}
                   className={cn(
                     "flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] transition-colors",
                     scope === s.id
@@ -607,14 +613,26 @@ export function SearchPalette() {
                   )
                 ) : null}
 
-                {!isCommandMode && loading && !hasAnyResults && (
+                {daemonSearchUnavailable && (
+                  <div data-testid="hermes-daemon-search-unavailable" className="m-3 rounded-md border border-border bg-muted/30 p-3 text-[12px]">
+                    <div className="flex items-center gap-2 font-medium text-foreground/80">
+                      <SearchIcon className="h-3.5 w-3.5" />
+                      Content search unavailable in Hermes mode
+                    </div>
+                    <p className="mt-1 text-muted-foreground">
+                      Pages, agents, and task search depend on the legacy Cabinet daemon. Type <code className="rounded bg-muted px-1">/</code> for commands.
+                    </p>
+                  </div>
+                )}
+
+                {!daemonSearchUnavailable && !isCommandMode && loading && !hasAnyResults && (
                   <div className="flex items-center gap-2 px-3 py-6 text-muted-foreground text-[12px]">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     Searching…
                   </div>
                 )}
 
-                {serviceError && (
+                {!daemonSearchUnavailable && serviceError && (
                   <div className="m-3 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-[12px] text-destructive-foreground">
                     <div className="flex items-center gap-2 font-medium text-destructive">
                       <AlertTriangle className="h-3.5 w-3.5" />
@@ -688,7 +706,7 @@ export function SearchPalette() {
                   </div>
                 )}
 
-                {hasAnyResults && (
+                {!daemonSearchUnavailable && hasAnyResults && (
                   <ResultList
                     flat={flat}
                     query={query.trim().toLowerCase()}

@@ -1,7 +1,9 @@
 import type { HermesHealthSnapshot } from "./types";
 
 export type HermesHealthDisplay = {
+  state: HermesAgentOperationalState;
   label: string;
+  statusText: string;
   detail: string;
   tone: "neutral" | "healthy" | "warning" | "failure";
   currentSource: string;
@@ -9,6 +11,18 @@ export type HermesHealthDisplay = {
   lastConfirmedAt: string | null;
   lastConfirmedVersion: string | null;
 };
+
+export type HermesAgentOperationalState =
+  | "connected"
+  | "stale"
+  | "probe_unavailable"
+  | "probe_timeout"
+  | "authentication_failure"
+  | "not_configured"
+  | "authoritative_offline"
+  | "unknown";
+
+const FRESH_AGENT_OBSERVATION_MS = 30_000;
 
 function ageLabel(observedAt: string, now: string): string {
   const elapsed = Date.parse(now) - Date.parse(observedAt);
@@ -26,7 +40,9 @@ export function hermesHealthDisplay(
 ): HermesHealthDisplay {
   if (!snapshot) {
     return {
-      label: "Hermes connecting",
+      state: "unknown",
+      label: "Hermes status unknown",
+      statusText: "Unknown — awaiting a source-specific Agent observation",
       detail: "Checking Hermes connectivity.",
       tone: "neutral",
       currentSource: "GET /api/hermes/health",
@@ -37,13 +53,33 @@ export function hermesHealthDisplay(
   }
 
   const sourceDetail = `Source ${snapshot.observationSource}, observed ${snapshot.checkedAt}.`;
+  const ageMs = Date.parse(now) - Date.parse(snapshot.checkedAt);
+  if (snapshot.status === "online" && (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > FRESH_AGENT_OBSERVATION_MS)) {
+    return {
+      state: "stale",
+      label: "Hermes evidence stale",
+      statusText: `Stale — Agent ${snapshot.version ?? "version unknown"} was last confirmed ${ageLabel(snapshot.checkedAt, now)}`,
+      detail: `${snapshot.message} The successful observation is stale. ${sourceDetail}`,
+      tone: "warning",
+      currentSource: snapshot.observationSource,
+      currentObservedAt: snapshot.checkedAt,
+      lastConfirmedAt: snapshot.checkedAt,
+      lastConfirmedVersion: snapshot.version,
+    };
+  }
   if (snapshot.status === "probe_timeout" || snapshot.status === "probe_unavailable") {
     const label = snapshot.status === "probe_timeout" ? "Hermes health probe timed out" : "Hermes status probe unavailable";
     const stale = lastConfirmed?.status === "online"
       ? ` Agent ${lastConfirmed.version ?? "version unknown"} was last confirmed ${ageLabel(lastConfirmed.checkedAt, now)} by ${lastConfirmed.observationSource}; that evidence is stale.`
       : " No prior successful observation is available; runtime state is unknown.";
     return {
+      state: lastConfirmed?.status === "online" ? "stale" : snapshot.status,
       label,
+      statusText: lastConfirmed?.status === "online"
+        ? `Health probe unavailable — last confirmed ${ageLabel(lastConfirmed.checkedAt, now)}`
+        : snapshot.status === "probe_timeout"
+          ? "Health probe timed out — runtime state unknown"
+          : "Health probe unavailable — runtime state unknown",
       detail: `${snapshot.message}${stale} ${sourceDetail}`,
       tone: "warning",
       currentSource: snapshot.observationSource,
@@ -54,15 +90,17 @@ export function hermesHealthDisplay(
   }
 
   const presentation = {
-    online: ["Hermes online", "healthy"],
-    offline: ["Hermes stopped", "failure"],
-    authentication_failure: ["Hermes authentication failed", "failure"],
-    unavailable_profile: ["Hermes profile unavailable", "warning"],
-    misconfigured: ["Hermes setup incomplete", "warning"],
+    online: ["connected", "Hermes connected", `Connected — ${snapshot.version ?? "version unknown"}`, "healthy"],
+    offline: ["authoritative_offline", "Hermes stopped", "Authoritatively offline", "failure"],
+    authentication_failure: ["authentication_failure", "Hermes authentication failed", "Authentication rejected — Jeremy action required", "failure"],
+    unavailable_profile: ["unknown", "Hermes profile unavailable", "Profile unavailable — runtime state unknown", "warning"],
+    misconfigured: ["not_configured", "Hermes not configured", "Not configured", "warning"],
   } as const;
-  const [label, tone] = presentation[snapshot.status];
+  const [state, label, statusText, tone] = presentation[snapshot.status];
   return {
+    state,
     label,
+    statusText,
     detail: `${snapshot.message} ${sourceDetail}`,
     tone,
     currentSource: snapshot.observationSource,

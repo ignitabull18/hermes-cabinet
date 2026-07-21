@@ -22,7 +22,8 @@ export function validateHermesEvidenceAuthority(authority: HermesEvidenceAuthori
   const { origin, provenanceKind, proofKind, proofScope } = authority;
   if (origin === "raw_observation") {
     const valid = provenanceKind === "live_runtime"
-      ? proofKind === "live" && (proofScope === "live_runtime_operation" || proofScope === "cabinet_local_surface")
+      ? (proofKind === "live" && (proofScope === "live_runtime_operation" || proofScope === "cabinet_local_surface")) ||
+        (proofKind === "detected_metadata" && proofScope === "configured_profile_metadata")
       : proofKind === "exact_fixture" && (proofScope === "exact_fixture_path" || proofScope === "cabinet_local_surface");
     return valid ? { valid: true, code: "valid" } : { valid: false, code: "invalid_raw_authority" };
   }
