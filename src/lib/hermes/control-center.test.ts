@@ -22,7 +22,7 @@ import { assertValidHermesEvidenceCatalog, validateHermesEvidenceAuthority } fro
 import { HERMES_CAPABILITY_EVIDENCE_CATALOG } from "./capability-evidence-catalog";
 import { buildHermesControlCenterProjection, hermesProjectionMatrixRows } from "./control-center-projection";
 import { gatewayEvidenceState, messagingHealth } from "./control-center";
-import type { HermesCapabilityObservation, HermesControlCenterProjectionInput } from "./control-center-types";
+import type { HermesCapabilityObservation, HermesControlCenterProjectionInput, HermesOperationalHealth } from "./control-center-types";
 
 const NOW = "2026-07-19T22:15:00.000Z";
 
@@ -140,6 +140,44 @@ test("partial success combined with failure or unavailability remains degraded",
     ]), "profiles");
     assert.equal(row.operationalHealth, "degraded", outcome);
     assert.notEqual(row.status, "connected", outcome);
+  }
+});
+
+test("Agent catalog visibility stays partial and cannot imply Executor or API-key health", () => {
+  for (const capabilityId of ["skills", "executor", "api-keys-tools"]) {
+    const row = capability(liveSnapshot(capabilityId, [observed(capabilityId, "success", {
+      source: "Hermes Agent catalog",
+      interface: capabilityId === "skills" ? "GET /v1/skills" : "GET /v1/toolsets",
+      facts: {
+        count: 2,
+        partialClaim: true,
+        limitation: "Catalog visibility does not prove operational or credential state.",
+      },
+    })]), capabilityId);
+    assert.equal(row.operationalHealth, "degraded", capabilityId);
+    assert.equal(row.status, "degraded", capabilityId);
+    assert.equal(row.credit.liveVisibility, false, capabilityId);
+    assert.equal(row.credit.liveProven, false, capabilityId);
+  }
+});
+
+test("Agent catalog empty, stale, future-invalid, unavailable, and failed observations remain distinct", () => {
+  const cases: Array<[HermesCapabilityObservation["outcome"], string, HermesOperationalHealth]> = [
+    ["connected_empty", NOW, "healthy"],
+    ["success", "2026-07-19T20:00:00.000Z", "unknown"],
+    ["success", "2026-07-20T22:15:00.000Z", "unknown"],
+    ["unavailable", NOW, "unavailable"],
+    ["failure", NOW, "degraded"],
+  ];
+  for (const [outcome, observedAt, expectedHealth] of cases) {
+    const row = capability(liveSnapshot("skills", [observed("skills", outcome, {
+      observedAt,
+      source: "Hermes Agent skill catalog",
+      interface: "GET /v1/skills",
+      facts: outcome === "success" ? { partialClaim: true } : undefined,
+    })]), "skills");
+    assert.equal(row.operationalHealth, expectedHealth, `${outcome} at ${observedAt}`);
+    if (observedAt !== NOW || outcome !== "connected_empty") assert.equal(row.credit.liveVisibility, false);
   }
 });
 

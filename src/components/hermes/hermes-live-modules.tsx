@@ -282,9 +282,50 @@ function SettingsModule({ data, snapshot }: { data: OperatorData; snapshot: Herm
   );
 }
 
-function ToolsModule({ snapshot, onRefresh, refreshing }: { snapshot: HermesControlCenterSnapshot; onRefresh: () => void; refreshing: boolean }) {
+function AgentCatalogModule({ snapshot, query }: { snapshot: HermesControlCenterSnapshot; query: string }) {
+  const needle = query.trim().toLowerCase();
+  const skills = snapshot.live.skillCatalog.items.filter((item) => !needle || `${item.name} ${item.category ?? ""}`.toLowerCase().includes(needle));
+  const toolsets = snapshot.live.toolsetCatalog.items.filter((item) => !needle || item.label.toLowerCase().includes(needle));
   return (
-    <ModuleShell title="Browser and OpenCLI" detail="External OpenCLI connectivity is observed through a bounded server-side doctor check." icon={Activity}>
+    <ModuleShell title="Agent skills and toolsets" detail="Live Agent catalog metadata only. Instructions, descriptions, tool names, schemas, commands, paths, URLs, and credentials stay server-side." icon={Box}>
+      <div className="grid grid-cols-2 border-b border-border">
+        <div className="px-4 py-3"><p className="text-lg font-semibold tabular-nums">{snapshot.live.skillCatalog.totalCount}</p><p className="text-xs text-muted-foreground">Skills reported</p></div>
+        <div className="border-s border-border px-4 py-3"><p className="text-lg font-semibold tabular-nums">{snapshot.live.toolsetCatalog.totalCount}</p><p className="text-xs text-muted-foreground">Toolsets reported</p></div>
+      </div>
+      <div className="grid divide-y divide-border lg:grid-cols-2 lg:divide-x lg:divide-y-0">
+        <div className="min-w-0">
+          <div className="border-b border-border px-4 py-2"><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Skills</p></div>
+          <div className="max-h-80 divide-y divide-border overflow-y-auto">
+            {skills.length === 0 ? <EmptyState>No skills match this view.</EmptyState> : skills.map((skill) => (
+              <div key={skill.displayId} className="min-w-0 px-4 py-2.5">
+                <p className="truncate text-sm font-medium">{skill.name}</p>
+                <p className="text-xs text-muted-foreground">{skill.category ?? "Category not reported"} · Enabled state not reported · Provenance not reported</p>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="min-w-0">
+          <div className="border-b border-border px-4 py-2"><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Toolsets</p></div>
+          <div className="max-h-80 divide-y divide-border overflow-y-auto">
+            {toolsets.length === 0 ? <EmptyState>No toolsets match this view.</EmptyState> : toolsets.map((toolset) => (
+              <div key={toolset.displayId} className="flex min-w-0 items-center justify-between gap-3 px-4 py-2.5">
+                <div className="min-w-0"><p className="truncate text-sm font-medium">{toolset.label}</p><p className="text-xs text-muted-foreground">{toolset.toolCount ?? "Unknown"} tools · {toolset.provenance ?? "Provenance not reported"}</p></div>
+                <Badge variant="outline">{toolset.enabled === null ? "State unknown" : toolset.enabled ? toolset.configured === false ? "Enabled · needs config" : "Enabled" : "Disabled"}</Badge>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <p className="border-t border-border px-4 py-3 text-xs text-muted-foreground">Catalog presence does not prove Executor health or canonical API-key configuration.</p>
+    </ModuleShell>
+  );
+}
+
+function ToolsModule({ snapshot, query, onRefresh, refreshing }: { snapshot: HermesControlCenterSnapshot; query: string; onRefresh: () => void; refreshing: boolean }) {
+  return (
+    <div className="flex flex-col gap-3">
+      <AgentCatalogModule snapshot={snapshot} query={query} />
+      <ModuleShell title="Browser and OpenCLI" detail="External OpenCLI connectivity is observed through a bounded server-side doctor check." icon={Activity}>
       <div className="grid gap-3 border-b border-border p-4 sm:grid-cols-2 lg:grid-cols-4">
         <div><p className="text-xs text-muted-foreground">Installed version</p><p className="mt-1 text-sm font-medium">{snapshot.live.openCliVersion ?? "Not detected"}</p></div>
         <div><p className="text-xs text-muted-foreground">Connection</p><p className="mt-1 text-sm font-medium">{snapshot.health.openCli}</p></div>
@@ -305,7 +346,8 @@ function ToolsModule({ snapshot, onRefresh, refreshing }: { snapshot: HermesCont
         </div>
         <p className="text-xs text-muted-foreground">Read-only acceptance supports a local page open, title and DOM read, and screenshot capture. No external write is performed.</p>
       </div>
-    </ModuleShell>
+      </ModuleShell>
+    </div>
   );
 }
 
@@ -317,6 +359,6 @@ export function HermesLiveModules({ section, snapshot, query, onRefresh, refresh
   if (section === "memory") return <MemoryModule data={data} />;
   if (section === "sessions") return <SessionsModule data={data} snapshot={snapshot} query={query} />;
   if (section === "settings") return <SettingsModule data={data} snapshot={snapshot} />;
-  if (section === "tools") return <ToolsModule snapshot={snapshot} onRefresh={onRefresh} refreshing={refreshing} />;
+  if (section === "tools") return <ToolsModule snapshot={snapshot} query={query} onRefresh={onRefresh} refreshing={refreshing} />;
   return null;
 }
