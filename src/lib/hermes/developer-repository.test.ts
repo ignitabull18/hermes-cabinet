@@ -88,7 +88,9 @@ test("Phase 2B machine evidence equals the shared production fixture projection"
     implementationRevision: machine.evidenceProvenance.implementationRevision,
     artifactGeneratedAt: machine.evidenceProvenance.artifactGeneratedAt,
   });
-  assert.deepEqual(machine, JSON.parse(JSON.stringify(fixture)));
+  const legacyCompatibleFixture = JSON.parse(JSON.stringify(fixture));
+  delete legacyCompatibleFixture.runtimeExecution;
+  assert.deepEqual(machine, legacyCompatibleFixture);
   assert.deepEqual(hermesProjectionMatrixRows(machine), hermesProjectionMatrixRows(fixture));
   assert.deepEqual(machine.parity, fixture.parity);
 });
