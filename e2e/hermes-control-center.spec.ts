@@ -1,35 +1,25 @@
 import { expect, test, type Page } from "@playwright/test";
+import { mkdirSync } from "node:fs";
+import path from "node:path";
+import { buildHermesAcceptanceFixtureProjection, HERMES_ACCEPTANCE_FIXTURE_ID } from "../src/lib/hermes/control-center-acceptance-fixture";
 import { bootCabinet, type CabinetInstance } from "../test/support/harness";
 
 test.describe.configure({ mode: "serial" });
 let cabinet: CabinetInstance;
-
-const capabilities = [
-  ["chat", "Chat and sessions", "Sessions", "operator", "Operator", "mapped", "connected"],
-  ["agents-subagents", "Agents and subagents", "Agents", "operator", "Operator", "visible_read_only", "available"],
-  ["messaging", "Messaging", "Messaging", "operator", "Operator", "visible_read_only", "available"],
-  ["browser-opencli", "Browser and OpenCLI", "Tools", "operator", "Operator", "visible_read_only", "connected"],
-  ["billing", "Billing", "Providers and models", "management", "Operator", "unsupported", "unsupported"],
-  ["terminal", "Terminal", "Developer", "developer", "Developer", "mapped", "available"],
-  ["raw-logs", "Raw logs", "Developer", "developer", "Developer", "diagnostic_only", "disabled"],
-].map(([id, name, group, audience, mode, parityState, status]) => ({
-  id, name, group, audience, mode, parityState, status,
-  desktopSource: "/installed", installedVersionSupport: id === "billing" ? "Not installed" : "Supported", installedSupported: id !== "billing",
-  interface: "/api/safe", cabinetSurface: "Hermes", cabinetHref: "/hermes", readWriteRisk: "read_only",
-  missingWork: id === "billing" ? "Upgrade and re-audit." : "Owner review remains open.", testEvidence: "fixture", keywords: [name.toLowerCase()],
-  statusDetail: id === "browser-opencli" ? "OpenCLI daemon, extension, and browser profile are connected." : "Live capability status.",
-}));
-
-const fixture = {
-  checkedAt: new Date().toISOString(),
-  installed: { desktopVersion: "0.17.0", desktopCommit: "311a5b0a552b", backendVersion: "0.18.2", upstreamCommit: "e361c5e20402", upstreamAheadBy: 325, cabinetCommit: "test", adapter: "desktop-0.18", updateAvailable: true },
-  health: { runtime: "online", gateway: "running", profile: "operator-os", openCli: "connected" },
-  summary: { available: 3, connected: 2, degraded: 0, disabled: 1, unsupported: 1, needs_setup: 0 },
-  parity: { operator: 71, management: 60, developer: 78 }, capabilities,
-  live: { profiles: 1, skills: 12, jobs: 0, mcpServers: 2, plugins: 1, openCliProfiles: 1, openCliVersion: "1.8.5", openCliBinaryLocation: "/opt/homebrew/bin/opencli", openCliCapabilities: { screenshot: true, domRead: true, formInteraction: true, download: true }, memoryProvider: "supermemory", memoryNamespace: "operator-os:supermemory", diagnostics: [] },
-};
+const evidenceDir = path.resolve("docs/evidence/hermes-truth-state");
+const implementationRevision = process.env.HERMES_EVIDENCE_IMPLEMENTATION_REVISION ?? "0".repeat(40);
+const artifactGeneratedAt = process.env.HERMES_EVIDENCE_GENERATED_AT ?? "2026-07-19T23:30:00.000Z";
+const fixture = buildHermesAcceptanceFixtureProjection({ implementationRevision, artifactGeneratedAt });
+expect(JSON.stringify(fixture)).not.toContain("fixture-secret");
+const browserErrors = new WeakMap<Page, string[]>();
 
 async function prepare(page: Page) {
+  const errors: string[] = [];
+  browserErrors.set(page, errors);
+  page.on("console", (message) => { if (message.type() === "error") errors.push(`${message.text()} ${message.location().url}`.trim()); });
+  page.on("response", (response) => { if (response.status() >= 400) errors.push(`HTTP ${response.status()} ${response.url()}`); });
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.route("**/api/hermes/health", (route) => route.fulfill({ json: { enabled: true, status: "online", version: "0.18.2", profile: "operator-os", gatewayState: "running", checkedAt: fixture.provenance.capturedAt, message: "Acceptance fixture health bridge." } }));
   await page.route("**/api/hermes/control-center", (route) => route.fulfill({ json: fixture }));
   await page.goto(`${cabinet.appUrl}/hermes`);
   const useDefault = page.getByRole("button", { name: "Use default" });
@@ -40,35 +30,86 @@ async function prepare(page: Page) {
   const skipTour = page.getByRole("button", { name: "Skip tour" });
   if (await skipTour.waitFor({ state: "visible", timeout: 5_000 }).then(() => true).catch(() => false)) await skipTour.click();
   await page.goto(`${cabinet.appUrl}/hermes`);
+  await page.addStyleTag({ content: '[aria-label="Status bar"] { display: none !important; }' });
   await expect(page.getByTestId("hermes-control-center")).toBeVisible();
+  await expect(page.getByTestId("hermes-fixture-provenance")).toContainText("Acceptance fixture — not live runtime");
+  await expect(page.getByTestId("hermes-fixture-provenance")).toContainText(`Fixture ID: ${HERMES_ACCEPTANCE_FIXTURE_ID}`);
+  await expect(page.getByTestId("hermes-fixture-provenance")).toContainText(`Implementation: ${implementationRevision}`);
+  await expect(page.locator('[aria-label="Status bar"]')).toBeHidden();
+  await expect(page.locator("body")).not.toContainText("fixture-secret");
 }
 
-test.beforeAll(async () => { cabinet = await bootCabinet({ env: { CABINET_RUNTIME_MODE: "hermes", CABINET_HERMES_PROFILE: "operator-os" } }); });
+test.beforeAll(async () => {
+  mkdirSync(evidenceDir, { recursive: true });
+  cabinet = await bootCabinet({ env: { CABINET_RUNTIME_MODE: "hermes", CABINET_HERMES_PROFILE: "operator-os" } });
+});
 test.afterAll(async () => { await cabinet?.close(); });
+test.afterEach(async ({ page }) => { expect(browserErrors.get(page) ?? []).toEqual([]); });
 
-test("operator search and inspection keep unsupported capabilities visible", async ({ page }) => {
+test("full 48-capability Overview derives totals and exceptions from the shared fixture", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
   await prepare(page);
-  await expect(page.getByTestId("hermes-capability-terminal")).toHaveCount(0);
-  await page.getByPlaceholder("Search capabilities, tools, models...").fill("billing");
-  await expect(page.getByTestId("hermes-capability-billing")).toBeVisible();
-  await page.getByTestId("hermes-capability-billing").click();
-  await expect(page.getByTestId("hermes-capability-inspector")).toContainText("unsupported");
+  expect(fixture.capabilities).toHaveLength(48);
+  expect(Object.values(fixture.summary).reduce((sum, count) => sum + count, 0)).toBe(48);
+  await expect(page.getByTestId("hermes-operational-exceptions")).toContainText("Telegram");
+  await expect(page.getByTestId("hermes-operational-exceptions")).toContainText("Conflicting evidence");
+  await expect(page.getByTestId("hermes-parity-metrics")).toContainText(`Discoverable ${fixture.parity.discoverability.percentage}%`);
+  await page.screenshot({ path: path.join(evidenceDir, "overview-operational-exceptions.png"), fullPage: true });
 });
 
-test("developer mode exposes technical surfaces without operator rows", async ({ page }) => {
+test("Messaging failure inspector shows exact fixture failure without current visibility credit", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await prepare(page);
+  await page.getByTestId("hermes-operational-exceptions").getByRole("button").filter({ hasText: "Messaging" }).click();
+  const inspector = page.getByTestId("hermes-capability-inspector");
+  await expect(inspector).toContainText("Fatal polling conflict");
+  await expect(inspector).toContainText("exact fixture");
+  await expect(inspector.getByText("Current live visibility").locator("..")).toContainText("Not credited");
+  await expect(inspector.getByText("Live-Proven").locator("..")).toContainText("Not credited");
+  await expect(inspector.getByTestId("hermes-fixture-path-proof")).toContainText("Exact fixture path");
+  await expect(inspector.getByTestId("hermes-fixture-path-proof")).toContainText("Proven");
+  await expect(inspector).not.toContainText(/Bearer|api\.telegram\.org\/bot|Authorization:/i);
+  await expect(inspector.getByTestId("hermes-inspector-detail-surface-state")).toContainText("Surface state");
+  await expect(inspector.getByTestId("hermes-inspector-detail-cabinet-surface")).toContainText("Cabinet surface");
+  await page.screenshot({ path: path.join(evidenceDir, "messaging-telegram-fatal.png"), fullPage: true });
+});
+
+test("Gateway conflict inspector preserves both source facts without current visibility credit", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await prepare(page);
+  await page.getByTestId("hermes-operational-exceptions").getByRole("button").filter({ hasText: "Gateway" }).click();
+  const inspector = page.getByTestId("hermes-capability-inspector");
+  await expect(inspector).toContainText("Hermes health bridge observed running");
+  await expect(inspector).toContainText("Hermes management status observed stopped");
+  await expect(inspector.getByText("Current live visibility").locator("..")).toContainText("Not credited");
+  await expect(inspector.getByText("Live-Proven").locator("..")).toContainText("Not credited");
+  await expect(inspector.getByTestId("hermes-fixture-path-proof")).toContainText("Proven");
+  await page.screenshot({ path: path.join(evidenceDir, "gateway-conflicting-evidence.png"), fullPage: true });
+});
+
+test("Developer mode preserves Diagnostic only in unknown and unavailable health states", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
   await prepare(page);
   await page.getByRole("tab", { name: "Developer" }).click();
-  await expect(page.getByTestId("hermes-capability-terminal")).toBeVisible();
-  await expect(page.getByTestId("hermes-capability-chat")).toHaveCount(0);
+  await expect(page.getByTestId("hermes-capability-advanced-config")).toContainText("Diagnostic only");
+  await expect(page.getByTestId("hermes-capability-raw-logs")).toContainText("Diagnostic only");
+  await expect(page.getByTestId("hermes-capability-gateway-diagnostics")).toContainText("Diagnostic only");
+  await page.screenshot({ path: path.join(evidenceDir, "developer-diagnostic-only.png"), fullPage: true });
 });
 
-test("OpenCLI module and 390px layout expose safe connection details without overflow", async ({ page }) => {
+test("390x844 reduced-motion More sheet stays reachable without horizontal overflow", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setViewportSize({ width: 390, height: 844 });
   await prepare(page);
-  await page.getByPlaceholder("Search Hermes").fill("OpenCLI");
-  await page.getByTestId("hermes-capability-browser-opencli").click();
-  await expect(page.getByRole("dialog", { name: "Browser and OpenCLI" }).getByTestId("opencli-module")).toContainText("/opt/homebrew/bin/opencli");
+  await page.getByRole("button", { name: "More Hermes sections" }).click();
+  const picker = page.getByRole("dialog", { name: "Hermes sections" });
+  await expect(picker).toBeVisible();
+  await expect(picker.getByTestId("hermes-mobile-fixture-provenance")).toContainText(`Fixture ID: ${HERMES_ACCEPTANCE_FIXTURE_ID}`);
+  await expect(picker.getByTestId("hermes-mobile-fixture-provenance")).toContainText(`Implementation: ${implementationRevision}`);
+  await expect(picker.getByRole("button", { name: "Messaging" })).toBeVisible();
+  await page.screenshot({ path: path.join(evidenceDir, "mobile-more-picker.png"), fullPage: true });
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
+  await picker.getByRole("button", { name: "Messaging" }).click();
+  await expect(page.getByTestId("hermes-live-messaging-platforms")).toContainText("Fatal polling conflict");
 });
