@@ -262,6 +262,7 @@ export function HermesSkillsManagement() {
                   ["Current state", preview.currentState.installed ? preview.currentState.enabled === false ? "Installed, disabled" : "Installed, enabled" : "Available, not installed"],
                   ["Target state", preview.targetState],
                   ["Profile", preview.profile],
+                  ["Authority", `${preview.currentState.source ?? "unknown"} source · ${preview.currentState.nativeTrust ?? "unknown"} native trust · ${preview.currentState.authorityClass}`],
                   ["Consequence", preview.expectedConsequence],
                   ["Reversibility", preview.reversibility],
                   ["Source", preview.sourceEvidence],

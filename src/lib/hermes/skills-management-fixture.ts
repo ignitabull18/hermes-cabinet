@@ -14,6 +14,7 @@ export const HERMES_SKILLS_ACCEPTANCE_LABEL = "Acceptance fixture — no live He
 
 function installed(name: string, enabled: boolean, actions: HermesManagedSkill["supportedActions"], updateAvailable: boolean | null = null, hubIdentifier: string | null = null, source: string | null = null): HermesManagedSkill {
   const provenance = hubIdentifier ? "hub" : "bundled";
+  const officialPublic = Boolean(hubIdentifier?.startsWith("official/") && (source ?? "official") === "official");
   return {
     identity: hubIdentifier ? `operator-os:hub:${hubIdentifier}` : `operator-os:${provenance}:${name}`,
     name,
@@ -22,6 +23,11 @@ function installed(name: string, enabled: boolean, actions: HermesManagedSkill["
     enabled,
     version: name === "update-ready" ? "1.0.0" : null,
     source: source ?? (hubIdentifier ? hubIdentifier.split("/")[0] : "bundled"),
+    nativeTrust: officialPublic || !hubIdentifier ? "builtin" : "community",
+    authorityClass: officialPublic ? "official_public" : "unapproved",
+    official: officialPublic,
+    public: officialPublic,
+    localFulfillment: true,
     provenance,
     hubIdentifier,
     profile: "operator-os",
@@ -63,6 +69,11 @@ export function buildHermesSkillsAcceptanceSnapshot(): HermesSkillsSnapshot {
       enabled: null,
       version: null,
       source: "official",
+      nativeTrust: "builtin",
+      authorityClass: "official_public",
+      official: true,
+      public: true,
+      localFulfillment: true,
       provenance: "hub",
       hubIdentifier: "official/productivity/installable-skill",
       profile: "operator-os",
@@ -146,7 +157,11 @@ export class FakeHermesSkillsAdapter implements HermesSkillsAdapter {
       identifier,
       name: skill.name,
       source: skill.source,
-      trust: "official",
+      nativeTrust: "builtin",
+      authorityClass: "official_public",
+      official: true,
+      public: true,
+      localFulfillment: true,
       scanVerdict: "safe",
       installPolicy: "allow",
       findingCount: 0,

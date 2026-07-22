@@ -20,9 +20,11 @@ import type {
 type Fetch = typeof fetch;
 
 const AUDITED_HERMES_VERSION = "0.19.0";
-export const AUDITED_HERMES_SOURCE_REVISION = "97f82f73fc15e534fef6377148c99c22be6b652c";
+export const AUDITED_HERMES_SOURCE_REVISION = "84b3ed8aace50ca5afb285d299b8a66816085368";
 const HERMES_IDENTITY_SCHEMA = "hermes.cli.identity";
 const HERMES_IDENTITY_SCHEMA_VERSION = 1;
+const HERMES_SKILLS_SCHEMA_VERSION = 2;
+const OFFICIAL_PUBLIC_AUTHORITY = "official_public";
 const HERMES_PUBLIC_SKILLS_SKIP_VALUE = "official-public-skills-v1";
 const SAFE_NAME = /^[a-z][a-z0-9_-]{0,95}$/;
 const SAFE_IDENTIFIER = /^[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*){0,6}$/;
@@ -117,6 +119,14 @@ function safeIdentifier(value: unknown): string | null {
   return SAFE_IDENTIFIER.test(candidate) ? candidate : null;
 }
 
+function safeInstallPath(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const candidate = value.trim();
+  return candidate && candidate.split("/").every((part) => SAFE_NAME.test(part))
+    ? candidate
+    : null;
+}
+
 function safeLabel(value: unknown, max = 64): string | null {
   if (typeof value !== "string") return null;
   const clean = sanitizeHermesText(value, max).replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").replace(/\s+/g, " ").trim();
@@ -128,27 +138,27 @@ function stripAnsi(value: string): string {
   return value.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "");
 }
 
-function uniqueSkills(items: HermesManagedSkill[]): { items: HermesManagedSkill[]; duplicates: string[] } {
-  const seen = new Map<string, HermesManagedSkill>();
-  const duplicates = new Set<string>();
-  for (const item of items) {
-    if (seen.has(item.identity)) duplicates.add(item.identity);
-    else seen.set(item.identity, item);
-  }
-  return { items: [...seen.values()], duplicates: [...duplicates] };
-}
-
 function installedIdentity(profile: string, name: string, provenance: HermesManagedSkill["provenance"], hubIdentifier: string | null): string {
   if (provenance === "hub" && hubIdentifier) return `${profile}:hub:${hubIdentifier}`;
   return `${profile}:${provenance ?? "unknown"}:${name}`;
 }
 
 function supportedActions(
-  skill: Pick<HermesManagedSkill, "installed" | "enabled" | "provenance" | "hubIdentifier">,
+  skill: Pick<HermesManagedSkill, "installed" | "provenance" | "hubIdentifier" | "source" | "nativeTrust" | "authorityClass" | "official" | "public" | "localFulfillment">,
   cliConfigured: boolean,
 ): HermesSkillAction[] {
   if (!skill.installed) return cliConfigured ? ["install"] : [];
-  return skill.provenance === "hub" && skill.hubIdentifier && cliConfigured ? ["remove"] : [];
+  return cliConfigured
+    && skill.provenance === "hub"
+    && Boolean(skill.hubIdentifier?.startsWith("official/"))
+    && skill.source === "official"
+    && skill.nativeTrust === "builtin"
+    && skill.authorityClass === OFFICIAL_PUBLIC_AUTHORITY
+    && skill.official
+    && skill.public
+    && skill.localFulfillment
+    ? ["remove"]
+    : [];
 }
 
 export function hermesCliChildEnvironment(skipExternalSecretSources = false): NodeJS.ProcessEnv {
@@ -562,11 +572,18 @@ export class HermesSkillsAgentAdapter implements HermesSkillsAdapter {
     const exactProfile = this.requireProfile(profile);
     const result = await this.readCliMachine(exactProfile, ["list", "--json"], this.policies.canonicalInstalled, (raw) => {
       const value = record(raw);
-      this.exactKeys(value, ["contract", "exact_match_count", "matches", "profile", "same_name_collision_count", "schema_version"], "Canonical Hermes CLI installed state");
-      if (value.contract !== "hermes.skills.installed-state" || value.schema_version !== 1 || value.profile !== exactProfile) {
+      this.exactKeys(value, ["ambiguity_count", "contract", "exact_match_count", "matches", "profile", "same_name_collision_count", "schema_version"], "Canonical Hermes CLI installed state");
+      if (value.contract !== "hermes.skills.installed-state" || value.schema_version !== HERMES_SKILLS_SCHEMA_VERSION || value.profile !== exactProfile) {
         throw new HermesSkillsAdapterError("contract_mismatch", "Canonical Hermes CLI installed state changed contract or profile.");
       }
-      if (!Number.isSafeInteger(value.exact_match_count) || !Number.isSafeInteger(value.same_name_collision_count) || !Array.isArray(value.matches)) {
+      if (
+        !Number.isSafeInteger(value.ambiguity_count)
+        || value.ambiguity_count !== 0
+        || !Number.isSafeInteger(value.exact_match_count)
+        || !Number.isSafeInteger(value.same_name_collision_count)
+        || value.same_name_collision_count !== 0
+        || !Array.isArray(value.matches)
+      ) {
         throw new HermesSkillsAdapterError("invalid_response", "Canonical Hermes CLI installed state returned malformed counts.");
       }
       return value;
@@ -575,14 +592,39 @@ export class HermesSkillsAgentAdapter implements HermesSkillsAdapter {
     const cliConfigured = this.cli.configured();
     const installed = array(result.value.matches).map((raw): HermesManagedSkill => {
         const item = record(raw);
-        this.exactKeys(item, ["enabled", "identifier", "name", "origin", "source", "trust"], "Canonical Hermes CLI skill match");
+        this.exactKeys(item, ["authority_class", "enabled", "identifier", "install_path", "installed", "local_fulfillment", "name", "native_trust", "official", "origin", "public", "source"], "Canonical Hermes CLI skill match");
         const name = safeName(item.name);
         const origin = item.origin;
         const source = safeLabel(item.source);
-        const trust = safeLabel(item.trust);
+        const nativeTrust = safeLabel(item.native_trust);
+        const authorityClass = item.authority_class === OFFICIAL_PUBLIC_AUTHORITY ? "official_public" : item.authority_class === "unapproved" ? "unapproved" : null;
         const provenance = origin === "hub" ? "hub" : origin === "builtin" ? "bundled" : origin === "local" ? "agent" : null;
         const hubIdentifier = provenance === "hub" ? safeIdentifier(item.identifier) : null;
-        if (!name || !provenance || !source || !trust || typeof item.enabled !== "boolean" || (provenance === "hub" && !hubIdentifier) || (provenance !== "hub" && item.identifier !== null)) {
+        const installPath = provenance === "agent" ? item.install_path === null ? null : safeInstallPath(item.install_path) : safeInstallPath(item.install_path);
+        if (
+          !name
+          || !provenance
+          || !source
+          || !nativeTrust
+          || !authorityClass
+          || item.installed !== true
+          || typeof item.enabled !== "boolean"
+          || typeof item.official !== "boolean"
+          || typeof item.public !== "boolean"
+          || typeof item.local_fulfillment !== "boolean"
+          || (provenance === "hub" && (!hubIdentifier || !installPath))
+          || (provenance !== "hub" && item.identifier !== null)
+          || (authorityClass === "official_public" && (
+            provenance !== "hub"
+            || !hubIdentifier?.startsWith("official/")
+            || source !== "official"
+            || nativeTrust !== "builtin"
+            || item.official !== true
+            || item.public !== true
+            || item.local_fulfillment !== true
+          ))
+          || (authorityClass === "unapproved" && (item.official !== false || item.public !== false))
+        ) {
           throw new HermesSkillsAdapterError("contract_mismatch", "Canonical Hermes CLI skill match was malformed or ambiguous.");
         }
         const identity = installedIdentity(exactProfile, name, provenance, hubIdentifier);
@@ -594,6 +636,11 @@ export class HermesSkillsAgentAdapter implements HermesSkillsAdapter {
           enabled: typeof item.enabled === "boolean" ? item.enabled : null,
           version: safeLabel(item.version, 32),
           source,
+          nativeTrust,
+          authorityClass,
+          official: item.official,
+          public: item.public,
+          localFulfillment: item.local_fulfillment,
           provenance,
           hubIdentifier,
           profile: exactProfile,
@@ -604,24 +651,26 @@ export class HermesSkillsAgentAdapter implements HermesSkillsAdapter {
         skill.supportedActions = supportedActions(skill, cliConfigured);
         return skill;
       });
-    if (result.value.exact_match_count !== installed.length) throw new HermesSkillsAdapterError("contract_mismatch", "Canonical Hermes CLI installed count disagreed with its matches.");
-    const unique = uniqueSkills(installed);
+    const hubCount = installed.filter((skill) => skill.provenance === "hub").length;
+    if (result.value.exact_match_count !== hubCount) throw new HermesSkillsAdapterError("contract_mismatch", "Canonical Hermes CLI installed count disagreed with its Hub matches.");
+    const identityCounts = new Map<string, number>();
     const names = new Map<string, number>();
-    for (const skill of installed) names.set(skill.name, (names.get(skill.name) ?? 0) + 1);
-    const duplicateNames = [...names.entries()].filter(([, count]) => count > 1).map(([name]) => name).sort();
-    const collisionCount = [...names.values()].reduce((total, count) => total + Math.max(0, count - 1), 0);
-    if (result.value.same_name_collision_count !== collisionCount) throw new HermesSkillsAdapterError("contract_mismatch", "Canonical Hermes CLI collision count disagreed with its matches.");
-    const duplicateIdentities = [...new Set([...unique.duplicates, ...installed.filter((skill) => duplicateNames.includes(skill.name)).map((skill) => skill.identity)])];
-    for (const skill of unique.items) if (duplicateNames.includes(skill.name)) skill.supportedActions = [];
+    for (const skill of installed) {
+      identityCounts.set(skill.identity, (identityCounts.get(skill.identity) ?? 0) + 1);
+      names.set(skill.name, (names.get(skill.name) ?? 0) + 1);
+    }
+    if ([...identityCounts.values(), ...names.values()].some((count) => count > 1)) {
+      throw new HermesSkillsAdapterError("contract_mismatch", "Canonical Hermes CLI returned duplicate identities after claiming no ambiguity.");
+    }
     return {
       profile: exactProfile,
       observedAt,
-      sourceState: unique.items.length ? "success" : "connected_empty",
-      summary: unique.items.length ? `Hermes reported ${unique.items.length} installed skill(s).` : "Hermes responded with no installed skills.",
+      sourceState: installed.length ? "success" : "connected_empty",
+      summary: installed.length ? `Hermes reported ${installed.length} installed skill(s).` : "Hermes responded with no installed skills.",
       interface: "Canonical Hermes CLI installed-state JSON",
-      installed: unique.items,
-      duplicateIdentities,
-      duplicateNames,
+      installed,
+      duplicateIdentities: [],
+      duplicateNames: [],
       evidence: result.evidence,
     };
   }
@@ -632,7 +681,7 @@ export class HermesSkillsAgentAdapter implements HermesSkillsAdapter {
       enable: { supported: false, interface: "Unsupported", note: "Hermes 0.19.0 exposes only an interactive config flow, not a fixed durable mutation." },
       disable: { supported: false, interface: "Unsupported", note: "Hermes 0.19.0 exposes only an interactive config flow, not a fixed durable mutation." },
       update: { supported: false, interface: "Audit only", note: "Hermes Agent 0.19.0 does not provide exact structured target-specific update readback." },
-      remove: { supported: cliConfigured, interface: cliConfigured ? "audited absolute Hermes CLI: skills uninstall <name>" : "Unavailable", note: cliConfigured ? "Requires exact hub identity and exact 0.19.0 executable identity." : "The installed Hermes CLI management contract is not approved." },
+      remove: { supported: cliConfigured, interface: cliConfigured ? "audited absolute Hermes CLI: skills uninstall <official-identifier> --yes" : "Unavailable", note: cliConfigured ? "Requires one exact installed official Hub identity with official_public authority." : "The installed Hermes CLI management contract is not approved." },
     };
   }
 
@@ -655,8 +704,8 @@ export class HermesSkillsAgentAdapter implements HermesSkillsAdapter {
     try {
       catalogRaw = (await this.readApi("/v1/skills?catalog=official", "Hermes Skills catalog discovery", this.policies.catalog, (raw) => {
         const envelope = record(raw);
-        this.exactKeys(envelope, ["data", "object"], "Hermes official Skills catalog");
-        if (envelope.object !== "list" || !Array.isArray(envelope.data)) throw new HermesSkillsAdapterError("invalid_response", "Hermes official Skills catalog returned a malformed contract.");
+        this.exactKeys(envelope, ["contract", "data", "object", "schema_version"], "Hermes official Skills catalog");
+        if (envelope.contract !== "hermes.skills.catalog" || envelope.schema_version !== HERMES_SKILLS_SCHEMA_VERSION || envelope.object !== "list" || !Array.isArray(envelope.data)) throw new HermesSkillsAdapterError("invalid_response", "Hermes official Skills catalog returned a malformed contract.");
         return envelope.data;
       })).value;
     } catch {
@@ -682,11 +731,22 @@ export class HermesSkillsAgentAdapter implements HermesSkillsAdapter {
     const installedHubIdentifiers = new Set(installed.flatMap((skill) => skill.hubIdentifier ? [skill.hubIdentifier] : []));
     const catalogItems = catalogRaw.map((raw): HermesManagedSkill => {
         const item = record(raw);
-        this.exactKeys(item, ["category", "identifier", "name", "source", "trust"], "Hermes official Skills catalog entry");
+        this.exactKeys(item, ["authority_class", "category", "identifier", "local_fulfillment", "name", "native_trust", "official", "public", "source"], "Hermes official Skills catalog entry");
         const name = safeName(item.name);
         const identifier = safeIdentifier(item.identifier);
         const category = safeName(item.category);
-        if (!name || !identifier || !identifier.startsWith("official/") || item.source !== "official" || item.trust !== "official" || !category) throw new HermesSkillsAdapterError("contract_mismatch", "Hermes official Skills catalog entry was malformed.");
+        if (
+          !name
+          || !identifier
+          || !identifier.startsWith("official/")
+          || item.source !== "official"
+          || item.native_trust !== "builtin"
+          || item.authority_class !== OFFICIAL_PUBLIC_AUTHORITY
+          || item.official !== true
+          || item.public !== true
+          || item.local_fulfillment !== true
+          || !category
+        ) throw new HermesSkillsAdapterError("contract_mismatch", "Hermes official Skills catalog entry was malformed.");
         const skill: HermesManagedSkill = {
           identity: identifier,
           name,
@@ -695,6 +755,11 @@ export class HermesSkillsAgentAdapter implements HermesSkillsAdapter {
           enabled: null,
           version: null,
           source: "official",
+          nativeTrust: "builtin",
+          authorityClass: "official_public",
+          official: true,
+          public: true,
+          localFulfillment: true,
           provenance: "hub",
           hubIdentifier: identifier,
           profile,
@@ -704,22 +769,29 @@ export class HermesSkillsAgentAdapter implements HermesSkillsAdapter {
         };
         return skill;
       });
+    const catalogIdentities = new Set<string>();
+    const catalogNames = new Set<string>();
+    for (const skill of catalogItems) {
+      if (catalogIdentities.has(skill.identity) || catalogNames.has(skill.name)) {
+        throw new HermesSkillsAdapterError("contract_mismatch", "Hermes official Skills catalog returned an ambiguous identity.");
+      }
+      catalogIdentities.add(skill.identity);
+      catalogNames.add(skill.name);
+    }
     const available = catalogItems.filter((skill) => !installedHubIdentifiers.has(skill.hubIdentifier!) && (!normalizedQuery || skill.name.includes(normalizedQuery.toLowerCase()) || skill.hubIdentifier!.includes(normalizedQuery.toLowerCase())));
-    const installedUnique = uniqueSkills(installed);
-    const availableUnique = uniqueSkills(available);
-    const total = installedUnique.items.length + availableUnique.items.length;
+    const total = installed.length + available.length;
     return {
         fixture: false,
         fixtureLabel: null,
         profile,
         observedAt,
         sourceState: total ? "success" : "connected_empty",
-        summary: total ? `Hermes reported ${installedUnique.items.length} installed skill(s) and ${availableUnique.items.length} catalog result(s).` : "Hermes responded with an empty skills catalog.",
+        summary: total ? `Hermes reported ${installed.length} installed skill(s) and ${available.length} catalog result(s).` : "Hermes responded with an empty skills catalog.",
         interface: "Hermes Agent 0.19.0 authenticated API + canonical Hermes CLI JSON",
         operations: this.operations(cliConfigured),
-        installed: installedUnique.items,
-        available: availableUnique.items,
-        duplicateIdentities: [...new Set([...canonical.duplicateIdentities, ...installedUnique.duplicates, ...availableUnique.duplicates])],
+        installed,
+        available,
+        duplicateIdentities: [],
       };
   }
 
@@ -730,42 +802,46 @@ export class HermesSkillsAgentAdapter implements HermesSkillsAdapter {
     const authority = await this.cli.inspect();
     const inspect = await this.readCliMachine(exactProfile, ["inspect", exactIdentifier, "--json"], this.policies.exactCandidate, (raw) => {
       const value = record(raw);
-      this.exactKeys(value, ["contract", "identifier", "local_fulfillment", "name", "official", "prerequisite_classes", "profile", "public", "schema_version", "source", "trust"], "Hermes CLI candidate inspect");
+      this.exactKeys(value, ["authority_class", "contract", "identifier", "local_fulfillment", "name", "native_trust", "official", "prerequisite_classes", "profile", "public", "schema_version", "source"], "Hermes CLI candidate inspect");
       return value;
     }, authority);
     const scan = await this.readCliMachine(exactProfile, ["audit", exactIdentifier, "--json"], this.policies.exactCandidate, (raw) => {
       const value = record(raw);
-      this.exactKeys(value, ["contract", "finding_count", "identifier", "local_fulfillment", "name", "official", "prerequisite_classes", "profile", "public", "schema_version", "source", "trust", "verdict"], "Hermes CLI candidate audit");
+      this.exactKeys(value, ["authority_class", "contract", "finding_count", "identifier", "local_fulfillment", "name", "native_trust", "official", "prerequisite_classes", "profile", "public", "schema_version", "source", "verdict"], "Hermes CLI candidate audit");
       return value;
     }, authority);
     const name = safeName(inspect.value.name);
     const source = safeLabel(inspect.value.source);
-    const trust = safeLabel(inspect.value.trust);
+    const nativeTrust = safeLabel(inspect.value.native_trust);
     const scanVerdict = safeLabel(scan.value.verdict)!;
     const findingCount = Number.isSafeInteger(scan.value.finding_count) ? Number(scan.value.finding_count) : -1;
     const inspectPrerequisitesRaw = array(inspect.value.prerequisite_classes);
     const auditPrerequisitesRaw = array(scan.value.prerequisite_classes);
     const prerequisiteClasses = inspectPrerequisitesRaw.map((value) => safeName(value)).filter((value): value is string => Boolean(value));
     const auditPrerequisites = auditPrerequisitesRaw.map((value) => safeName(value)).filter((value): value is string => Boolean(value));
-    const shared = [inspect.value, scan.value].every((value) => value.schema_version === 1 && value.profile === exactProfile && value.identifier === exactIdentifier && value.name === name && value.source === "official" && value.trust === "official" && value.official === true && value.public === true && value.local_fulfillment === true);
+    const shared = [inspect.value, scan.value].every((value) => value.schema_version === HERMES_SKILLS_SCHEMA_VERSION && value.profile === exactProfile && value.identifier === exactIdentifier && value.name === name && value.source === "official" && value.native_trust === "builtin" && value.authority_class === OFFICIAL_PUBLIC_AUTHORITY && value.official === true && value.public === true && value.local_fulfillment === true);
     const allowedPrerequisites = new Set(["account", "command", "credential", "environment", "network", "platform"]);
     const prerequisiteShapeValid = prerequisiteClasses.length === inspectPrerequisitesRaw.length
       && auditPrerequisites.length === auditPrerequisitesRaw.length
       && new Set(prerequisiteClasses).size === prerequisiteClasses.length
       && prerequisiteClasses.every((value) => allowedPrerequisites.has(value))
       && JSON.stringify([...prerequisiteClasses].sort()) === JSON.stringify(prerequisiteClasses);
-    if (!shared || !name || !source || !trust || inspect.value.contract !== "hermes.skills.candidate" || scan.value.contract !== "hermes.skills.audit" || JSON.stringify(prerequisiteClasses) !== JSON.stringify(auditPrerequisites) || !prerequisiteShapeValid || findingCount < 0 || !["safe", "caution", "dangerous"].includes(scanVerdict)) {
+    if (!shared || !name || !source || !nativeTrust || inspect.value.contract !== "hermes.skills.candidate" || scan.value.contract !== "hermes.skills.audit" || JSON.stringify(prerequisiteClasses) !== JSON.stringify(auditPrerequisites) || !prerequisiteShapeValid || findingCount < 0 || !["safe", "caution", "dangerous"].includes(scanVerdict)) {
       throw new HermesSkillsAdapterError("contract_mismatch", "Hermes CLI candidate inspect and audit disagree or are malformed.");
     }
     const sensitivePrerequisites = new Set(["account", "command", "credential", "environment", "network"]);
     const prerequisiteClassification = prerequisiteClasses.some((value) => sensitivePrerequisites.has(value)) ? "declared" : "none_declared";
     const installPolicy = scanVerdict === "safe" && findingCount === 0 ? "allow" : "block";
-    const fingerprint = hash(JSON.stringify({ exactIdentifier, name, source, trust, scanVerdict, installPolicy, findingCount, prerequisiteClassification, prerequisiteClasses }));
+    const fingerprint = hash(JSON.stringify({ exactIdentifier, name, source, nativeTrust, authorityClass: OFFICIAL_PUBLIC_AUTHORITY, scanVerdict, installPolicy, findingCount, prerequisiteClassification, prerequisiteClasses }));
     return {
       identifier: exactIdentifier,
       name,
       source,
-      trust,
+      nativeTrust,
+      authorityClass: "official_public",
+      official: true,
+      public: true,
+      localFulfillment: true,
       scanVerdict,
       installPolicy,
       findingCount,
@@ -795,11 +871,12 @@ export class HermesSkillsAgentAdapter implements HermesSkillsAdapter {
     const args = ["-p", operation.profile, "skills"];
     if (operation.action === "install") {
       const identifier = safeIdentifier(operation.targetIdentity);
-      if (!identifier) throw new HermesSkillsAdapterError("dispatch_failed", "The Hermes catalog identity is invalid.");
+      if (!identifier?.startsWith("official/")) throw new HermesSkillsAdapterError("dispatch_failed", "The official Hermes catalog identity is invalid.");
       args.push("install", identifier, "--yes");
     } else if (operation.action === "remove") {
-      if (!safeIdentifier(operation.targetIdentity.split(":hub:")[1] ?? "")) throw new HermesSkillsAdapterError("dispatch_failed", "The exact Hermes hub identity is unavailable.");
-      args.push("uninstall", operation.targetName);
+      const identifier = safeIdentifier(operation.targetIdentity.split(":hub:")[1] ?? "");
+      if (!identifier?.startsWith("official/") || !operation.skipExternalSecretSources) throw new HermesSkillsAdapterError("dispatch_failed", "The exact approved official Hermes Hub identity is unavailable.");
+      args.push("uninstall", identifier, "--yes");
     } else {
       throw new HermesSkillsAdapterError("dispatch_failed", "This Hermes skill operation is unsupported.");
     }
@@ -810,7 +887,6 @@ export class HermesSkillsAgentAdapter implements HermesSkillsAdapter {
       throw new HermesSkillsAdapterError("contract_mismatch", "External secret-source isolation is unavailable for this skill source.");
     }
     const result = await this.cli.run(args, {
-      input: operation.action === "remove" ? "yes\n" : undefined,
       expectedAuthority: authority.cliAuthorityIdentity,
       skipExternalSecretSources: operation.skipExternalSecretSources,
     });

@@ -53,38 +53,63 @@ function canonical(matches: unknown[] = []): unknown {
     names.set(name, (names.get(name) ?? 0) + 1);
   }
   return {
+    ambiguity_count: 0,
     contract: "hermes.skills.installed-state",
-    exact_match_count: matches.length,
+    exact_match_count: matches.filter((value) => (value as { origin?: unknown }).origin === "hub").length,
     matches,
     profile: "operator-os",
     same_name_collision_count: [...names.values()].reduce((total, count) => total + Math.max(0, count - 1), 0),
-    schema_version: 1,
+    schema_version: 2,
   };
 }
 
 const officialMatch = {
+  authority_class: "official_public",
   enabled: true,
   identifier: "official/communication/one-three-one-rule",
+  install_path: "communication/one-three-one-rule",
+  installed: true,
+  local_fulfillment: true,
   name: "one-three-one-rule",
+  native_trust: "builtin",
+  official: true,
   origin: "hub",
+  public: true,
   source: "official",
-  trust: "official",
+};
+
+const officialCatalog = {
+  contract: "hermes.skills.catalog",
+  object: "list",
+  schema_version: 2,
+  data: [{
+    authority_class: "official_public",
+    category: "communication",
+    identifier: "official/communication/one-three-one-rule",
+    local_fulfillment: true,
+    name: "one-three-one-rule",
+    native_trust: "builtin",
+    official: true,
+    public: true,
+    source: "official",
+  }],
 };
 
 function candidate(contract: "hermes.skills.candidate" | "hermes.skills.audit"): Record<string, unknown> {
   return {
+    authority_class: "official_public",
     contract,
     ...(contract === "hermes.skills.audit" ? { finding_count: 0 } : {}),
     identifier: "official/communication/one-three-one-rule",
     local_fulfillment: true,
     name: "one-three-one-rule",
+    native_trust: "builtin",
     official: true,
     prerequisite_classes: ["platform"],
     profile: "operator-os",
     public: true,
-    schema_version: 1,
+    schema_version: 2,
     source: "official",
-    trust: "official",
     ...(contract === "hermes.skills.audit" ? { verdict: "safe" } : {}),
   };
 }
@@ -127,7 +152,7 @@ test("official catalog uses only authenticated Agent /v1/skills projection and n
   const urls: string[] = [];
   const adapter = new HermesSkillsAgentAdapter(config, async (input) => {
     urls.push(String(input));
-    return response({ object: "list", data: [{ category: "communication", identifier: "official/communication/one-three-one-rule", name: "one-three-one-rule", source: "official", trust: "official" }] });
+    return response(officialCatalog);
   }, fakeCli, fastPolicies);
   const snapshot = await adapter.discoverCatalog("three");
   assert.equal(snapshot.available.length, 1);
@@ -144,6 +169,9 @@ test("exact candidate inspect and audit bind one identifier with safe zero-findi
   const adapter = new HermesSkillsAgentAdapter(config, async () => { throw new Error("HTTP must not run"); }, fakeCli, fastPolicies);
   const inspected = await adapter.inspectExactCandidate("official/communication/one-three-one-rule", "operator-os");
   assert.equal(inspected.identifier, "official/communication/one-three-one-rule");
+  assert.equal(inspected.source, "official");
+  assert.equal(inspected.nativeTrust, "builtin");
+  assert.equal(inspected.authorityClass, "official_public");
   assert.equal(inspected.scanVerdict, "safe");
   assert.equal(inspected.findingCount, 0);
   assert.deepEqual(inspected.prerequisiteClasses, ["platform"]);
@@ -160,9 +188,10 @@ test("malformed JSON, human output, extra fields, version drift, collisions, and
     "Name: human table output",
     "{not-json}",
     { ...(canonical() as Record<string, unknown>), unexpected: "field" },
-    { ...(canonical() as Record<string, unknown>), schema_version: 2 },
+    { ...(canonical() as Record<string, unknown>), schema_version: 1 },
     canonical([{ ...officialMatch, identifier: null }]),
-    { ...(canonical([officialMatch, { ...officialMatch, identifier: null, origin: "local", source: "local", trust: "local" }]) as Record<string, unknown>), same_name_collision_count: 0 },
+    { ...(canonical([officialMatch, { ...officialMatch, identifier: null, install_path: null, origin: "local", source: "local", native_trust: "local", authority_class: "unapproved", official: false, public: false }]) as Record<string, unknown>), same_name_collision_count: 0 },
+    canonical([{ ...officialMatch, native_trust: "official" }]),
   ];
   for (const value of cases) {
     const adapter = new HermesSkillsAgentAdapter(config, async () => response({}), cliRouter(() => value), fastPolicies);
@@ -189,7 +218,7 @@ test("execution authority and dispatch use only fixed CLI arrays; enable, disabl
   await adapter.execute({ action: "remove", targetIdentity: "operator-os:hub:official/communication/one-three-one-rule", targetName: "one-three-one-rule", profile: "operator-os", reason: "governed test", skipExternalSecretSources: true }, remove);
   assert.deepEqual(fakeCli.calls.slice(-2).map((call) => call.args), [
     ["-p", "operator-os", "skills", "install", "official/communication/one-three-one-rule", "--yes"],
-    ["-p", "operator-os", "skills", "uninstall", "one-three-one-rule"],
+    ["-p", "operator-os", "skills", "uninstall", "official/communication/one-three-one-rule", "--yes"],
   ]);
   for (const action of ["enable", "disable", "update"] as const) await assert.rejects(() => adapter.inspectExecutionAuthority(action, "operator-os"), /only governed install and removal/i);
   assert.deepEqual(fetchCalls, []);
@@ -202,7 +231,7 @@ test("25 catalog, canonical, candidate, precondition, verification, and reconcil
     const adapter = new HermesSkillsAgentAdapter(config, async (input) => {
       const url = String(input);
       if (/\/api\/skills|toggle|\/hub\//.test(url)) forbidden.push(url);
-      return response({ object: "list", data: [{ category: "communication", identifier: "official/communication/one-three-one-rule", name: "one-three-one-rule", source: "official", trust: "official" }] });
+      return response(officialCatalog);
     }, fakeCli, fastPolicies);
     await adapter.discoverCatalog();
     await adapter.readCanonicalInstalledState("operator-os");

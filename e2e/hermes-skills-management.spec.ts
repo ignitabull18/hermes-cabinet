@@ -37,7 +37,7 @@ async function prepare(page: Page) {
       action: body.action,
       targetIdentity: body.targetIdentity,
       targetName: "installable-skill",
-      currentState: { identity: "official/productivity/installable-skill", name: "installable-skill", installed: false, enabled: null, version: null, source: "official", provenance: "hub", hubIdentifier: "official/productivity/installable-skill", profile: "operator-os", updateAvailable: null },
+      currentState: { identity: "official/productivity/installable-skill", name: "installable-skill", installed: false, enabled: null, version: null, source: "official", nativeTrust: "builtin", authorityClass: "official_public", official: true, public: true, localFulfillment: true, provenance: "hub", hubIdentifier: "official/productivity/installable-skill", profile: "operator-os", updateAvailable: null },
       targetState: "Installed and verified in Hermes",
       profile: "operator-os",
       expectedConsequence: "Hermes will scan and install installable-skill for the selected profile.",
@@ -94,6 +94,9 @@ test("Operator is action-oriented and completes preview, typed confirmation, and
   await page.getByRole("button", { name: "Skills", exact: true }).click();
   await expect(page.getByTestId("hermes-skills-fixture-label")).toContainText("Acceptance fixture — no live Hermes mutation performed");
   await expect(page.getByTestId("hermes-skills-fixture-label")).toContainText("Fixture Agent 0.19.0");
+  await expect(page.getByTestId("hermes-skill-removable-skill").getByRole("button", { name: "Remove" })).toBeVisible();
+  await expect(page.getByTestId("hermes-skill-unsupported-bundled").getByRole("button")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^(Enable|Disable|Update)$/ })).toHaveCount(0);
   await page.getByRole("tab", { name: "Available" }).click();
   await page.getByTestId("hermes-skill-installable-skill").getByRole("button", { name: "Install" }).click();
   const dialog = page.getByTestId("hermes-skill-confirmation-dialog");

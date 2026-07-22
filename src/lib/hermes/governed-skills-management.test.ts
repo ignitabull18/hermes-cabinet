@@ -63,6 +63,42 @@ test("enable, disable, and update have no operational authority", async () => {
   }
 });
 
+test("governed Remove rejects community, GitHub, private, local, bundled, missing, and ambiguous targets before dispatch", async () => {
+  const drifts = [
+    { source: "community", nativeTrust: "community", authorityClass: "unapproved" as const, official: false, public: false },
+    { source: "github", nativeTrust: "community", authorityClass: "unapproved" as const, official: false, public: true },
+    { source: "private", nativeTrust: "private", authorityClass: "unapproved" as const, official: false, public: false },
+    { source: "local", provenance: "agent" as const, nativeTrust: "local", authorityClass: "unapproved" as const, official: false, public: false },
+    { source: "bundled", provenance: "bundled" as const, hubIdentifier: null, nativeTrust: "builtin", authorityClass: "unapproved" as const, official: false, public: false },
+  ];
+  for (const drift of drifts) {
+    const { adapter, target } = service();
+    const canonical = adapter.readCanonicalInstalledState.bind(adapter);
+    adapter.readCanonicalInstalledState = async (profile) => {
+      const state = await canonical(profile);
+      return {
+        ...state,
+        installed: state.installed.map((skill) => skill.identity === removeIdentity ? { ...skill, ...drift } : skill),
+      };
+    };
+    await assert.rejects(() => prepare(target, "remove", removeIdentity), HermesSkillsManagementError);
+    assert.equal(adapter.mutationCalls, 0);
+  }
+
+  const ambiguous = service();
+  const ambiguousCanonical = ambiguous.adapter.readCanonicalInstalledState.bind(ambiguous.adapter);
+  ambiguous.adapter.readCanonicalInstalledState = async (profile) => ({
+    ...(await ambiguousCanonical(profile)),
+    duplicateNames: ["removable-skill"],
+  });
+  await assert.rejects(() => prepare(ambiguous.target, "remove", removeIdentity), HermesSkillsManagementError);
+  assert.equal(ambiguous.adapter.mutationCalls, 0);
+
+  const missing = service();
+  await assert.rejects(() => prepare(missing.target, "remove", "operator-os:hub:official/productivity/missing-skill"));
+  assert.equal(missing.adapter.mutationCalls, 0);
+});
+
 test("canonical unavailable, malformed, stale, and future observations fail before dispatch", async () => {
   for (const state of ["unavailable", "authentication_failure", "failure", "timeout", "malformed"] as const) {
     const { adapter, target } = service();

@@ -18,6 +18,11 @@ export type HermesManagedSkill = {
   enabled: boolean | null;
   version: string | null;
   source: string | null;
+  nativeTrust: string | null;
+  authorityClass: "official_public" | "unapproved";
+  official: boolean;
+  public: boolean;
+  localFulfillment: boolean;
   provenance: "hub" | "bundled" | "agent" | null;
   hubIdentifier: string | null;
   profile: string;
@@ -62,7 +67,11 @@ export type HermesExactSkillCandidate = {
   identifier: string;
   name: string;
   source: string;
-  trust: string;
+  nativeTrust: string;
+  authorityClass: "official_public";
+  official: true;
+  public: true;
+  localFulfillment: true;
   scanVerdict: string;
   installPolicy: "allow" | "ask" | "block";
   findingCount: number;
@@ -86,7 +95,7 @@ export type HermesSkillExecutionAuthority = {
 
 export type HermesSkillTargetState = Pick<
   HermesManagedSkill,
-  "identity" | "name" | "installed" | "enabled" | "version" | "source" | "provenance" | "hubIdentifier" | "profile" | "updateAvailable"
+  "identity" | "name" | "installed" | "enabled" | "version" | "source" | "nativeTrust" | "authorityClass" | "official" | "public" | "localFulfillment" | "provenance" | "hubIdentifier" | "profile" | "updateAvailable"
 >;
 
 export type HermesSkillOperation = {

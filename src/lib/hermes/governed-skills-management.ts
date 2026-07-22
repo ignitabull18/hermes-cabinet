@@ -71,6 +71,11 @@ function fingerprint(action: HermesSkillAction, skill: HermesManagedSkill): stri
     enabled: skill.enabled,
     version: skill.version,
     source: skill.source,
+    nativeTrust: skill.nativeTrust,
+    authorityClass: skill.authorityClass,
+    official: skill.official,
+    public: skill.public,
+    localFulfillment: skill.localFulfillment,
     provenance: skill.provenance,
     hubIdentifier: skill.hubIdentifier,
     profile: skill.profile,
@@ -122,6 +127,11 @@ function candidateTarget(candidate: HermesExactSkillCandidate, profile: string):
     enabled: null,
     version: null,
     source: candidate.source,
+    nativeTrust: candidate.nativeTrust,
+    authorityClass: candidate.authorityClass,
+    official: candidate.official,
+    public: candidate.public,
+    localFulfillment: candidate.localFulfillment,
     provenance: "hub",
     hubIdentifier: candidate.identifier,
     profile,
@@ -136,7 +146,11 @@ function candidateAllowsSecretSourceSkip(candidate: HermesExactSkillCandidate | 
     candidate
     && candidate.identifier.startsWith("official/")
     && candidate.source === "official"
-    && (candidate.trust === "builtin" || candidate.trust === "official")
+    && candidate.nativeTrust === "builtin"
+    && candidate.authorityClass === "official_public"
+    && candidate.official
+    && candidate.public
+    && candidate.localFulfillment
     && candidate.prerequisiteClassification === "none_declared"
     && candidate.installPolicy === "allow"
     && candidate.scanVerdict === "safe"
@@ -146,11 +160,17 @@ function candidateAllowsSecretSourceSkip(candidate: HermesExactSkillCandidate | 
 
 function canonicalTarget(state: HermesCanonicalSkillsState, identity: string, candidate: HermesExactSkillCandidate | null): HermesManagedSkill | null {
   if (!candidate) return state.installed.find((skill) => skill.identity === identity) ?? null;
-  const matches = state.installed.filter((skill) => skill.profile === state.profile && skill.name === candidate.name && skill.provenance === "hub");
+  const matches = state.installed.filter((skill) =>
+    skill.profile === state.profile
+    && skill.name === candidate.name
+    && skill.provenance === "hub"
+    && skill.hubIdentifier === candidate.identifier
+    && skill.source === candidate.source
+    && skill.nativeTrust === candidate.nativeTrust
+    && skill.authorityClass === candidate.authorityClass
+  );
   if (matches.length !== 1 || state.duplicateNames.includes(candidate.name)) return null;
-  const match = matches[0];
-  if (match.hubIdentifier && match.hubIdentifier !== candidate.identifier) return null;
-  return { ...match, identity: `${state.profile}:hub:${candidate.identifier}`, hubIdentifier: candidate.identifier, source: candidate.source };
+  return matches[0];
 }
 
 export class HermesSkillsManagementError extends Error {
@@ -198,7 +218,7 @@ export class HermesSkillsManagementService {
     if (input.action === "install" && (!candidate || candidate.identifier !== input.targetIdentity)) {
       throw new HermesSkillsManagementError("target_mismatch", "Hermes did not preserve the exact prepared Hub identifier.");
     }
-    if (candidate && (candidate.installPolicy !== "allow" || candidate.scanVerdict !== "safe" || candidate.findingCount !== 0)) {
+    if (candidate && (!candidateAllowsSecretSourceSkip(candidate))) {
       throw new HermesSkillsManagementError("stale_target", "The exact Hermes Skills Hub candidate does not retain valid trust and scan authority.");
     }
     const canonical = await this.adapter.readCanonicalInstalledState(profile);
@@ -214,6 +234,19 @@ export class HermesSkillsManagementService {
     if (!target.supportedActions.includes(input.action)) throw new HermesSkillsManagementError("unsupported_action", "The installed Hermes contract does not support this action for the selected skill.");
     if ((input.action === "install" || input.action === "remove") && !target.hubIdentifier) {
       throw new HermesSkillsManagementError("unsupported_action", "The exact Hermes hub identifier is required for this action.");
+    }
+    if (input.action === "remove" && !(
+      target.installed
+      && target.provenance === "hub"
+      && target.hubIdentifier?.startsWith("official/")
+      && target.source === "official"
+      && target.nativeTrust === "builtin"
+      && target.authorityClass === "official_public"
+      && target.official
+      && target.public
+      && target.localFulfillment
+    )) {
+      throw new HermesSkillsManagementError("unsupported_action", "Only one exact installed official public Hub skill can be removed.");
     }
     const authority = await this.adapter.inspectExecutionAuthority(input.action, profile);
     const reason = safeReason(input.reason);
@@ -235,6 +268,11 @@ export class HermesSkillsManagementService {
         enabled: target.enabled,
         version: target.version,
         source: target.source,
+        nativeTrust: target.nativeTrust,
+        authorityClass: target.authorityClass,
+        official: target.official,
+        public: target.public,
+        localFulfillment: target.localFulfillment,
         provenance: target.provenance,
         hubIdentifier: target.hubIdentifier,
         profile: target.profile,
@@ -387,7 +425,7 @@ export class HermesSkillsManagementService {
       } catch {
         return this.result(stored, "failed_before_dispatch", "precondition_check", "Hermes could not revalidate the exact Skills Hub candidate. No mutation was dispatched.", false, false, null);
       }
-      if (candidate.fingerprint !== stored.candidate?.fingerprint || candidate.installPolicy !== "allow" || candidate.scanVerdict !== "safe" || candidate.findingCount !== 0) {
+      if (candidate.fingerprint !== stored.candidate?.fingerprint || !candidateAllowsSecretSourceSkip(candidate)) {
         return this.result(stored, "blocked_no_action", "precondition_check", "The exact Skills Hub candidate trust or scan authority changed after preview. No mutation was dispatched.", false, false, null);
       }
     }
@@ -441,6 +479,11 @@ export class HermesSkillsManagementService {
         && matches[0].provenance === "hub"
         && matches[0].hubIdentifier === stored.candidate?.identifier
         && matches[0].source === stored.candidate?.source
+        && matches[0].nativeTrust === "builtin"
+        && matches[0].authorityClass === "official_public"
+        && matches[0].official
+        && matches[0].public
+        && matches[0].localFulfillment
         && !snapshot.duplicateNames.includes(stored.public.targetName);
     }
     if (stored.public.action === "remove") {
