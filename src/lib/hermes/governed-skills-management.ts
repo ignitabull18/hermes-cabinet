@@ -3,7 +3,10 @@ import { sanitizeHermesText } from "./control-center-sanitizer";
 import { HermesSkillsAdapterError, type HermesSkillsAdapter } from "./skills-adapter";
 import type {
   HermesManagedSkill,
+  HermesCanonicalSkillsState,
+  HermesExactSkillCandidate,
   HermesSkillAction,
+  HermesSkillExecutionAuthority,
   HermesSkillOperation,
   HermesSkillsManagementPreview,
   HermesSkillsManagementResult,
@@ -28,9 +31,9 @@ type ServiceOptions = {
 type StoredPreview = {
   public: HermesSkillsManagementPreview;
   actorScope: string;
-  query: string;
   stateFingerprint: string;
-  authorityIdentity: string;
+  authority: HermesSkillExecutionAuthority;
+  candidate: HermesExactSkillCandidate | null;
   createdAt: number;
   lastAccessAt: number;
 };
@@ -104,18 +107,37 @@ function confirmation(action: HermesSkillAction, name: string, profile: string):
   return `${action.toUpperCase()} SKILL ${name} IN ${profile}`;
 }
 
-function findTarget(snapshot: HermesSkillsSnapshot, action: HermesSkillAction, identity: string): HermesManagedSkill | null {
-  const collection = action === "install" ? snapshot.available : snapshot.installed;
-  return collection.find((skill) => skill.identity === identity) ?? null;
+function hubIdentifier(action: HermesSkillAction, identity: string, profile: string): string | null {
+  if (action === "install") return identity;
+  const prefix = `${profile}:hub:`;
+  return identity.startsWith(prefix) ? identity.slice(prefix.length) : null;
 }
 
-function sameCanonicalInstalledSkill(skill: HermesManagedSkill, expected: HermesSkillsManagementPreview["currentState"]): boolean {
-  return skill.installed
-    && skill.identity === expected.identity
-    && skill.name === expected.name
-    && skill.profile === expected.profile
-    && skill.provenance === expected.provenance
-    && skill.hubIdentifier === expected.hubIdentifier;
+function candidateTarget(candidate: HermesExactSkillCandidate, profile: string): HermesManagedSkill {
+  return {
+    identity: candidate.identifier,
+    name: candidate.name,
+    category: null,
+    installed: false,
+    enabled: null,
+    version: null,
+    source: candidate.source,
+    provenance: "hub",
+    hubIdentifier: candidate.identifier,
+    profile,
+    updateAvailable: null,
+    observedAt: candidate.observedAt,
+    supportedActions: ["install"],
+  };
+}
+
+function canonicalTarget(state: HermesCanonicalSkillsState, identity: string, candidate: HermesExactSkillCandidate | null): HermesManagedSkill | null {
+  if (!candidate) return state.installed.find((skill) => skill.identity === identity) ?? null;
+  const matches = state.installed.filter((skill) => skill.profile === state.profile && skill.name === candidate.name && skill.provenance === "hub");
+  if (matches.length !== 1 || state.duplicateNames.includes(candidate.name)) return null;
+  const match = matches[0];
+  if (match.hubIdentifier && match.hubIdentifier !== candidate.identifier) return null;
+  return { ...match, identity: `${state.profile}:hub:${candidate.identifier}`, hubIdentifier: candidate.identifier, source: candidate.source };
 }
 
 export class HermesSkillsManagementError extends Error {
@@ -152,24 +174,35 @@ export class HermesSkillsManagementService {
   }
 
   async snapshot(query = ""): Promise<HermesSkillsSnapshot> {
-    return this.adapter.read(query);
+    return this.adapter.discoverCatalog(query);
   }
 
   async prepare(input: { action: HermesSkillAction; targetIdentity: string; reason: string; actorIdentity: string; query?: string }): Promise<HermesSkillsManagementPreview> {
     this.cleanup();
-    const query = (input.query ?? "").trim().slice(0, 80);
-    const snapshot = await this.adapter.read(query);
-    const assessment = this.assessCanonical(snapshot, snapshot.profile);
+    const profile = this.adapter.configuredProfile();
+    const identifier = hubIdentifier(input.action, input.targetIdentity, profile);
+    const candidate = identifier ? await this.adapter.inspectExactCandidate(identifier, profile) : null;
+    if (input.action === "install" && (!candidate || candidate.identifier !== input.targetIdentity)) {
+      throw new HermesSkillsManagementError("target_mismatch", "Hermes did not preserve the exact prepared Hub identifier.");
+    }
+    if (candidate && (candidate.installPolicy !== "allow" || candidate.scanVerdict !== "safe" || candidate.findingCount !== 0)) {
+      throw new HermesSkillsManagementError("stale_target", "The exact Hermes Skills Hub candidate does not retain valid trust and scan authority.");
+    }
+    const canonical = await this.adapter.readCanonicalInstalledState(profile);
+    const assessment = this.assessCanonical(canonical, profile);
     if (!assessment.ok) throw new HermesSkillsManagementError("stale_target", assessment.summary);
-    const target = findTarget(snapshot, input.action, input.targetIdentity);
+    const target = input.action === "install" && candidate
+      ? candidateTarget(candidate, profile)
+      : canonicalTarget(canonical, input.targetIdentity, candidate);
     if (!target) throw new HermesSkillsManagementError("target_mismatch", "Hermes no longer reports the selected exact skill target.");
-    if (snapshot.profile !== target.profile) throw new HermesSkillsManagementError("target_mismatch", "The canonical Hermes profile does not match the selected target.");
-    if (snapshot.duplicateIdentities.includes(target.identity)) throw new HermesSkillsManagementError("stale_target", "Hermes reported a duplicate or ambiguous canonical skill identity. No action can be prepared safely.");
+    if (canonical.profile !== target.profile) throw new HermesSkillsManagementError("target_mismatch", "The canonical Hermes profile does not match the selected target.");
+    if (canonical.duplicateIdentities.includes(target.identity) || canonical.duplicateNames.includes(target.name)) throw new HermesSkillsManagementError("stale_target", "Hermes reported a duplicate or ambiguous canonical skill identity. No action can be prepared safely.");
+    if (input.action === "install" && canonical.installed.some((skill) => skill.name === target.name)) throw new HermesSkillsManagementError("stale_target", "The exact install target is no longer absent from canonical Hermes state.");
     if (!target.supportedActions.includes(input.action)) throw new HermesSkillsManagementError("unsupported_action", "The installed Hermes contract does not support this action for the selected skill.");
     if ((input.action === "install" || input.action === "remove") && !target.hubIdentifier) {
       throw new HermesSkillsManagementError("unsupported_action", "The exact Hermes hub identifier is required for this action.");
     }
-    const authorityIdentity = await this.adapter.authorize(input.action);
+    const authority = await this.adapter.inspectExecutionAuthority(input.action, profile);
     const reason = safeReason(input.reason);
     const stateFingerprint = fingerprint(input.action, target);
     const actorScope = hash(input.actorIdentity);
@@ -198,15 +231,15 @@ export class HermesSkillsManagementService {
       profile: target.profile,
       expectedConsequence: consequence(input.action, target.name),
       reversibility: reversibility(input.action),
-      sourceEvidence: snapshot.interface,
-      evidenceObservedAt: snapshot.observedAt,
+      sourceEvidence: canonical.interface,
+      evidenceObservedAt: canonical.observedAt,
       expiresAt: new Date(createdAt + this.previewTtlMs).toISOString(),
       confirmationPhrase: confirmation(input.action, target.name, target.profile),
       reason,
       phase: "prepared",
     };
     const key = this.previewKey(actorScope, previewId);
-    this.previews.set(key, { public: preview, actorScope, query, stateFingerprint, authorityIdentity, createdAt, lastAccessAt: createdAt });
+    this.previews.set(key, { public: preview, actorScope, stateFingerprint, authority, candidate, createdAt, lastAccessAt: createdAt });
     this.cleanup();
     return preview;
   }
@@ -311,7 +344,7 @@ export class HermesSkillsManagementService {
     };
   }
 
-  private assessCanonical(snapshot: HermesSkillsSnapshot, expectedProfile: string): CanonicalAssessment {
+  private assessCanonical(snapshot: HermesCanonicalSkillsState, expectedProfile: string): CanonicalAssessment {
     if (snapshot.profile !== expectedProfile) return { ok: false, status: "blocked_no_action", summary: "Hermes reported a different canonical profile. No mutation was dispatched." };
     if (snapshot.sourceState !== "success" && snapshot.sourceState !== "connected_empty") {
       return { ok: false, status: "failed_before_dispatch", summary: `Canonical Hermes Skills state is ${snapshot.sourceState}. No mutation was dispatched.` };
@@ -325,32 +358,44 @@ export class HermesSkillsManagementService {
   }
 
   private async execute(stored: StoredPreview): Promise<HermesSkillsManagementResult> {
-    let snapshot: HermesSkillsSnapshot;
+    let currentAuthority: HermesSkillExecutionAuthority;
     try {
-      snapshot = await this.adapter.read(stored.query);
+      currentAuthority = await this.adapter.inspectExecutionAuthority(stored.public.action, stored.public.profile);
     } catch {
-      return this.result(stored, "failed_before_dispatch", "precondition_check", "Hermes could not complete the canonical precondition read. No mutation was dispatched.", false, false, null);
+      return this.result(stored, "failed_before_dispatch", "precondition_check", "The audited Hermes execution authority is unavailable. No mutation was dispatched.", false, false, null);
+    }
+    if (currentAuthority.opaqueIdentity !== stored.authority.opaqueIdentity) {
+      return this.result(stored, "blocked_no_action", "precondition_check", "The audited Hermes execution authority changed after preview. No mutation was dispatched.", false, false, null);
+    }
+    let candidate = stored.candidate;
+    if (candidate) {
+      try {
+        candidate = await this.adapter.inspectExactCandidate(candidate.identifier, stored.public.profile);
+      } catch {
+        return this.result(stored, "failed_before_dispatch", "precondition_check", "Hermes could not revalidate the exact Skills Hub candidate. No mutation was dispatched.", false, false, null);
+      }
+      if (candidate.fingerprint !== stored.candidate?.fingerprint || candidate.installPolicy !== "allow" || candidate.scanVerdict !== "safe" || candidate.findingCount !== 0) {
+        return this.result(stored, "blocked_no_action", "precondition_check", "The exact Skills Hub candidate trust or scan authority changed after preview. No mutation was dispatched.", false, false, null);
+      }
+    }
+    let snapshot: HermesCanonicalSkillsState;
+    try {
+      snapshot = await this.adapter.readCanonicalInstalledState(stored.public.profile);
+    } catch {
+      return this.result(stored, "failed_before_dispatch", "precondition_check", "Hermes Agent Skills installed-state read did not complete. No mutation was dispatched.", false, false, null);
     }
     const assessment = this.assessCanonical(snapshot, stored.public.profile);
     if (!assessment.ok) return this.result(stored, assessment.status, "precondition_check", assessment.summary, false, false, null);
-    if (snapshot.duplicateIdentities.includes(stored.public.targetIdentity)) {
+    if (snapshot.duplicateIdentities.includes(stored.public.targetIdentity) || snapshot.duplicateNames.includes(stored.public.targetName)) {
       return this.result(stored, "blocked_no_action", "precondition_check", "Hermes reported a duplicate or ambiguous canonical target. No mutation was dispatched.", false, false, null);
     }
     if (this.alreadyDesired(stored, snapshot)) {
       return this.result(stored, "verified_success", "verified", "Hermes already verifies the exact requested skill state. No mutation was dispatched.", false, false, snapshot.observedAt);
     }
-    const current = findTarget(snapshot, stored.public.action, stored.public.targetIdentity);
-    if (!current || fingerprint(stored.public.action, current) !== stored.stateFingerprint) {
+    const current = stored.public.action === "install" ? null : canonicalTarget(snapshot, stored.public.currentState.identity, candidate);
+    const installAbsent = stored.public.action === "install" && !snapshot.installed.some((skill) => skill.name === stored.public.targetName);
+    if ((stored.public.action === "install" && !installAbsent) || (stored.public.action !== "install" && (!current || fingerprint(stored.public.action, current) !== stored.stateFingerprint))) {
       return this.result(stored, "blocked_no_action", "precondition_check", "Canonical Hermes skill state changed after preview. No mutation was dispatched.", false, false, null);
-    }
-    let currentAuthority: string;
-    try {
-      currentAuthority = await this.adapter.authorize(stored.public.action);
-    } catch {
-      return this.result(stored, "failed_before_dispatch", "precondition_check", "The audited Hermes execution authority is unavailable. No mutation was dispatched.", false, false, null);
-    }
-    if (currentAuthority !== stored.authorityIdentity) {
-      return this.result(stored, "blocked_no_action", "precondition_check", "The audited Hermes execution authority changed after preview. No mutation was dispatched.", false, false, null);
     }
 
     const operation: HermesSkillOperation = {
@@ -362,7 +407,7 @@ export class HermesSkillsManagementService {
     };
     let responseReceived = false;
     try {
-      const response = await this.adapter.execute(operation, stored.authorityIdentity);
+      const response = await this.adapter.execute(operation, currentAuthority);
       responseReceived = response.responseReceived;
     } catch (error) {
       const dispatched = error instanceof HermesSkillsAdapterError && error.dispatched;
@@ -375,34 +420,31 @@ export class HermesSkillsManagementService {
       : this.result(stored, "outcome_unknown", "verification_attempted", "Hermes responded, but canonical readback did not verify the exact requested skill state. No retry was attempted.", true, responseReceived, verification.observedAt);
   }
 
-  private alreadyDesired(stored: StoredPreview, snapshot: HermesSkillsSnapshot): boolean {
+  private alreadyDesired(stored: StoredPreview, snapshot: HermesCanonicalSkillsState): boolean {
     if (stored.public.action === "install") {
-      return snapshot.installed.some((skill) =>
+      const matches = snapshot.installed.filter((skill) => skill.profile === stored.public.profile && skill.name === stored.public.targetName);
+      return matches.length === 1
+        && matches[0].provenance === "hub"
+        && (!matches[0].hubIdentifier || matches[0].hubIdentifier === stored.candidate?.identifier)
+        && !snapshot.duplicateNames.includes(stored.public.targetName);
+    }
+    if (stored.public.action === "remove") {
+      return !snapshot.installed.some((skill) =>
         skill.profile === stored.public.profile
         && skill.name === stored.public.targetName
         && skill.provenance === "hub"
-        && skill.hubIdentifier === stored.public.targetIdentity
-        && skill.source === stored.public.currentState.source,
-      );
-    }
-    if (stored.public.action === "remove") {
-      const identifier = stored.public.currentState.hubIdentifier;
-      return Boolean(identifier) && !snapshot.installed.some((skill) =>
-        skill.profile === stored.public.profile
-        && skill.provenance === "hub"
-        && skill.hubIdentifier === identifier,
       );
     }
     if (stored.public.action === "update") return false;
-    const installed = snapshot.installed.find((skill) => sameCanonicalInstalledSkill(skill, stored.public.currentState));
+    const installed = canonicalTarget(snapshot, stored.public.currentState.identity, stored.candidate);
     return stored.public.action === "enable" ? installed?.enabled === true : installed?.enabled === false;
   }
 
   private async verify(stored: StoredPreview): Promise<{ verified: boolean; observedAt: string | null }> {
     try {
-      const snapshot = await this.adapter.read(stored.query);
+      const snapshot = await this.adapter.readCanonicalInstalledState(stored.public.profile);
       const assessment = this.assessCanonical(snapshot, stored.public.profile);
-      if (!assessment.ok || snapshot.duplicateIdentities.includes(stored.public.targetIdentity)) return { verified: false, observedAt: Number.isFinite(Date.parse(snapshot.observedAt)) ? snapshot.observedAt : null };
+      if (!assessment.ok || snapshot.duplicateIdentities.includes(stored.public.targetIdentity) || snapshot.duplicateNames.includes(stored.public.targetName)) return { verified: false, observedAt: Number.isFinite(Date.parse(snapshot.observedAt)) ? snapshot.observedAt : null };
       return { verified: this.alreadyDesired(stored, snapshot), observedAt: snapshot.observedAt };
     } catch {
       return { verified: false, observedAt: null };

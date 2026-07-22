@@ -1,5 +1,14 @@
 import type { HermesSkillsAdapter } from "./skills-adapter";
-import type { HermesManagedSkill, HermesSkillAction, HermesSkillOperation, HermesSkillsSnapshot, HermesSkillsSourceState } from "./skills-management-types";
+import type {
+  HermesCanonicalSkillsState,
+  HermesExactSkillCandidate,
+  HermesManagedSkill,
+  HermesSkillAction,
+  HermesSkillExecutionAuthority,
+  HermesSkillOperation,
+  HermesSkillsSnapshot,
+  HermesSkillsSourceState,
+} from "./skills-management-types";
 
 export const HERMES_SKILLS_ACCEPTANCE_LABEL = "Acceptance fixture — no live Hermes mutation performed";
 
@@ -67,6 +76,10 @@ export function buildHermesSkillsAcceptanceSnapshot(): HermesSkillsSnapshot {
 
 export class FakeHermesSkillsAdapter implements HermesSkillsAdapter {
   mutationCalls = 0;
+  catalogCalls = 0;
+  canonicalCalls = 0;
+  candidateCalls = 0;
+  authorityCalls = 0;
   readonly operations: HermesSkillOperation[] = [];
   failBeforeDispatch = false;
   unknownAfterDispatch = false;
@@ -76,10 +89,15 @@ export class FakeHermesSkillsAdapter implements HermesSkillsAdapter {
   executionBarrier: Promise<void> | null = null;
   executionStarted: (() => void) | null = null;
   installAsDifferentHubIdentity = false;
+  installWithSameNameBundled = false;
   leaveSameNameBundledOnRemove = false;
   private snapshotValue = buildHermesSkillsAcceptanceSnapshot();
 
-  async read(): Promise<HermesSkillsSnapshot> {
+  configuredProfile(): string {
+    return "operator-os";
+  }
+
+  private async readSnapshot(): Promise<HermesSkillsSnapshot> {
     if (this.staleOnNextRead) {
       this.staleOnNextRead = false;
       const first = this.snapshotValue.installed[0];
@@ -93,14 +111,72 @@ export class FakeHermesSkillsAdapter implements HermesSkillsAdapter {
     return snapshot;
   }
 
-  async authorize(action: HermesSkillAction): Promise<string> {
-    if (action === "update") throw new Error("Update remains audit-only");
-    return `fixture-authority-${action}`;
+  async discoverCatalog(): Promise<HermesSkillsSnapshot> {
+    this.catalogCalls += 1;
+    return this.readSnapshot();
   }
 
-  async execute(operation: HermesSkillOperation, expectedAuthority: string): Promise<{ responseReceived: boolean }> {
+  async readCanonicalInstalledState(profile: string): Promise<HermesCanonicalSkillsState> {
+    this.canonicalCalls += 1;
+    if (profile !== this.configuredProfile()) throw new Error("Fixture profile mismatch");
+    const snapshot = await this.readSnapshot();
+    const names = new Map<string, number>();
+    for (const skill of snapshot.installed) names.set(skill.name, (names.get(skill.name) ?? 0) + 1);
+    return {
+      profile,
+      observedAt: snapshot.observedAt,
+      sourceState: snapshot.sourceState,
+      summary: snapshot.summary,
+      interface: "Hermes Agent Skills installed-state read",
+      installed: snapshot.installed,
+      duplicateIdentities: snapshot.duplicateIdentities,
+      duplicateNames: [...names.entries()].filter(([, count]) => count > 1).map(([name]) => name),
+      evidence: { attemptCount: 1, finalClassification: "success", totalElapsedMs: 1 },
+    };
+  }
+
+  async inspectExactCandidate(identifier: string, profile: string): Promise<HermesExactSkillCandidate> {
+    this.candidateCalls += 1;
+    if (profile !== this.configuredProfile()) throw new Error("Fixture profile mismatch");
+    const snapshot = await this.readSnapshot();
+    const skill = snapshot.available.find((item) => item.hubIdentifier === identifier)
+      ?? snapshot.installed.find((item) => item.hubIdentifier === identifier);
+    if (!skill?.hubIdentifier || !skill.source) throw new Error("Fixture candidate unavailable");
+    return {
+      identifier,
+      name: skill.name,
+      source: skill.source,
+      trust: "official",
+      scanVerdict: "safe",
+      installPolicy: "allow",
+      findingCount: 0,
+      prerequisiteClassification: "none_declared",
+      fingerprint: `fixture-candidate-${identifier}`,
+      observedAt: new Date().toISOString(),
+      evidence: {
+        preview: { attemptCount: 1, finalClassification: "success", totalElapsedMs: 1 },
+        scan: { attemptCount: 1, finalClassification: "success", totalElapsedMs: 1 },
+      },
+    };
+  }
+
+  async inspectExecutionAuthority(action: HermesSkillAction, profile: string): Promise<HermesSkillExecutionAuthority> {
+    this.authorityCalls += 1;
+    if (profile !== this.configuredProfile()) throw new Error("Fixture profile mismatch");
+    if (action === "update") throw new Error("Update remains audit-only");
+    return {
+      action,
+      profile,
+      opaqueIdentity: `fixture-authority-${action}`,
+      agentContractIdentity: `fixture-contract-${action}`,
+      cliAuthorityIdentity: action === "install" || action === "remove" ? "fixture-cli" : null,
+      inspectedAt: new Date().toISOString(),
+    };
+  }
+
+  async execute(operation: HermesSkillOperation, authority: HermesSkillExecutionAuthority): Promise<{ responseReceived: boolean }> {
     if (this.failBeforeDispatch) throw new Error("Fixture failed before dispatch");
-    if (expectedAuthority !== `fixture-authority-${operation.action}`) throw new Error("Fixture authority mismatch");
+    if (authority.opaqueIdentity !== `fixture-authority-${operation.action}`) throw new Error("Fixture authority mismatch");
     this.mutationCalls += 1;
     this.operations.push(operation);
     this.executionStarted?.();
@@ -115,6 +191,7 @@ export class FakeHermesSkillsAdapter implements HermesSkillsAdapter {
       this.snapshotValue.available = this.snapshotValue.available.filter((skill) => skill.identity !== operation.targetIdentity);
       const installedIdentifier = this.installAsDifferentHubIdentity ? `clawhub/${operation.targetName}` : operation.targetIdentity;
       this.snapshotValue.installed.push(installed(operation.targetName, true, ["disable", "remove"], false, installedIdentifier, this.installAsDifferentHubIdentity ? "clawhub" : catalog?.source ?? null));
+      if (this.installWithSameNameBundled) this.snapshotValue.installed.push(installed(operation.targetName, true, ["disable"]));
     } else if (operation.action === "remove") {
       this.snapshotValue.installed = this.snapshotValue.installed.filter((skill) => skill.identity !== operation.targetIdentity);
       if (this.leaveSameNameBundledOnRemove) this.snapshotValue.installed.push(installed(operation.targetName, true, ["disable"]));

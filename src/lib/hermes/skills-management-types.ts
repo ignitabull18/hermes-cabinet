@@ -40,6 +40,50 @@ export type HermesSkillsSnapshot = {
   duplicateIdentities: string[];
 };
 
+export type HermesSkillsReadEvidence = {
+  attemptCount: 1 | 2;
+  finalClassification: "success" | "timeout" | "transport_unavailable" | "authentication_rejected" | "malformed_response" | "contract_mismatch";
+  totalElapsedMs: number;
+};
+
+export type HermesCanonicalSkillsState = {
+  profile: string;
+  observedAt: string;
+  sourceState: HermesSkillsSourceState;
+  summary: string;
+  interface: "Hermes Agent Skills installed-state read";
+  installed: HermesManagedSkill[];
+  duplicateIdentities: string[];
+  duplicateNames: string[];
+  evidence: HermesSkillsReadEvidence;
+};
+
+export type HermesExactSkillCandidate = {
+  identifier: string;
+  name: string;
+  source: string;
+  trust: string;
+  scanVerdict: string;
+  installPolicy: "allow" | "ask" | "block";
+  findingCount: number;
+  prerequisiteClassification: "none_declared" | "declared";
+  fingerprint: string;
+  observedAt: string;
+  evidence: {
+    preview: HermesSkillsReadEvidence;
+    scan: HermesSkillsReadEvidence;
+  };
+};
+
+export type HermesSkillExecutionAuthority = {
+  action: HermesSkillAction;
+  profile: string;
+  opaqueIdentity: string;
+  agentContractIdentity: string;
+  cliAuthorityIdentity: string | null;
+  inspectedAt: string;
+};
+
 export type HermesSkillTargetState = Pick<
   HermesManagedSkill,
   "identity" | "name" | "installed" | "enabled" | "version" | "source" | "provenance" | "hubIdentifier" | "profile" | "updateAvailable"

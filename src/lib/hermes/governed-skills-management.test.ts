@@ -43,6 +43,20 @@ test("every prepare receives independent 128-bit preview and request identities"
   assert.equal(first.confirmationPhrase, "DISABLE SKILL enabled-skill IN operator-os");
 });
 
+test("prepare, commit precondition, and verification use narrow reads without catalog discovery", async () => {
+  const adapter = new FakeHermesSkillsAdapter();
+  const target = service(adapter);
+  await target.snapshot("enabled-skill");
+  assert.equal(adapter.catalogCalls, 1);
+  const preview = await prepare(target, "disable", enabledIdentity, actor, "a query that must not become mutation authority");
+  const result = await commit(target, preview);
+  assert.equal(result.status, "verified_success");
+  assert.equal(adapter.catalogCalls, 1, "commit and verification must not rediscover the catalog");
+  assert.equal(adapter.canonicalCalls, 3, "prepare, commit precondition, and verification each use one canonical operation");
+  assert.equal(adapter.authorityCalls, 2, "authority is inspected once at prepare and once at commit");
+  assert.equal(adapter.mutationCalls, 1);
+});
+
 test("commit requires exact phrase, actor, and exact target binding", async () => {
   const adapter = new FakeHermesSkillsAdapter();
   const target = service(adapter);
@@ -192,11 +206,45 @@ test("same-name skill from another source cannot verify install, while exact rem
   const installed = await commit(installService, await prepare(installService, "install", installIdentity));
   assert.equal(installed.status, "outcome_unknown");
 
+  const duplicateInstall = new FakeHermesSkillsAdapter();
+  duplicateInstall.installWithSameNameBundled = true;
+  const duplicateService = service(duplicateInstall);
+  const duplicate = await commit(duplicateService, await prepare(duplicateService, "install", installIdentity));
+  assert.equal(duplicate.status, "outcome_unknown");
+  assert.equal(duplicateInstall.mutationCalls, 1);
+
   const removal = new FakeHermesSkillsAdapter();
   removal.leaveSameNameBundledOnRemove = true;
   const removalService = service(removal);
   const removed = await commit(removalService, await prepare(removalService, "remove", removableIdentity));
   assert.equal(removed.status, "verified_success");
+});
+
+test("candidate authority changes and same-name installed alternates block install before dispatch", async () => {
+  const changed = new FakeHermesSkillsAdapter();
+  const inspect = changed.inspectExactCandidate.bind(changed);
+  let inspections = 0;
+  changed.inspectExactCandidate = async (identifier, profile) => {
+    const candidate = await inspect(identifier, profile);
+    inspections += 1;
+    return inspections === 1 ? candidate : { ...candidate, trust: "changed", fingerprint: `${candidate.fingerprint}-changed` };
+  };
+  const changedService = service(changed);
+  const changedResult = await commit(changedService, await prepare(changedService, "install", installIdentity));
+  assert.equal(changedResult.status, "blocked_no_action");
+  assert.match(changedResult.summary, /trust or scan authority changed/i);
+  assert.equal(changed.mutationCalls, 0);
+
+  const ambiguous = new FakeHermesSkillsAdapter();
+  const readCanonical = ambiguous.readCanonicalInstalledState.bind(ambiguous);
+  ambiguous.readCanonicalInstalledState = async (profile) => {
+    const state = await readCanonical(profile);
+    const alternate = { ...state.installed[0], identity: "operator-os:bundled:installable-skill", name: "installable-skill", provenance: "bundled" as const, hubIdentifier: null, source: "bundled" };
+    return { ...state, installed: [...state.installed, alternate] };
+  };
+  const ambiguousService = service(ambiguous);
+  await assert.rejects(() => prepare(ambiguousService, "install", installIdentity), /no longer absent/i);
+  assert.equal(ambiguous.mutationCalls, 0);
 });
 
 test("failure before dispatch and timeout after dispatch preserve outcome certainty", async () => {

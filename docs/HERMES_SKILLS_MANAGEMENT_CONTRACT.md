@@ -13,24 +13,55 @@ requires canonical Hermes readback before claiming success.
 | List installed | `GET /api/skills?profile=<profile>` | Operational |
 | List hub sources | `GET /api/skills/hub/sources?profile=<profile>` | Operational |
 | Search catalog | `GET /api/skills/hub/search?q=<query>&source=all&limit=50&profile=<profile>` | Operational |
+| Inspect exact candidate | `GET /api/skills/hub/preview?identifier=<identifier>&profile=<profile>` plus exact `GET /api/skills/hub/scan` | Required for an exact hub target; content and findings never egress |
 | Install | `<approved-cli> -p <profile> skills install <identifier> --yes` | Operational only with approved CLI authority |
 | Enable or disable | `PUT /api/skills/toggle?profile=<profile>` with `{name, enabled, profile}` | Operational |
 | Remove | `<approved-cli> -p <profile> skills uninstall <name>` with fixed `yes\n` input | Operational only for an exact installed hub identity and approved CLI authority |
 | Check updates | Hermes CLI `skills check` | Read-only audit surface |
 | Update | No exact structured, target-specific update/readback contract in 0.19.0 | Audit-only, no action exposed |
-| Verify outcome | Fresh installed, source, and catalog reads | Required; command or HTTP success is insufficient |
+| Verify outcome | Fresh narrow installed-state read | Required; command or HTTP success is insufficient |
 
-Cabinet does not call the content-bearing hub preview surface and does not
-return scan findings, manifests, skill instructions, repository URLs, or file
-names. Hermes' native install pipeline retains responsibility for quarantine
-and scanning. The installed API uninstall wrapper passes an unsupported
-`--yes` option, so Cabinet uses the audited CLI contract above instead.
+Catalog discovery is not mutation authority. Prepare and commit inspect a full
+hub identifier through the target-specific preview and scan contracts, reduce
+the response immediately to name, source, trust, scan verdict, finding count,
+prerequisite classification, and an opaque fingerprint, and never return scan
+findings, manifests, skill instructions, repository URLs, or file names. The
+installed API uninstall wrapper passes an unsupported `--yes` option, so
+Cabinet uses the audited CLI contract above instead.
+
+## Read boundaries and deadlines
+
+Cabinet exposes five explicit adapter operations: `discoverCatalog`,
+`readCanonicalInstalledState`, `inspectExactCandidate`,
+`inspectExecutionAuthority`, and `execute`. Catalog discovery may use general
+search or featured sources. Prepare, commit preconditions, verification, and
+reconciliation use only the narrow installed-state reader, plus exact candidate
+inspection when the prepared target is hub-backed.
+
+Read deadlines are source-specific and independent of the general Hermes
+collector timeout:
+
+| Source class | Per attempt | Total operation deadline | Attempts |
+| --- | ---: | ---: | ---: |
+| Installed state | 750 ms | 1750 ms | At most 2 |
+| Agent contract | 1500 ms | 3250 ms | At most 2 |
+| Exact hub candidate preview and scan | 6000 ms | 12500 ms shared | At most 2 per read within the shared deadline |
+| Catalog discovery | 5000 ms | 5500 ms | 1 |
+
+Only timeout and transient transport unavailability permit one read-only
+retry, with a new abort controller. Authentication rejection, malformed
+response, contract mismatch, duplicate identity, stale state, and changed
+target never retry. Mutation dispatch never retries. Internal evidence records
+attempt count, safe source classification, and total elapsed time without raw
+URLs or credentials. Observation time is captured only after all required
+source reads complete successfully.
 
 ## Exact executable authority
 
 `CABINET_HERMES_CLI_PATH` has no default and must be an explicit absolute
 server-side path. There is no `PATH` lookup or fallback. For install and remove,
-Cabinet performs all of the following before preview and again before dispatch:
+Cabinet performs all of the following once during prepare and once during the
+commit authority check:
 
 - resolves symlinks and requires a regular executable file no larger than the
   bounded executable limit;
@@ -50,7 +81,9 @@ Cabinet performs all of the following before preview and again before dispatch:
 
 The API authority is separately bound to exact Agent API version 0.19.0 and the
 configured profile. Prepare records an opaque action authority; commit
-reauthorizes and rejects any change before dispatch.
+reauthorizes and rejects any change before dispatch. The fixed CLI runner makes
+one final executable-identity comparison immediately before spawning and does
+not repeat the Agent contract check.
 
 ## Identity and provenance
 
@@ -80,7 +113,7 @@ reauthorizes and rejects any change before dispatch.
 | Duplicate commit | Concurrent and later duplicates share the first pending promise or completed result and never redispatch |
 | Process restart | A fresh canonical read that exactly proves the requested state returns success without dispatch |
 | Canonical source gate | Unavailable, authentication failure, timeout, failure, malformed, stale, duplicate, or changed state fails closed before dispatch |
-| Retry | Never automatic; reconciliation is read-only |
+| Retry | One bounded retry is allowed only for a read timeout or transient transport unavailability; mutation never retries and reconciliation is read-only |
 | Success | Requires exact fresh canonical Hermes readback |
 | Ambiguous outcome | A timeout or transport loss after dispatch, or failed exact readback, is `outcome_unknown` |
 | Reversibility | Enable and disable are paired. Install and removal require separate confirmations. Update is audit-only |

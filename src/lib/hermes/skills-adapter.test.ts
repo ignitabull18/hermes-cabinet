@@ -6,9 +6,11 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   FixedHermesSkillsCli,
+  HermesSkillsAdapterError,
   HermesSkillsAgentAdapter,
   type HermesCliAuthority,
   type HermesSkillsCli,
+  type HermesSkillsReadPolicies,
 } from "./skills-adapter";
 import type { HermesReadOnlyServerConfig } from "./server-config";
 
@@ -47,6 +49,21 @@ function contractFetch(handler: (url: string, init?: RequestInit) => Response | 
   };
 }
 
+const fastPolicies: HermesSkillsReadPolicies = {
+  canonicalInstalled: { perAttemptTimeoutMs: 20, totalDeadlineMs: 45, maxAttempts: 2 },
+  agentContract: { perAttemptTimeoutMs: 20, totalDeadlineMs: 45, maxAttempts: 2 },
+  exactCandidate: { perAttemptTimeoutMs: 20, totalDeadlineMs: 45, maxAttempts: 2 },
+  catalog: { perAttemptTimeoutMs: 20, totalDeadlineMs: 25, maxAttempts: 1 },
+};
+
+function waitForAbort(init?: RequestInit): Promise<Response> {
+  return new Promise((_, reject) => {
+    const signal = init?.signal;
+    if (signal?.aborted) return reject(new DOMException("timed out", "AbortError"));
+    signal?.addEventListener("abort", () => reject(new DOMException("timed out", "AbortError")), { once: true });
+  });
+}
+
 test("normalizes exact hub identities and drops malicious metadata, paths, URLs, and duplicates", async () => {
   const fetchImpl = contractFetch(async (url) => {
     if (url.includes("/api/skills?")) return response([
@@ -66,7 +83,7 @@ test("normalizes exact hub identities and drops malicious metadata, paths, URLs,
     throw new Error(`Unexpected URL ${url}`);
   });
   const adapter = new HermesSkillsAgentAdapter(config, fetchImpl, cli());
-  const snapshot = await adapter.read();
+  const snapshot = await adapter.discoverCatalog();
   assert.equal(snapshot.installed.length, 1);
   assert.equal(snapshot.installed[0].identity, "operator-os:hub:official/productivity/safe-skill");
   assert.equal(snapshot.installed[0].hubIdentifier, "official/productivity/safe-skill");
@@ -76,21 +93,21 @@ test("normalizes exact hub identities and drops malicious metadata, paths, URLs,
   for (const forbidden of ["SECRET INSTRUCTIONS", "super-secret", "/Users/secret", "API_KEY", "unbounded description", "https://"]) assert.doesNotMatch(serialized, new RegExp(forbidden.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
-test("distinguishes connected-empty, authentication, timeout, malformed, and contract-mismatch sources", async () => {
+test("canonical installed-state reads distinguish empty, authentication, timeout, and malformed responses", async () => {
   const empty = contractFetch((url) => url.includes("/api/skills?") ? response([]) : response({ installed: {}, featured: [] }));
-  assert.equal((await new HermesSkillsAgentAdapter(config, empty, cli({ configured: () => false })).read()).sourceState, "connected_empty");
+  assert.equal((await new HermesSkillsAgentAdapter(config, empty, cli({ configured: () => false })).readCanonicalInstalledState("operator-os")).sourceState, "connected_empty");
 
   const authAdapter = new HermesSkillsAgentAdapter(config, async () => response({ detail: "Unauthorized" }, 401), cli());
-  assert.equal((await authAdapter.read()).sourceState, "authentication_failure");
+  await assert.rejects(() => authAdapter.readCanonicalInstalledState("operator-os"), (error: unknown) => error instanceof HermesSkillsAdapterError && error.kind === "authentication" && error.readEvidence?.attemptCount === 1);
 
   const timeoutAdapter = new HermesSkillsAgentAdapter(config, async () => { throw new DOMException("timed out", "AbortError"); }, cli());
-  assert.equal((await timeoutAdapter.read()).sourceState, "timeout");
+  await assert.rejects(() => timeoutAdapter.readCanonicalInstalledState("operator-os"), (error: unknown) => error instanceof HermesSkillsAdapterError && error.kind === "timeout" && error.readEvidence?.attemptCount === 2);
 
   const malformed = contractFetch((url) => url.includes("/api/skills?") ? response({ not: "an array" }) : response({ installed: {}, featured: [] }));
-  assert.equal((await new HermesSkillsAgentAdapter(config, malformed, cli()).read()).sourceState, "malformed");
+  await assert.rejects(() => new HermesSkillsAgentAdapter(config, malformed, cli()).readCanonicalInstalledState("operator-os"), (error: unknown) => error instanceof HermesSkillsAdapterError && error.kind === "invalid_response" && error.readEvidence?.attemptCount === 1);
 
   const mismatched = async (input: RequestInfo | URL) => String(input).endsWith("/openapi.json") ? response({ info: { version: "0.20.0" } }) : response([]);
-  assert.equal((await new HermesSkillsAgentAdapter(config, mismatched, cli()).read()).sourceState, "malformed");
+  await assert.rejects(() => new HermesSkillsAgentAdapter(config, mismatched, cli()).inspectExecutionAuthority("disable", "operator-os"), /audited 0\.19\.0 contract/i);
 });
 
 test("without an explicit CLI path only API-backed enable and disable are operational", async () => {
@@ -98,7 +115,7 @@ test("without an explicit CLI path only API-backed enable and disable are operat
     ? response([{ name: "safe-skill", enabled: true, provenance: "hub", source: "official" }])
     : response({ installed: { "official/productivity/safe-skill": { name: "safe-skill" } }, featured: [{ name: "installable", identifier: "official/productivity/installable", source: "official" }] }));
   const adapter = new HermesSkillsAgentAdapter(config, fetchImpl, cli({ configured: () => false }));
-  const snapshot = await adapter.read();
+  const snapshot = await adapter.discoverCatalog();
   assert.equal(snapshot.operations.install.supported, false);
   assert.equal(snapshot.operations.remove.supported, false);
   assert.equal(snapshot.operations.update.supported, false);
@@ -107,30 +124,146 @@ test("without an explicit CLI path only API-backed enable and disable are operat
   assert.deepEqual(snapshot.installed[0].supportedActions, ["disable"]);
 });
 
+test("catalog discovery is isolated from canonical state and a catalog timeout does not erase installed state", async () => {
+  const paths: string[] = [];
+  const fetchImpl = contractFetch((url, init) => {
+    paths.push(new URL(url).pathname);
+    if (url.includes("/api/skills?")) return response([{ name: "safe-skill", enabled: true, provenance: "bundled" }]);
+    if (url.includes("/api/skills/hub/sources")) return waitForAbort(init);
+    throw new Error(`Unexpected URL ${url}`);
+  });
+  const adapter = new HermesSkillsAgentAdapter(config, fetchImpl, cli(), fastPolicies);
+  const canonical = await adapter.readCanonicalInstalledState("operator-os");
+  assert.equal(canonical.installed.length, 1);
+  assert.deepEqual(paths, ["/api/skills"]);
+  paths.length = 0;
+  const discovery = await adapter.discoverCatalog();
+  assert.equal(discovery.installed.length, 1);
+  assert.equal(discovery.available.length, 0);
+  assert.match(discovery.summary, /catalog discovery is unavailable/i);
+  assert.deepEqual(paths, ["/api/skills", "/api/skills/hub/sources"]);
+});
+
+test("canonical timeout retries once, while authentication and malformed contracts never retry", async () => {
+  let transientCalls = 0;
+  const transient = new HermesSkillsAgentAdapter(config, async () => {
+    transientCalls += 1;
+    if (transientCalls === 1) throw new DOMException("timed out", "AbortError");
+    return response([]);
+  }, cli(), fastPolicies);
+  const recovered = await transient.readCanonicalInstalledState("operator-os");
+  assert.equal(transientCalls, 2);
+  assert.deepEqual(recovered.evidence, { attemptCount: 2, finalClassification: "success", totalElapsedMs: recovered.evidence.totalElapsedMs });
+
+  let unavailableCalls = 0;
+  const unavailable = new HermesSkillsAgentAdapter(config, async () => {
+    unavailableCalls += 1;
+    return unavailableCalls === 1 ? response({}, 503) : response([]);
+  }, cli(), fastPolicies);
+  assert.equal((await unavailable.readCanonicalInstalledState("operator-os")).evidence.attemptCount, 2);
+  assert.equal(unavailableCalls, 2);
+
+  let authCalls = 0;
+  const auth = new HermesSkillsAgentAdapter(config, async () => { authCalls += 1; return response({}, 401); }, cli(), fastPolicies);
+  await assert.rejects(() => auth.readCanonicalInstalledState("operator-os"), (error: unknown) => error instanceof HermesSkillsAdapterError && error.readEvidence?.attemptCount === 1);
+  assert.equal(authCalls, 1);
+
+  let malformedCalls = 0;
+  const malformed = new HermesSkillsAgentAdapter(config, async () => { malformedCalls += 1; return response({ wrong: true }); }, cli(), fastPolicies);
+  await assert.rejects(() => malformed.readCanonicalInstalledState("operator-os"), (error: unknown) => error instanceof HermesSkillsAdapterError && error.readEvidence?.attemptCount === 1);
+  assert.equal(malformedCalls, 1);
+
+  let mismatchCalls = 0;
+  const mismatch = new HermesSkillsAgentAdapter(config, async () => {
+    mismatchCalls += 1;
+    return response({ info: { version: "0.20.0" } });
+  }, cli(), fastPolicies);
+  await assert.rejects(
+    () => mismatch.inspectExecutionAuthority("disable", "operator-os"),
+    (error: unknown) => error instanceof HermesSkillsAdapterError
+      && error.kind === "contract_mismatch"
+      && error.readEvidence?.attemptCount === 1
+      && error.readEvidence.finalClassification === "contract_mismatch",
+  );
+  assert.equal(mismatchCalls, 1);
+});
+
+test("two canonical timeouts obey the total deadline and retain safe source-class evidence", async () => {
+  let calls = 0;
+  const adapter = new HermesSkillsAgentAdapter(config, async (_input, init) => { calls += 1; return waitForAbort(init); }, cli(), fastPolicies);
+  const startedAt = Date.now();
+  await assert.rejects(
+    () => adapter.readCanonicalInstalledState("operator-os"),
+    (error: unknown) => error instanceof HermesSkillsAdapterError
+      && error.kind === "timeout"
+      && error.message === "Hermes Agent Skills installed-state read timed out."
+      && error.readEvidence?.attemptCount === 2
+      && error.readEvidence.finalClassification === "timeout",
+  );
+  assert.equal(calls, 2);
+  assert.ok(Date.now() - startedAt < 150, "the total read deadline must remain bounded");
+});
+
+test("exact candidate inspection binds preview and scan to one full identifier without broad search", async () => {
+  const urls: string[] = [];
+  const identifier = "official/communication/one-three-one-rule";
+  const fetchImpl = contractFetch((url) => {
+    urls.push(url);
+    if (url.includes("/api/skills/hub/preview")) return response({ identifier, name: "one-three-one-rule", source: "official", trust_level: "official", skill_md: "---\nname: one-three-one-rule\n---\nprivate content" });
+    if (url.includes("/api/skills/hub/scan")) return response({ identifier, name: "one-three-one-rule", source: "official", verdict: "safe", policy: "allow", findings: [] });
+    throw new Error(`Unexpected URL ${url}`);
+  });
+  const adapter = new HermesSkillsAgentAdapter(config, fetchImpl, cli(), fastPolicies);
+  const candidate = await adapter.inspectExactCandidate(identifier, "operator-os");
+  assert.equal(candidate.identifier, identifier);
+  assert.equal(candidate.trust, "official");
+  assert.equal(candidate.scanVerdict, "safe");
+  assert.equal(candidate.findingCount, 0);
+  assert.equal(candidate.prerequisiteClassification, "none_declared");
+  assert.equal(urls.length, 2);
+  for (const url of urls) {
+    assert.match(url, /identifier=official%2Fcommunication%2Fone-three-one-rule/);
+    assert.match(url, /profile=operator-os/);
+    assert.doesNotMatch(url, /\/search\?/);
+  }
+  assert.doesNotMatch(JSON.stringify(candidate), /private content/);
+});
+
 test("uses only fixed Hermes argument arrays for install and exact removal; Update remains audit-only", async () => {
   const calls: Array<{ args: readonly string[]; input?: string; expectedAuthority?: string }> = [];
+  let cliInspections = 0;
+  let contractChecks = 0;
   const fakeCli = cli({
+    inspect: async () => { cliInspections += 1; return authority; },
     run: async (args, options) => {
       calls.push({ args, input: options?.input, expectedAuthority: options?.expectedAuthority });
       return { exitCode: 0, timedOut: false, forcedTermination: false, output: "token=must-not-egress" };
     },
   });
-  const adapter = new HermesSkillsAgentAdapter(config, contractFetch(async () => response({ ok: true })), fakeCli);
-  const installAuthority = await adapter.authorize("install");
+  const adapter = new HermesSkillsAgentAdapter(config, async (input) => {
+    if (String(input).endsWith("/openapi.json")) {
+      contractChecks += 1;
+      return response({ info: { version: "0.19.0" } });
+    }
+    return response({ ok: true });
+  }, fakeCli);
+  const installAuthority = await adapter.inspectExecutionAuthority("install", "operator-os");
   await adapter.execute({ action: "install", targetIdentity: "official/productivity/installable", targetName: "installable", profile: "operator-os", reason: "test reason" }, installAuthority);
-  const removeAuthority = await adapter.authorize("remove");
+  const removeAuthority = await adapter.inspectExecutionAuthority("remove", "operator-os");
   await adapter.execute({ action: "remove", targetIdentity: "operator-os:hub:official/productivity/safe-skill", targetName: "safe-skill", profile: "operator-os", reason: "test reason" }, removeAuthority);
-  await assert.rejects(() => adapter.authorize("update"), /audit-only/i);
+  await assert.rejects(() => adapter.inspectExecutionAuthority("update", "operator-os"), /audit-only/i);
   assert.deepEqual(calls, [
     { args: ["-p", "operator-os", "skills", "install", "official/productivity/installable", "--yes"], input: undefined, expectedAuthority: authority.opaqueIdentity },
     { args: ["-p", "operator-os", "skills", "uninstall", "safe-skill"], input: "yes\n", expectedAuthority: authority.opaqueIdentity },
   ]);
+  assert.equal(contractChecks, 2, "each prepared authority check reads the Agent contract once");
+  assert.equal(cliInspections, 2, "each prepared authority check inspects the CLI once");
 });
 
 test("enable and disable use the exact authenticated Agent API toggle contract", async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   const adapter = new HermesSkillsAgentAdapter(config, contractFetch(async (url, init) => { requests.push({ url, init }); return response({ ok: true }); }), cli({ run: async () => { throw new Error("CLI must not run"); } }));
-  const executionAuthority = await adapter.authorize("disable");
+  const executionAuthority = await adapter.inspectExecutionAuthority("disable", "operator-os");
   await adapter.execute({ action: "disable", targetIdentity: "operator-os:hub:official/productivity/safe-skill", targetName: "safe-skill", profile: "operator-os", reason: "test reason" }, executionAuthority);
   const toggle = requests.find((request) => request.url.includes("/api/skills/toggle"));
   assert.equal(toggle?.url, "http://127.0.0.1:61921/api/skills/toggle?profile=operator-os");
@@ -140,7 +273,7 @@ test("enable and disable use the exact authenticated Agent API toggle contract",
 
 test("CLI output and process failures never cross the adapter boundary", async () => {
   const adapter = new HermesSkillsAgentAdapter(config, contractFetch(async () => response({})), cli({ run: async () => ({ exitCode: 9, timedOut: false, forcedTermination: false, output: "Authorization: Bearer secret-value /Users/private/.env" }) }));
-  const executionAuthority = await adapter.authorize("remove");
+  const executionAuthority = await adapter.inspectExecutionAuthority("remove", "operator-os");
   await assert.rejects(
     () => adapter.execute({ action: "remove", targetIdentity: "operator-os:hub:official/productivity/safe-skill", targetName: "safe-skill", profile: "operator-os", reason: "test reason" }, executionAuthority),
     (error: unknown) => error instanceof Error && !error.message.includes("secret-value") && !error.message.includes("/Users/private"),
