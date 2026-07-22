@@ -51,7 +51,7 @@ test("authenticated same-origin prepare and commit bind to the server actor", as
   const adapter = new FakeHermesSkillsAdapter();
   const service = new HermesSkillsManagementService(adapter);
   const deps = { requireAuth: allowAuth, sameOrigin: allowOrigin, runtimeMode: () => "hermes" as const, actorIdentity: async () => "actor-one", service };
-  const preparedResponse = await handleHermesSkillsPost(request({ stage: "prepare", action: "disable", targetIdentity: "operator-os:bundled:enabled-skill", reason: "Required for route acceptance." }), deps);
+  const preparedResponse = await handleHermesSkillsPost(request({ stage: "prepare", action: "install", targetIdentity: "official/productivity/installable-skill", reason: "Required for route acceptance." }), deps);
   assert.equal(preparedResponse.status, 200);
   const prepared = await preparedResponse.json();
   const preview = prepared.preview;
@@ -69,7 +69,7 @@ test("acceptance fixture route uses only the fake adapter", async () => {
   const getResponse = await handleHermesSkillsGet(get, deps);
   const snapshot = await getResponse.json();
   assert.equal(snapshot.fixtureLabel, "Acceptance fixture — no live Hermes mutation performed");
-  const preparedResponse = await handleHermesSkillsPost(request({ fixture: true, stage: "prepare", action: "enable", targetIdentity: "operator-os:bundled:disabled-skill", reason: "Fixture mutation acceptance only." }), deps);
+  const preparedResponse = await handleHermesSkillsPost(request({ fixture: true, stage: "prepare", action: "install", targetIdentity: "official/productivity/installable-skill", reason: "Fixture mutation acceptance only." }), deps);
   const preview = (await preparedResponse.json()).preview;
   const committedResponse = await handleHermesSkillsPost(request({ fixture: true, stage: "commit", previewId: preview.previewId, targetIdentity: preview.targetIdentity, confirmationPhrase: preview.confirmationPhrase }), deps);
   assert.equal((await committedResponse.json()).result.status, "verified_success");

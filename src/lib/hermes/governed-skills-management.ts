@@ -395,7 +395,7 @@ export class HermesSkillsManagementService {
     try {
       snapshot = await this.adapter.readCanonicalInstalledState(stored.public.profile);
     } catch {
-      return this.result(stored, "failed_before_dispatch", "precondition_check", "Hermes Agent Skills installed-state read did not complete. No mutation was dispatched.", false, false, null);
+      return this.result(stored, "failed_before_dispatch", "precondition_check", "Canonical Hermes CLI installed-state read did not complete. No mutation was dispatched.", false, false, null);
     }
     const assessment = this.assessCanonical(snapshot, stored.public.profile);
     if (!assessment.ok) return this.result(stored, assessment.status, "precondition_check", assessment.summary, false, false, null);
@@ -439,15 +439,12 @@ export class HermesSkillsManagementService {
       const matches = snapshot.installed.filter((skill) => skill.profile === stored.public.profile && skill.name === stored.public.targetName);
       return matches.length === 1
         && matches[0].provenance === "hub"
-        && (!matches[0].hubIdentifier || matches[0].hubIdentifier === stored.candidate?.identifier)
+        && matches[0].hubIdentifier === stored.candidate?.identifier
+        && matches[0].source === stored.candidate?.source
         && !snapshot.duplicateNames.includes(stored.public.targetName);
     }
     if (stored.public.action === "remove") {
-      return !snapshot.installed.some((skill) =>
-        skill.profile === stored.public.profile
-        && skill.name === stored.public.targetName
-        && skill.provenance === "hub"
-      );
+      return !snapshot.installed.some((skill) => skill.profile === stored.public.profile && skill.name === stored.public.targetName);
     }
     if (stored.public.action === "update") return false;
     const installed = canonicalTarget(snapshot, stored.public.currentState.identity, stored.candidate);

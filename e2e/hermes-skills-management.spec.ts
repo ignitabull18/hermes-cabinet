@@ -36,16 +36,16 @@ async function prepare(page: Page) {
       requestIdentity: "hermes-request-11111111111111111111111111111111",
       action: body.action,
       targetIdentity: body.targetIdentity,
-      targetName: "enabled-skill",
-      currentState: { identity: "operator-os:bundled:enabled-skill", name: "enabled-skill", installed: true, enabled: true, version: null, source: "bundled", provenance: "bundled", hubIdentifier: null, profile: "operator-os", updateAvailable: null },
-      targetState: "Installed and disabled in Hermes",
+      targetName: "installable-skill",
+      currentState: { identity: "official/productivity/installable-skill", name: "installable-skill", installed: false, enabled: null, version: null, source: "official", provenance: "hub", hubIdentifier: "official/productivity/installable-skill", profile: "operator-os", updateAvailable: null },
+      targetState: "Installed and verified in Hermes",
       profile: "operator-os",
-      expectedConsequence: "Hermes will stop loading enabled-skill for new work in the selected profile.",
-      reversibility: "Reversible by a separately confirmed enable action.",
-      sourceEvidence: "Hermes Agent 0.19.0 authenticated API",
+      expectedConsequence: "Hermes will scan and install installable-skill for the selected profile.",
+      reversibility: "Reversible by a separately confirmed removal while the exact hub identity remains available.",
+      sourceEvidence: "Canonical Hermes CLI installed-state JSON",
       evidenceObservedAt: "2026-07-21T20:00:00.000Z",
       expiresAt: "2026-07-21T20:02:00.000Z",
-      confirmationPhrase: "DISABLE SKILL enabled-skill IN operator-os",
+      confirmationPhrase: "INSTALL SKILL installable-skill IN operator-os",
       reason: body.reason,
       phase: "prepared",
     } } });
@@ -53,9 +53,9 @@ async function prepare(page: Page) {
       commits += 1;
       return route.fulfill({ json: { ok: true, result: {
         requestIdentity: "hermes-request-11111111111111111111111111111111",
-        action: "disable",
-        targetIdentity: "operator-os:bundled:enabled-skill",
-        targetName: "enabled-skill",
+        action: "install",
+        targetIdentity: "official/productivity/installable-skill",
+        targetName: "installable-skill",
         profile: "operator-os",
         status: "verified_success",
         phase: "verified",
@@ -94,13 +94,14 @@ test("Operator is action-oriented and completes preview, typed confirmation, and
   await page.getByRole("button", { name: "Skills", exact: true }).click();
   await expect(page.getByTestId("hermes-skills-fixture-label")).toContainText("Acceptance fixture — no live Hermes mutation performed");
   await expect(page.getByTestId("hermes-skills-fixture-label")).toContainText("Fixture Agent 0.19.0");
-  await page.getByTestId("hermes-skill-enabled-skill").getByRole("button", { name: "Disable" }).click();
+  await page.getByRole("tab", { name: "Available" }).click();
+  await page.getByTestId("hermes-skill-installable-skill").getByRole("button", { name: "Install" }).click();
   const dialog = page.getByTestId("hermes-skill-confirmation-dialog");
-  await dialog.getByLabel("Reason").fill("Disable during the governed acceptance fixture.");
+  await dialog.getByLabel("Reason").fill("Install through the governed native CLI acceptance fixture.");
   await dialog.getByRole("button", { name: "Prepare preview" }).click();
-  await expect(dialog.getByTestId("hermes-skill-preview")).toContainText("Hermes Agent 0.19.0 authenticated API");
+  await expect(dialog.getByTestId("hermes-skill-preview")).toContainText("Canonical Hermes CLI installed-state JSON");
   await expect(dialog.getByRole("button", { name: "Commit through Hermes" })).toBeDisabled();
-  await dialog.getByTestId("hermes-skill-confirmation-input").fill("DISABLE SKILL enabled-skill IN operator-os");
+  await dialog.getByTestId("hermes-skill-confirmation-input").fill("INSTALL SKILL installable-skill IN operator-os");
   await dialog.getByRole("button", { name: "Commit through Hermes" }).click();
   await expect(dialog.getByTestId("hermes-skill-result-verified_success")).toContainText("verified success");
   expect(commits()).toBe(1);

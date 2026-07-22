@@ -39,21 +39,21 @@ export function buildHermesSkillsAcceptanceSnapshot(): HermesSkillsSnapshot {
     observedAt: "2026-07-21T20:00:00.000Z",
     sourceState: "success",
     summary: "Fixture covers governed Hermes Skills management without a live mutation.",
-    interface: "Hermes Agent 0.19.0 authenticated API",
+    interface: "Hermes Agent 0.19.0 authenticated API + canonical Hermes CLI JSON",
     operations: {
       install: { supported: true, interface: "fixture Hermes adapter", note: "No live dispatch." },
-      enable: { supported: true, interface: "fixture Hermes adapter", note: "No live dispatch." },
-      disable: { supported: true, interface: "fixture Hermes adapter", note: "No live dispatch." },
+      enable: { supported: false, interface: "Unsupported", note: "No fixed native noninteractive mutation." },
+      disable: { supported: false, interface: "Unsupported", note: "No fixed native noninteractive mutation." },
       update: { supported: false, interface: "fixture audit only", note: "Exact target-specific update readback is unavailable." },
       remove: { supported: true, interface: "fixture Hermes adapter", note: "No live dispatch." },
     },
     installed: [
-      installed("enabled-skill", true, ["disable"]),
-      installed("disabled-skill", false, ["enable"]),
-      installed("update-ready", true, ["disable", "remove"], true, "official/productivity/update-ready", "official"),
-      installed("removable-skill", true, ["disable", "remove"], false, "official/productivity/removable-skill", "official"),
-      installed("unsupported-bundled", true, ["disable"]),
-      installed("malicious-metadata-redacted", true, ["disable"]),
+      installed("enabled-skill", true, []),
+      installed("disabled-skill", false, []),
+      installed("update-ready", true, ["remove"], true, "official/productivity/update-ready", "official"),
+      installed("removable-skill", true, ["remove"], false, "official/productivity/removable-skill", "official"),
+      installed("unsupported-bundled", true, []),
+      installed("malicious-metadata-redacted", true, []),
     ],
     available: [{
       identity: "official/productivity/installable-skill",
@@ -127,7 +127,7 @@ export class FakeHermesSkillsAdapter implements HermesSkillsAdapter {
       observedAt: snapshot.observedAt,
       sourceState: snapshot.sourceState,
       summary: snapshot.summary,
-      interface: "Hermes Agent Skills installed-state read",
+      interface: "Canonical Hermes CLI installed-state JSON",
       installed: snapshot.installed,
       duplicateIdentities: snapshot.duplicateIdentities,
       duplicateNames: [...names.entries()].filter(([, count]) => count > 1).map(([name]) => name),
@@ -151,6 +151,7 @@ export class FakeHermesSkillsAdapter implements HermesSkillsAdapter {
       installPolicy: "allow",
       findingCount: 0,
       prerequisiteClassification: "none_declared",
+      prerequisiteClasses: [],
       fingerprint: `fixture-candidate-${identifier}`,
       observedAt: new Date().toISOString(),
       evidence: {
@@ -163,13 +164,12 @@ export class FakeHermesSkillsAdapter implements HermesSkillsAdapter {
   async inspectExecutionAuthority(action: HermesSkillAction, profile: string): Promise<HermesSkillExecutionAuthority> {
     this.authorityCalls += 1;
     if (profile !== this.configuredProfile()) throw new Error("Fixture profile mismatch");
-    if (action === "update") throw new Error("Update remains audit-only");
+    if (action !== "install" && action !== "remove") throw new Error("Only install and removal are operational");
     return {
       action,
       profile,
       opaqueIdentity: `fixture-authority-${action}`,
-      agentContractIdentity: `fixture-contract-${action}`,
-      cliAuthorityIdentity: action === "install" || action === "remove" ? "fixture-cli" : null,
+      cliAuthorityIdentity: "fixture-cli",
       inspectedAt: new Date().toISOString(),
     };
   }
@@ -190,21 +190,13 @@ export class FakeHermesSkillsAdapter implements HermesSkillsAdapter {
       const catalog = this.snapshotValue.available.find((skill) => skill.identity === operation.targetIdentity);
       this.snapshotValue.available = this.snapshotValue.available.filter((skill) => skill.identity !== operation.targetIdentity);
       const installedIdentifier = this.installAsDifferentHubIdentity ? `clawhub/${operation.targetName}` : operation.targetIdentity;
-      this.snapshotValue.installed.push(installed(operation.targetName, true, ["disable", "remove"], false, installedIdentifier, this.installAsDifferentHubIdentity ? "clawhub" : catalog?.source ?? null));
-      if (this.installWithSameNameBundled) this.snapshotValue.installed.push(installed(operation.targetName, true, ["disable"]));
+      this.snapshotValue.installed.push(installed(operation.targetName, true, ["remove"], false, installedIdentifier, this.installAsDifferentHubIdentity ? "clawhub" : catalog?.source ?? null));
+      if (this.installWithSameNameBundled) this.snapshotValue.installed.push(installed(operation.targetName, true, []));
     } else if (operation.action === "remove") {
       this.snapshotValue.installed = this.snapshotValue.installed.filter((skill) => skill.identity !== operation.targetIdentity);
-      if (this.leaveSameNameBundledOnRemove) this.snapshotValue.installed.push(installed(operation.targetName, true, ["disable"]));
+      if (this.leaveSameNameBundledOnRemove) this.snapshotValue.installed.push(installed(operation.targetName, true, []));
     } else {
-      this.snapshotValue.installed = this.snapshotValue.installed.map((skill) => skill.name === operation.targetName ? {
-        ...skill,
-        enabled: operation.action === "enable" ? true : operation.action === "disable" ? false : skill.enabled,
-        supportedActions: operation.action === "enable"
-          ? ["disable", ...(skill.provenance === "hub" ? ["remove" as const] : [])]
-          : operation.action === "disable"
-            ? ["enable", ...(skill.provenance === "hub" ? ["remove" as const] : [])]
-            : skill.supportedActions,
-      } : skill);
+      throw new Error("Fixture action is unsupported");
     }
     this.snapshotValue.observedAt = new Date().toISOString();
     return { responseReceived: true };

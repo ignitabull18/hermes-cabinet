@@ -33,7 +33,7 @@ export type HermesSkillsSnapshot = {
   observedAt: string;
   sourceState: HermesSkillsSourceState;
   summary: string;
-  interface: "Hermes Agent 0.19.0 authenticated API";
+  interface: "Hermes Agent 0.19.0 authenticated API + canonical Hermes CLI JSON";
   operations: Record<HermesSkillAction, { supported: boolean; interface: string; note: string }>;
   installed: HermesManagedSkill[];
   available: HermesManagedSkill[];
@@ -51,7 +51,7 @@ export type HermesCanonicalSkillsState = {
   observedAt: string;
   sourceState: HermesSkillsSourceState;
   summary: string;
-  interface: "Hermes Agent Skills installed-state read";
+  interface: "Canonical Hermes CLI installed-state JSON";
   installed: HermesManagedSkill[];
   duplicateIdentities: string[];
   duplicateNames: string[];
@@ -67,6 +67,7 @@ export type HermesExactSkillCandidate = {
   installPolicy: "allow" | "ask" | "block";
   findingCount: number;
   prerequisiteClassification: "none_declared" | "declared";
+  prerequisiteClasses: string[];
   fingerprint: string;
   observedAt: string;
   evidence: {
@@ -79,7 +80,6 @@ export type HermesSkillExecutionAuthority = {
   action: HermesSkillAction;
   profile: string;
   opaqueIdentity: string;
-  agentContractIdentity: string;
   cliAuthorityIdentity: string | null;
   inspectedAt: string;
 };

@@ -1,174 +1,114 @@
 # Hermes Skills management contract
 
-Audited 2026-07-21 against the installed Hermes Agent 0.19.0 executable and
-authenticated Agent API contract. Hermes remains the canonical skill registry
-and executor. Cabinet keeps only bounded, in-process previews and receipts and
-requires canonical Hermes readback before claiming success.
+Audited 2026-07-21 against Hermes Agent 0.19.0. Hermes remains the canonical
+registry and executor. Cabinet holds only bounded in-process previews and
+receipts and never claims success without fresh canonical CLI JSON readback.
 
-## Native interfaces used
+## Durable interfaces
 
-| Operation | Exact Hermes 0.19.0 interface | Phase 5A status |
+| Purpose | Exact interface | Authority |
 | --- | --- | --- |
-| Contract identity | `GET /openapi.json`, requiring `info.version == 0.19.0` | Required before prepare and commit |
-| List installed | `GET /api/skills?profile=<profile>` | Operational |
-| List hub sources | `GET /api/skills/hub/sources?profile=<profile>` | Operational |
-| Search catalog | `GET /api/skills/hub/search?q=<query>&source=all&limit=50&profile=<profile>` | Operational |
-| Inspect exact candidate | `GET /api/skills/hub/preview?identifier=<identifier>&profile=<profile>` plus exact `GET /api/skills/hub/scan` | Required for an exact hub target; content and findings never egress |
-| Machine identity | `<approved-cli> version --json`, schema `hermes.cli.identity` v1 | Required for CLI-backed operations |
-| Install | `<approved-cli> -p <profile> skills install <identifier> --yes` | Operational only with approved CLI authority |
-| Enable or disable | `PUT /api/skills/toggle?profile=<profile>` with `{name, enabled, profile}` | Operational |
-| Remove | `<approved-cli> -p <profile> skills uninstall <name>` with fixed `yes\n` input | Operational only for an exact installed hub identity and approved CLI authority |
-| Check updates | Hermes CLI `skills check` | Read-only audit surface |
-| Update | No exact structured, target-specific update/readback contract in 0.19.0 | Audit-only, no action exposed |
-| Verify outcome | Fresh narrow installed-state read | Required; command or HTTP success is insufficient |
+| Official catalog | Authenticated `GET /v1/skills?catalog=official` | Discoverability only |
+| Canonical installed state | `<approved-cli> -p <profile> skills list --json` | Canonical |
+| Exact candidate metadata | `<approved-cli> -p <profile> skills inspect <official-identifier> --json` | Candidate authorization |
+| Exact candidate scan | `<approved-cli> -p <profile> skills audit <official-identifier> --json` | Candidate authorization |
+| CLI identity | `<approved-cli> version --json`, `hermes.cli.identity` v1 | Executable authority |
+| Install | `<approved-cli> -p <profile> skills install <identifier> --yes` | Governed mutation |
+| Remove | `<approved-cli> -p <profile> skills uninstall <name>` | Governed mutation |
+| Update | `skills check` only | Audit-only |
+| Enable or disable | Interactive `skills config` only | Unsupported; no Cabinet action |
 
-Catalog discovery is not mutation authority. Prepare and commit inspect a full
-hub identifier through the target-specific preview and scan contracts, reduce
-the response immediately to name, source, trust, scan verdict, finding count,
-prerequisite classification, and an opaque fingerprint, and never return scan
-findings, manifests, skill instructions, repository URLs, or file names. The
-installed API uninstall wrapper passes an unsupported `--yes` option, so
-Cabinet uses the audited CLI contract above instead.
+Desktop Management `/api/skills`, `/api/skills/toggle`, and Desktop Hub
+search, sources, preview, and scan routes are not dependencies. Agent
+`/v1/skills` is never accepted as installed-state proof. Production prepare,
+commit precondition, post-dispatch verification, and reconciliation use only
+the fixed CLI machine contract.
 
-## Read boundaries and deadlines
+The official catalog response is bounded to category, exact identifier, name,
+source, and trust. Candidate JSON is bounded to exact identifier and name,
+official/public/local provenance, trust, prerequisite classes, scan verdict,
+and finding count. Canonical JSON is bounded to profile, exact installed
+identity, Hub identifier where applicable, origin/provenance, source/trust,
+enabled state, exact-match count, and same-name collision count. Cabinet
+rejects extra fields, malformed JSON, ANSI or human table output, schema drift,
+profile drift, count disagreement, and inspect/audit disagreement.
 
-Cabinet exposes five explicit adapter operations: `discoverCatalog`,
-`readCanonicalInstalledState`, `inspectExactCandidate`,
-`inspectExecutionAuthority`, and `execute`. Catalog discovery may use general
-search or featured sources. Prepare, commit preconditions, verification, and
-reconciliation use only the narrow installed-state reader, plus exact candidate
-inspection when the prepared target is hub-backed.
+## Companion revision
 
-Read deadlines are source-specific and independent of the general Hermes
-collector timeout:
+The only approved companion is:
 
-| Source class | Per attempt | Total operation deadline | Attempts |
-| --- | ---: | ---: | ---: |
-| Installed state | 750 ms | 1750 ms | At most 2 |
-| Agent contract | 1500 ms | 3250 ms | At most 2 |
-| Exact hub candidate preview and scan | 6000 ms | 12500 ms shared | At most 2 per read within the shared deadline |
-| Catalog discovery | 5000 ms | 5500 ms | 1 |
+- commit: `97f82f73fc15e534fef6377148c99c22be6b652c`
+- parent/live installed base: `714ed4ec6cbe3e57b7bb6379c5e97f7b801469a5`
+- patch: `docs/evidence/hermes-skills-management/0001-feat-skills-expose-canonical-machine-contracts.patch`
+- patch SHA-256: `87c4bcec83050f1452bb3ee80372d61f9932b0bbb5fbecce8987d04ab675237b`
 
-Only timeout and transient transport unavailability permit one read-only
-retry, with a new abort controller. Authentication rejection, malformed
-response, contract mismatch, duplicate identity, stale state, and changed
-target never retry. Mutation dispatch never retries. Internal evidence records
-attempt count, safe source classification, and total elapsed time without raw
-URLs or credentials. Observation time is captured only after all required
-source reads complete successfully.
+Earlier companion `9172a354f058aa0feaa6ea9c3b7def799e53bada` is a semantic
+reference only and is not trusted. The live-base commit
+`714ed4ec6cbe3e57b7bb6379c5e97f7b801469a5` is the parent, not the approved
+management contract.
 
-## Exact executable authority
+## Secret-source and execution isolation
 
-`CABINET_HERMES_CLI_PATH` has no default and must be an explicit absolute
-server-side path. There is no `PATH` lookup or fallback. For install and remove,
-Cabinet performs all of the following once during prepare and once during the
-commit authority check:
+Cabinet passes
+`HERMES_SKIP_EXTERNAL_SECRET_SOURCES=official-public-skills-v1` only for the
+audited public Skills command shapes. The companion extends that allowlist only
+for `skills list --json`, `skills inspect official/... --json`, and
+`skills audit official/... --json`. Private identifiers and all unrelated
+commands remain rejected.
 
-- resolves symlinks and requires a regular executable file no larger than the
-  bounded executable limit;
-- hashes the executable bytes and binds device, inode, size, nanosecond mtime,
-  resolved path, and machine identity into an opaque authority identity;
-- runs only the resolved executable with `shell: false` and fixed argument
-  arrays;
-- requires `hermes.cli.identity` schema version 1, Hermes Agent 0.19.0,
-  live-base companion source revision `714ed4ec6cbe3e57b7bb6379c5e97f7b801469a5`,
-  a valid self-hashed installation identity, and an installation root and
-  entrypoint that resolve back to the configured executable;
-- rejects a missing, non-executable, unexpected, replaced, or changed target;
-- passes a minimal fixed environment with only production mode, home, a fixed
-  system path, locale, noninteractive, no-color, and terminal settings;
-- bounds combined output, never returns it to the browser, sends `SIGTERM` at
-  the operation deadline, escalates to `SIGKILL` after the grace period, and
-  settles after the child closes and is reaped.
+Exact inspect and audit resolve only the local official optional-skill source;
+they do not initialize a remote catalog. Cabinet enables the skip only when the
+candidate proves official source/trust, public and local fulfillment, safe scan
+with zero findings, and no credential, account, network, environment, or
+command prerequisite. Platform classification alone is non-sensitive.
 
-The machine identity command runs before Hermes profile, dotenv, plugin,
-logging, update-check, network, and external secret-source startup. Immediately
-before mutation dispatch, Cabinet repeats only the static file identity check,
-then invokes the exact executable once for the fixed Skills operation.
+`CABINET_HERMES_CLI_PATH` has no default. Cabinet requires an absolute regular
+executable and binds resolved path, file bytes, device, inode, size,
+nanosecond mtime, and machine identity into an opaque authority. It requires
+Hermes Agent 0.19.0 and exact source revision
+`97f82f73fc15e534fef6377148c99c22be6b652c`. Every subprocess uses
+`shell: false`, a fixed argument array, bounded output and deadlines, and a
+minimal environment without Cabinet/provider credentials. No `PATH` fallback,
+direct Skills file write, human-output parser, or raw CLI output crosses the
+adapter boundary.
 
-The API authority is separately bound to exact Agent API version 0.19.0 and the
-configured profile. Prepare records an opaque action authority; commit
-reauthorizes and rejects any change before dispatch. The fixed CLI runner makes
-one final executable-identity comparison immediately before spawning and does
-not repeat the Agent contract check.
+## Governance and verification
 
-## Public Skills secret-source isolation
-
-The companion Hermes patch accepts the exact server-controlled value
-`HERMES_SKIP_EXTERNAL_SECRET_SOURCES=official-public-skills-v1` only for these
-command shapes: local installed-state `skills list`, local `skills audit`,
-official `skills inspect`, official `skills install`, and an uninstall whose
-canonical hub lock entry proves official provenance. Chat, gateway, model,
-provider, authentication, search, private sources, and every other command are
-rejected when that value is present.
-
-Cabinet sets the value only after the exact candidate is official, has builtin
-or official trust, has safe scan and allow policy with zero findings, and has
-no declared credential, account, network, environment, or external-command
-prerequisite. Ordinary profile configuration, dotenv, managed scope, skill
-scanning, and governed policy still run. Only external secret-source
-application is skipped. Candidates that do not satisfy the proof run with
-normal Hermes secret loading or remain unavailable.
-
-The approved installation target is the live-base companion commit
-`714ed4ec6cbe3e57b7bb6379c5e97f7b801469a5`, whose parent is the installed
-Hermes source revision `d7b36070ef807841699ad32c5b6af547fee3ff64`.
-Commit `9172a354f058aa0feaa6ea9c3b7def799e53bada` is retained only as the
-original semantic reference and is not an approved live installation target.
-
-## Identity and provenance
-
-- Installed hub identity is
-  `<profile>:hub:<exact-source/category/name-identifier>`.
-- Installed bundled or Agent identity is
-  `<profile>:<provenance>:<safe-name>`.
-- Catalog identity is the exact safe Hermes hub identifier.
-- Same-name skills from different hub sources remain different targets.
-- A hub-installed row without exactly one identifier mapping is ambiguous and
-  has no supported actions.
-- Install verification requires the exact hub identifier, profile, provenance,
-  and source. A same-name result from another source does not verify.
-- Removal verification requires the exact hub identifier to be absent. A
-  same-name bundled skill may remain without invalidating exact removal.
-
-## Governed operation behavior
-
-| Property | Phase 5A behavior |
+| Property | Behavior |
 | --- | --- |
-| Preview and request IDs | Independent cryptographically random 128-bit identities; never derived from semantics |
-| Semantic state binding | Separate server-only SHA-256 fingerprint over exact target state, source, provenance, hub identifier, profile, and action |
-| Actor isolation | Preview and receipt lookup are actor-scoped; one actor cannot observe or commit another actor's request |
-| Preview expiry | 120 seconds |
-| Receipt lifecycle | Explicit `pending` then `completed`; pending receipts are never removed by age or count cleanup |
-| Completed cleanup | Retention and count limits apply only to completed receipts and remove the paired preview at the same time |
-| Duplicate commit | Concurrent and later duplicates share the first pending promise or completed result and never redispatch |
-| Process restart | A fresh canonical read that exactly proves the requested state returns success without dispatch |
-| Canonical source gate | Unavailable, authentication failure, timeout, failure, malformed, stale, duplicate, or changed state fails closed before dispatch |
-| Retry | One bounded retry is allowed only for a read timeout or transient transport unavailability; mutation never retries and reconciliation is read-only |
-| Success | Requires exact fresh canonical Hermes readback |
-| Ambiguous outcome | A timeout or transport loss after dispatch, or failed exact readback, is `outcome_unknown` |
-| Reversibility | Enable and disable are paired. Install and removal require separate confirmations. Update is audit-only |
+| IDs | Independent cryptographically random 128-bit preview and request identities |
+| Actor | Preview and receipt lookup is actor-scoped |
+| Binding | Server-only fingerprint covers action, exact target state, profile, source, provenance, and Hub identifier |
+| Confirmation | Exact server-issued phrase, for example `INSTALL SKILL one-three-one-rule IN operator-os` |
+| Dispatch | At most one fixed CLI mutation for a request; no automatic mutation retry |
+| Duplicate commit | Concurrent and later duplicates share the first pending promise or completed result |
+| Precondition | Fresh candidate, executable authority, and canonical state must equal prepared state |
+| Success | Exact profile, Hub identifier, installed name, official provenance, one match, and no same-name collision |
+| Unknown | Timeout, transport loss, or unverified readback becomes `outcome_unknown` |
+| Reconciliation | Read-only canonical CLI JSON; never redispatches |
+| Rollback | Install names governed Remove; Remove requires a separately confirmed Install |
+
+Install verification requires the exact Hub identifier, installed name,
+profile, source, provenance, and exactly one canonical match. A same-name skill
+from another source never verifies. Removal verification requires that no
+same-name canonical entry remains, preventing a source collision from being
+mistaken for rollback success. CLI exit status alone is never success.
+
+Enable and disable are explicitly unsupported because Hermes 0.19.0 exposes no
+fixed durable noninteractive mutation for them. They have no production route
+action, no supported row action, and no Operator button. Update remains
+audit-only.
 
 ## Non-egress boundary
 
-Browser responses contain bounded safe identity, name, installed/enabled state,
-explicit version when present, safe source/provenance, exact safe hub identifier,
-profile, observation time, supported actions, preview facts, and result state.
+Browser responses may contain bounded skill identity, name, installed/enabled
+state, safe source/provenance, exact Hub identifier, profile, observation time,
+supported action, preview facts, and result state. They never contain actor
+identity, fingerprints, credentials, descriptions, skill instructions, prompt
+text, manifests, file names, local paths, URLs, raw metadata, raw API/CLI
+bodies, executable identity/path, or command arguments.
 
-Cabinet does not return actor identity, semantic fingerprints, credentials,
-skill instructions, prompt text, manifests, file names, local paths,
-environment requirements, raw API bodies, raw CLI output, executable identity,
-executable paths, or command arguments.
-
-## Acceptance fixture
-
-The Skills-only fixture is explicitly labeled
-`Acceptance fixture — no live Hermes mutation performed` and
-`Fixture Agent 0.19.0`. It uses the fake adapter while exercising the
-production governance service and route. It covers exact identities, actor
-isolation, random IDs, concurrent duplicate commits, pending-receipt cleanup,
-completed-receipt eviction, stale and malformed canonical states, exact
-install/enable/disable/remove readback, same-name source collisions, failures
-before dispatch, unknown outcomes after dispatch, read-only reconciliation,
-and malicious metadata sanitization. Update is displayed as audit-only and is
-not committed by the fixture.
+The acceptance fixture is labeled `Acceptance fixture — no live Hermes
+mutation performed`. It exercises the production governance service and route
+for Install and Remove only. It cannot expose enable, disable, or update as an
+operational action.

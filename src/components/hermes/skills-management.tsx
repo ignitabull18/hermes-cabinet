@@ -27,13 +27,9 @@ import type {
 type Filter = "installed" | "available";
 type ApiResponse = { ok?: boolean; preview?: HermesSkillsManagementPreview; result?: HermesSkillsManagementResult; error?: string };
 
-const ACTION_LABELS: Record<HermesSkillAction, string> = {
-  install: "Install",
-  enable: "Enable",
-  disable: "Disable",
-  update: "Update",
-  remove: "Remove",
-};
+function actionLabel(action: HermesSkillAction): string {
+  return action === "install" ? "Install" : action === "remove" ? "Remove" : "Unsupported";
+}
 
 function age(observedAt: string): string {
   const elapsed = Date.now() - Date.parse(observedAt);
@@ -66,7 +62,7 @@ function SkillRow({ skill, onAction }: { skill: HermesManagedSkill; onAction: (s
       <div className="flex flex-wrap gap-2 sm:justify-end">
         {skill.supportedActions.map((action) => (
           <Button key={action} size="sm" variant={action === "remove" ? "outline" : "default"} onClick={() => onAction(skill, action)}>
-            {ACTION_LABELS[action]}
+            {actionLabel(action)}
           </Button>
         ))}
         {!skill.supportedActions.length ? <span className="text-xs text-muted-foreground">No managed action in Hermes 0.19.0</span> : null}
@@ -239,7 +235,7 @@ export function HermesSkillsManagement() {
       <Dialog open={Boolean(selected)} onOpenChange={(open) => { if (!open) close(); }}>
         <DialogContent className="sm:max-w-xl" data-testid="hermes-skill-confirmation-dialog">
           <DialogHeader>
-            <DialogTitle>{selected ? `${ACTION_LABELS[selected.action]} ${selected.skill.name}` : "Manage skill"}</DialogTitle>
+            <DialogTitle>{selected ? `${actionLabel(selected.action)} ${selected.skill.name}` : "Manage skill"}</DialogTitle>
             <DialogDescription>Cabinet prepares the exact request. Hermes remains the executor and source of truth.</DialogDescription>
           </DialogHeader>
           {result ? (
@@ -261,7 +257,7 @@ export function HermesSkillsManagement() {
             <div className="space-y-3">
               <dl className="grid gap-2 rounded-lg border border-border bg-muted/20 p-3 text-xs" data-testid="hermes-skill-preview">
                 {[
-                  ["Action", ACTION_LABELS[preview.action]],
+                  ["Action", actionLabel(preview.action)],
                   ["Target", preview.targetName],
                   ["Current state", preview.currentState.installed ? preview.currentState.enabled === false ? "Installed, disabled" : "Installed, enabled" : "Available, not installed"],
                   ["Target state", preview.targetState],

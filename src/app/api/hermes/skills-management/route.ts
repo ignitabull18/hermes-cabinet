@@ -33,7 +33,7 @@ function text(value: unknown): string {
 }
 
 function isAction(value: unknown): value is HermesSkillAction {
-  return value === "install" || value === "enable" || value === "disable" || value === "update" || value === "remove";
+  return value === "install" || value === "remove";
 }
 
 function fixtureAllowed(): boolean {

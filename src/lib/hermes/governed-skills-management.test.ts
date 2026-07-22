@@ -1,291 +1,207 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { HermesSkillsManagementService } from "./governed-skills-management";
+import { HermesSkillsManagementError, HermesSkillsManagementService } from "./governed-skills-management";
 import { FakeHermesSkillsAdapter } from "./skills-management-fixture";
-import type { HermesSkillAction } from "./skills-management-types";
+import type { HermesSkillAction, HermesSkillsManagementPreview } from "./skills-management-types";
 
-const actor = "cabinet-test-actor";
-const actorB = "cabinet-test-actor-b";
-const reason = "Required for the governed acceptance test.";
-const enabledIdentity = "operator-os:bundled:enabled-skill";
-const disabledIdentity = "operator-os:bundled:disabled-skill";
-const removableIdentity = "operator-os:hub:official/productivity/removable-skill";
 const installIdentity = "official/productivity/installable-skill";
+const removeIdentity = "operator-os:hub:official/productivity/removable-skill";
+const reason = "Validate the governed native Hermes Skills path.";
 
-function opaqueSequence() {
-  let value = 0;
-  return () => (++value).toString(16).padStart(32, "0");
+function service(adapter = new FakeHermesSkillsAdapter(), tokens?: string[]) {
+  let index = 0;
+  return {
+    adapter,
+    target: new HermesSkillsManagementService(adapter, () => new Date(), tokens ? { opaqueToken: () => tokens[index++] ?? "f".repeat(32) } : {}),
+  };
 }
 
-function service(adapter = new FakeHermesSkillsAdapter(), now: () => Date = () => new Date(), options: ConstructorParameters<typeof HermesSkillsManagementService>[2] = {}) {
-  return new HermesSkillsManagementService(adapter, now, { opaqueToken: opaqueSequence(), ...options });
+async function prepare(target: HermesSkillsManagementService, action: HermesSkillAction = "install", identity = installIdentity, actorIdentity = "actor-one") {
+  return target.prepare({ action, targetIdentity: identity, reason, actorIdentity });
 }
 
-async function prepare(target: HermesSkillsManagementService, action: HermesSkillAction, targetIdentity: string, actorIdentity = actor, query = "") {
-  return target.prepare({ action, targetIdentity, reason, actorIdentity, query });
-}
-
-async function commit(target: HermesSkillsManagementService, preview: Awaited<ReturnType<typeof prepare>>, actorIdentity = actor) {
+async function commit(target: HermesSkillsManagementService, preview: HermesSkillsManagementPreview, actorIdentity = "actor-one") {
   return target.commit({ previewId: preview.previewId, targetIdentity: preview.targetIdentity, confirmationPhrase: preview.confirmationPhrase, actorIdentity });
 }
 
-test("every prepare receives independent 128-bit preview and request identities", async () => {
-  const adapter = new FakeHermesSkillsAdapter();
-  const target = service(adapter);
-  const first = await prepare(target, "disable", enabledIdentity);
-  const second = await prepare(target, "disable", enabledIdentity);
-  assert.equal(adapter.mutationCalls, 0);
+test("prepare mints independent opaque 128-bit preview and request identities with exact confirmation", async () => {
+  const { target } = service(undefined, ["1".repeat(32), "2".repeat(32), "3".repeat(32), "4".repeat(32)]);
+  const first = await prepare(target);
+  const second = await prepare(target);
   assert.match(first.previewId, /^hermes-preview-[a-f0-9]{32}$/);
   assert.match(first.requestIdentity, /^hermes-request-[a-f0-9]{32}$/);
-  assert.notEqual(first.previewId, first.requestIdentity);
   assert.notEqual(first.previewId, second.previewId);
   assert.notEqual(first.requestIdentity, second.requestIdentity);
-  assert.equal(first.confirmationPhrase, "DISABLE SKILL enabled-skill IN operator-os");
+  assert.equal(first.confirmationPhrase, "INSTALL SKILL installable-skill IN operator-os");
+  assert.equal(first.currentState.hubIdentifier, installIdentity);
+  assert.equal(first.sourceEvidence, "Canonical Hermes CLI installed-state JSON");
 });
 
-test("prepare, commit precondition, and verification use narrow reads without catalog discovery", async () => {
-  const adapter = new FakeHermesSkillsAdapter();
-  const target = service(adapter);
-  await target.snapshot("enabled-skill");
-  assert.equal(adapter.catalogCalls, 1);
-  const preview = await prepare(target, "disable", enabledIdentity, actor, "a query that must not become mutation authority");
+test("prepare and commit bind actor, target, phrase, candidate, authority, and fresh canonical reads", async () => {
+  const { adapter, target } = service();
+  const preview = await prepare(target);
+  assert.equal(adapter.catalogCalls, 0);
+  assert.equal(adapter.candidateCalls, 1);
+  assert.equal(adapter.canonicalCalls, 1);
+  await assert.rejects(() => target.commit({ previewId: preview.previewId, targetIdentity: "official/other/skill", confirmationPhrase: preview.confirmationPhrase, actorIdentity: "actor-one" }), (error: unknown) => error instanceof HermesSkillsManagementError && error.code === "target_mismatch");
+  await assert.rejects(() => target.commit({ previewId: preview.previewId, targetIdentity: preview.targetIdentity, confirmationPhrase: "INSTALL SKILL wrong IN operator-os", actorIdentity: "actor-one" }), (error: unknown) => error instanceof HermesSkillsManagementError && error.code === "not_confirmed");
+  await assert.rejects(() => target.commit({ previewId: preview.previewId, targetIdentity: preview.targetIdentity, confirmationPhrase: preview.confirmationPhrase, actorIdentity: "actor-two" }), (error: unknown) => error instanceof HermesSkillsManagementError && error.code === "preview_expired");
   const result = await commit(target, preview);
   assert.equal(result.status, "verified_success");
-  assert.equal(adapter.catalogCalls, 1, "commit and verification must not rediscover the catalog");
-  assert.equal(adapter.canonicalCalls, 3, "prepare, commit precondition, and verification each use one canonical operation");
-  assert.equal(adapter.authorityCalls, 2, "authority is inspected once at prepare and once at commit");
+  assert.equal(result.mutationAttempted, true);
+  assert.equal(result.retryAttempted, false);
   assert.equal(adapter.mutationCalls, 1);
+  assert.equal(adapter.catalogCalls, 0);
+  assert.equal(adapter.candidateCalls, 2);
+  assert.equal(adapter.canonicalCalls, 3, "precondition and post-dispatch verification each use canonical readback");
 });
 
-test("commit requires exact phrase, actor, and exact target binding", async () => {
-  const adapter = new FakeHermesSkillsAdapter();
-  const target = service(adapter);
-  const preview = await prepare(target, "disable", enabledIdentity);
-  await assert.rejects(() => target.commit({ previewId: preview.previewId, targetIdentity: preview.targetIdentity, confirmationPhrase: "confirmed", actorIdentity: actor }), /exact server-issued/i);
-  await assert.rejects(() => target.commit({ previewId: preview.previewId, targetIdentity: "operator-os:bundled:other", confirmationPhrase: preview.confirmationPhrase, actorIdentity: actor }), /does not match/i);
-  await assert.rejects(() => target.commit({ previewId: preview.previewId, targetIdentity: preview.targetIdentity, confirmationPhrase: preview.confirmationPhrase, actorIdentity: actorB }), /unavailable/i);
-  assert.equal(adapter.mutationCalls, 0);
+test("enable, disable, and update have no operational authority", async () => {
+  const { target } = service();
+  for (const [action, identity] of [["enable", "operator-os:bundled:disabled-skill"], ["disable", "operator-os:bundled:enabled-skill"], ["update", removeIdentity]] as const) {
+    await assert.rejects(() => prepare(target, action, identity), (error: unknown) => error instanceof HermesSkillsManagementError && error.code === "unsupported_action");
+  }
 });
 
-test("actors have isolated previews and completed receipts", async () => {
-  const adapter = new FakeHermesSkillsAdapter();
-  const target = service(adapter);
-  const previewA = await prepare(target, "disable", enabledIdentity, actor);
-  const resultA = await commit(target, previewA, actor);
-  assert.equal(resultA.status, "verified_success");
-  await assert.rejects(() => commit(target, previewA, actorB), /unavailable/i);
-  const previewB = await prepare(target, "enable", enabledIdentity, actorB);
-  assert.notEqual(previewB.requestIdentity, previewA.requestIdentity);
-  assert.equal(adapter.mutationCalls, 1);
-});
-
-test("unsupported action and changed semantic state block before dispatch", async () => {
-  const adapter = new FakeHermesSkillsAdapter();
-  const target = service(adapter);
-  await assert.rejects(() => prepare(target, "remove", "operator-os:bundled:unsupported-bundled"), /does not support/i);
-  await assert.rejects(() => prepare(target, "update", "operator-os:hub:official/productivity/update-ready"), /does not support/i);
-  const preview = await prepare(target, "disable", enabledIdentity);
-  adapter.staleOnNextRead = true;
-  const result = await commit(target, preview);
-  assert.equal(result.status, "blocked_no_action");
-  assert.match(result.summary, /state changed/i);
-  assert.equal(adapter.mutationCalls, 0);
-});
-
-test("canonical unavailable, authentication, timeout, failure, malformed, and stale states fail before dispatch honestly", async () => {
-  for (const state of ["unavailable", "authentication_failure", "timeout", "failure", "malformed"] as const) {
-    const adapter = new FakeHermesSkillsAdapter();
-    const target = service(adapter);
-    const preview = await prepare(target, "disable", enabledIdentity);
+test("canonical unavailable, malformed, stale, and future observations fail before dispatch", async () => {
+  for (const state of ["unavailable", "authentication_failure", "failure", "timeout", "malformed"] as const) {
+    const { adapter, target } = service();
     adapter.sourceStateOverride = state;
-    const result = await commit(target, preview);
-    assert.equal(result.status, "failed_before_dispatch", state);
-    assert.match(result.summary, new RegExp(state));
-    assert.doesNotMatch(result.summary, /target changed/i);
+    await assert.rejects(() => prepare(target), (error: unknown) => error instanceof HermesSkillsManagementError && error.code === "stale_target");
     assert.equal(adapter.mutationCalls, 0);
   }
-
-  const adapter = new FakeHermesSkillsAdapter();
-  let now = Date.now();
-  const target = service(adapter, () => new Date(now), { canonicalFreshnessMs: 1_000 });
-  const preview = await prepare(target, "disable", enabledIdentity);
-  now += 2_000;
-  adapter.observedAtOverride = new Date(now - 2_000).toISOString();
-  const stale = await commit(target, preview);
-  assert.equal(stale.status, "failed_before_dispatch");
-  assert.match(stale.summary, /stale/i);
-  assert.equal(adapter.mutationCalls, 0);
-});
-
-test("concurrent duplicates for one preview dispatch exactly once and reuse the completed receipt", async () => {
-  const adapter = new FakeHermesSkillsAdapter();
-  const target = service(adapter);
-  const preview = await prepare(target, "disable", enabledIdentity);
-  const [first, second] = await Promise.all([commit(target, preview), commit(target, preview)]);
-  assert.deepEqual(first, second);
-  assert.equal(first.status, "verified_success");
-  assert.equal(adapter.mutationCalls, 1);
-  assert.deepEqual(await commit(target, preview), first);
-  assert.equal(adapter.mutationCalls, 1);
-});
-
-test("pending receipts survive count overflow, retention cleanup, and concurrent duplicate cleanup", async () => {
-  const adapter = new FakeHermesSkillsAdapter();
-  let releaseExecution!: () => void;
-  adapter.executionBarrier = new Promise<void>((resolve) => { releaseExecution = resolve; });
-  let executionStarted!: () => void;
-  const started = new Promise<void>((resolve) => { executionStarted = resolve; });
-  adapter.executionStarted = executionStarted;
-  let now = Date.now();
-  const target = service(adapter, () => new Date(now), { maxReceipts: 1, receiptRetentionMs: 10, canonicalFreshnessMs: 1_000_000 });
-  const pendingPreview = await prepare(target, "disable", enabledIdentity);
-  const pendingCommit = commit(target, pendingPreview);
-  await started;
-  now += 50;
-  const duplicateDuringCleanup = commit(target, pendingPreview);
-  const secondPreview = await prepare(target, "enable", disabledIdentity);
-  adapter.executionBarrier = null;
-  const second = await commit(target, secondPreview);
-  assert.equal(second.status, "verified_success");
-  assert.deepEqual(await commit(target, secondPreview), second, "a pending receipt must not consume the completed-receipt count budget");
-  releaseExecution();
-  const [first, duplicate] = await Promise.all([pendingCommit, duplicateDuringCleanup]);
-  assert.deepEqual(first, duplicate);
-  assert.equal(adapter.mutationCalls, 2, "cleanup must not cause a second pending dispatch");
-});
-
-test("completed receipt eviction removes its preview and cannot redispatch", async () => {
-  const adapter = new FakeHermesSkillsAdapter();
-  const target = service(adapter, () => new Date(), { maxReceipts: 1, receiptRetentionMs: 1_000_000 });
-  const firstPreview = await prepare(target, "disable", enabledIdentity);
-  assert.equal((await commit(target, firstPreview)).status, "verified_success");
-  const secondPreview = await prepare(target, "enable", disabledIdentity);
-  assert.equal((await commit(target, secondPreview)).status, "verified_success");
-  const calls = adapter.mutationCalls;
-  await assert.rejects(() => commit(target, firstPreview), /unavailable|prepare it again/i);
-  assert.equal(adapter.mutationCalls, calls);
-});
-
-test("enable, disable, then enable with the same reason executes the new required operation", async () => {
-  const adapter = new FakeHermesSkillsAdapter();
-  const target = service(adapter);
-  const enableOne = await prepare(target, "enable", disabledIdentity);
-  assert.equal((await commit(target, enableOne)).status, "verified_success");
-  const disable = await prepare(target, "disable", disabledIdentity);
-  assert.equal((await commit(target, disable)).status, "verified_success");
-  const enableTwo = await prepare(target, "enable", disabledIdentity);
-  assert.notEqual(enableOne.requestIdentity, enableTwo.requestIdentity);
-  const final = await commit(target, enableTwo);
-  assert.equal(final.status, "verified_success");
-  assert.equal(final.mutationAttempted, true);
-  assert.equal(adapter.mutationCalls, 3);
-});
-
-test("Hermes exact readback is required for install, enable, disable, and removal", async () => {
-  const cases: Array<[HermesSkillAction, string, string]> = [
-    ["install", installIdentity, "installable-skill"],
-    ["enable", disabledIdentity, "disabled-skill"],
-    ["disable", enabledIdentity, "enabled-skill"],
-    ["remove", removableIdentity, "removable-skill"],
-  ];
-  for (const [action, identity, name] of cases) {
-    const adapter = new FakeHermesSkillsAdapter();
-    const target = service(adapter);
-    const result = await commit(target, await prepare(target, action, identity));
-    assert.equal(result.status, "verified_success", action);
-    assert.equal(result.targetName, name);
-    assert.equal(result.mutationAttempted, true);
-    assert.equal(adapter.mutationCalls, 1);
+  for (const observedAt of ["2020-01-01T00:00:00.000Z", "not-a-date", new Date(Date.now() + 60_000).toISOString()]) {
+    const { adapter, target } = service();
+    adapter.observedAtOverride = observedAt;
+    await assert.rejects(() => prepare(target), HermesSkillsManagementError);
+    assert.equal(adapter.mutationCalls, 0);
   }
 });
 
-test("same-name skill from another source cannot verify install, while exact removal tolerates a bundled name collision", async () => {
-  const wrongInstall = new FakeHermesSkillsAdapter();
-  wrongInstall.installAsDifferentHubIdentity = true;
-  const installService = service(wrongInstall);
-  const installed = await commit(installService, await prepare(installService, "install", installIdentity));
-  assert.equal(installed.status, "outcome_unknown");
+test("concurrent and later duplicate commits dispatch exactly once and share the completed receipt", async () => {
+  const { adapter, target } = service();
+  let release!: () => void;
+  adapter.executionBarrier = new Promise<void>((resolve) => { release = resolve; });
+  const preview = await prepare(target);
+  const first = commit(target, preview);
+  const second = commit(target, preview);
+  await new Promise<void>((resolve) => { adapter.executionStarted = resolve; setTimeout(resolve, 10); });
+  release();
+  const [one, two] = await Promise.all([first, second]);
+  const three = await commit(target, preview);
+  assert.deepEqual(one, two);
+  assert.deepEqual(one, three);
+  assert.equal(adapter.mutationCalls, 1);
+});
 
-  const duplicateInstall = new FakeHermesSkillsAdapter();
-  duplicateInstall.installWithSameNameBundled = true;
-  const duplicateService = service(duplicateInstall);
-  const duplicate = await commit(duplicateService, await prepare(duplicateService, "install", installIdentity));
-  assert.equal(duplicate.status, "outcome_unknown");
-  assert.equal(duplicateInstall.mutationCalls, 1);
+test("changed canonical state, candidate fingerprint, and same-name provenance collision block before dispatch", async () => {
+  const stale = service();
+  const stalePreview = await prepare(stale.target);
+  const staleRead = stale.adapter.readCanonicalInstalledState.bind(stale.adapter);
+  let injectCollision = true;
+  stale.adapter.readCanonicalInstalledState = async (...args) => {
+    const state = await staleRead(...args);
+    if (!injectCollision) return state;
+    injectCollision = false;
+    const alternate = { ...state.installed[0], identity: "operator-os:agent:installable-skill", name: "installable-skill", provenance: "agent" as const, hubIdentifier: null, supportedActions: [] };
+    return { ...state, installed: [...state.installed, alternate], duplicateNames: ["installable-skill"] };
+  };
+  const staleResult = await commit(stale.target, stalePreview);
+  assert.equal(staleResult.status, "blocked_no_action");
+  assert.equal(stale.adapter.mutationCalls, 0);
 
-  const removal = new FakeHermesSkillsAdapter();
-  removal.leaveSameNameBundledOnRemove = true;
-  const removalService = service(removal);
-  const removed = await commit(removalService, await prepare(removalService, "remove", removableIdentity));
+  const changedCandidate = service();
+  const candidatePreview = await prepare(changedCandidate.target);
+  const original = changedCandidate.adapter.inspectExactCandidate.bind(changedCandidate.adapter);
+  changedCandidate.adapter.inspectExactCandidate = async (...args) => ({ ...(await original(...args)), fingerprint: "changed" });
+  const candidateResult = await commit(changedCandidate.target, candidatePreview);
+  assert.equal(candidateResult.status, "blocked_no_action");
+  assert.equal(changedCandidate.adapter.mutationCalls, 0);
+
+  const collision = service();
+  collision.adapter.installWithSameNameBundled = true;
+  const collisionResult = await commit(collision.target, await prepare(collision.target));
+  assert.equal(collisionResult.status, "outcome_unknown");
+  assert.equal(collision.adapter.mutationCalls, 1);
+});
+
+test("exact Hub install and removal require canonical provenance and no same-name ambiguity", async () => {
+  const install = service();
+  const installed = await commit(install.target, await prepare(install.target));
+  assert.equal(installed.status, "verified_success");
+  assert.equal(install.adapter.operations[0].skipExternalSecretSources, true);
+
+  const wrongSource = service();
+  wrongSource.adapter.installAsDifferentHubIdentity = true;
+  const wrong = await commit(wrongSource.target, await prepare(wrongSource.target));
+  assert.equal(wrong.status, "outcome_unknown");
+
+  const remove = service();
+  const removed = await commit(remove.target, await prepare(remove.target, "remove", removeIdentity));
   assert.equal(removed.status, "verified_success");
+  assert.equal(removed.action, "remove");
+
+  const ambiguousRemove = service();
+  ambiguousRemove.adapter.leaveSameNameBundledOnRemove = true;
+  const ambiguous = await commit(ambiguousRemove.target, await prepare(ambiguousRemove.target, "remove", removeIdentity));
+  assert.equal(ambiguous.status, "outcome_unknown");
 });
 
-test("candidate authority changes and same-name installed alternates block install before dispatch", async () => {
-  const changed = new FakeHermesSkillsAdapter();
-  const inspect = changed.inspectExactCandidate.bind(changed);
-  let inspections = 0;
-  changed.inspectExactCandidate = async (identifier, profile) => {
-    const candidate = await inspect(identifier, profile);
-    inspections += 1;
-    return inspections === 1 ? candidate : { ...candidate, trust: "changed", fingerprint: `${candidate.fingerprint}-changed` };
-  };
-  const changedService = service(changed);
-  const changedResult = await commit(changedService, await prepare(changedService, "install", installIdentity));
-  assert.equal(changedResult.status, "blocked_no_action");
-  assert.match(changedResult.summary, /trust or scan authority changed/i);
-  assert.equal(changed.mutationCalls, 0);
+test("failure before dispatch and ambiguous outcome remain honest and never retry automatically", async () => {
+  const before = service();
+  before.adapter.failBeforeDispatch = true;
+  const failed = await commit(before.target, await prepare(before.target));
+  assert.equal(failed.status, "failed_before_dispatch");
+  assert.equal(failed.mutationAttempted, false);
+  assert.equal(before.adapter.mutationCalls, 0);
 
-  const ambiguous = new FakeHermesSkillsAdapter();
-  const readCanonical = ambiguous.readCanonicalInstalledState.bind(ambiguous);
-  ambiguous.readCanonicalInstalledState = async (profile) => {
-    const state = await readCanonical(profile);
-    const alternate = { ...state.installed[0], identity: "operator-os:bundled:installable-skill", name: "installable-skill", provenance: "bundled" as const, hubIdentifier: null, source: "bundled" };
-    return { ...state, installed: [...state.installed, alternate] };
-  };
-  const ambiguousService = service(ambiguous);
-  await assert.rejects(() => prepare(ambiguousService, "install", installIdentity), /no longer absent/i);
-  assert.equal(ambiguous.mutationCalls, 0);
+  const unknown = service();
+  unknown.adapter.unknownAfterDispatch = true;
+  const preview = await prepare(unknown.target);
+  const result = await commit(unknown.target, preview);
+  assert.equal(result.status, "outcome_unknown");
+  assert.equal(result.mutationAttempted, true);
+  assert.equal(result.retryAttempted, false);
+  assert.equal(unknown.adapter.mutationCalls, 1);
+  const rechecked = await unknown.target.recheck({ previewId: preview.previewId, targetIdentity: preview.targetIdentity, actorIdentity: "actor-one" });
+  assert.equal(rechecked.status, "outcome_unknown");
+  assert.equal(unknown.adapter.mutationCalls, 1, "read-only reconciliation must never redispatch");
 });
 
-test("failure before dispatch and timeout after dispatch preserve outcome certainty", async () => {
-  const beforeAdapter = new FakeHermesSkillsAdapter();
-  beforeAdapter.failBeforeDispatch = true;
-  const beforeService = service(beforeAdapter);
-  const before = await commit(beforeService, await prepare(beforeService, "disable", enabledIdentity));
-  assert.equal(before.status, "failed_before_dispatch");
-  assert.equal(before.mutationAttempted, false);
-
-  const unknownAdapter = new FakeHermesSkillsAdapter();
-  unknownAdapter.unknownAfterDispatch = true;
-  const unknownService = service(unknownAdapter);
-  const preview = await prepare(unknownService, "disable", enabledIdentity);
-  const unknown = await commit(unknownService, preview);
-  assert.equal(unknown.status, "outcome_unknown");
-  assert.equal(unknown.mutationAttempted, true);
-  const calls = unknownAdapter.mutationCalls;
-  await unknownService.recheck({ previewId: preview.previewId, targetIdentity: preview.targetIdentity, actorIdentity: actor });
-  assert.equal(unknownAdapter.mutationCalls, calls, "read-only reconciliation must never repeat a mutation");
+test("actor identity, reason secrets, credentials, state fingerprint, and candidate content never egress", async () => {
+  const { adapter, target } = service();
+  const preview = await target.prepare({ action: "install", targetIdentity: installIdentity, reason: "Validate without token=super-secret or /Users/private/.env", actorIdentity: "actor-secret-value" });
+  await commit(target, preview, "actor-secret-value");
+  const serialized = JSON.stringify({ preview, operations: adapter.operations });
+  assert.doesNotMatch(serialized, /actor-secret-value|stateFingerprint|API_KEY|Authorization: Bearer|SKILL\.md content/i);
 });
 
-test("a process-restart replay cannot repeat an operation exact canonical Hermes state already proves", async () => {
-  const adapter = new FakeHermesSkillsAdapter();
-  const firstProcess = service(adapter);
-  const restartedProcess = service(adapter);
-  const firstPreview = await prepare(firstProcess, "enable", disabledIdentity);
-  const restartPreview = await prepare(restartedProcess, "enable", disabledIdentity);
-  assert.equal((await commit(firstProcess, firstPreview)).status, "verified_success");
-  assert.equal(adapter.mutationCalls, 1);
-  const replay = await commit(restartedProcess, restartPreview);
-  assert.equal(replay.status, "verified_success");
-  assert.equal(replay.mutationAttempted, false);
-  assert.equal(adapter.mutationCalls, 1);
-});
+test("25/25 catalog, prepare, dry precondition, post-verification, and reconciliation simulations never retry", async () => {
+  for (let index = 0; index < 25; index += 1) {
+    const catalog = service();
+    assert.equal((await catalog.target.snapshot()).profile, "operator-os");
 
-test("actor identity, state fingerprint, and credentials never egress", async () => {
-  const adapter = new FakeHermesSkillsAdapter();
-  const target = service(adapter);
-  const preview = await target.prepare({ action: "disable", targetIdentity: enabledIdentity, reason, actorIdentity: "actor-secret-value" });
-  const result = await commit(target, preview, "actor-secret-value");
-  const serialized = JSON.stringify({ preview, result });
-  for (const forbidden of ["actor-secret-value", "stateFingerprint", "authorityIdentity", "credential", "apiKey"]) assert.doesNotMatch(serialized, new RegExp(forbidden, "i"));
+    const prepared = service();
+    const preview = await prepare(prepared.target);
+    assert.equal(prepared.adapter.mutationCalls, 0);
+    assert.equal(preview.action, "install");
+
+    const dry = service();
+    dry.adapter.failBeforeDispatch = true;
+    const dryResult = await commit(dry.target, await prepare(dry.target));
+    assert.equal(dryResult.status, "failed_before_dispatch");
+    assert.equal(dry.adapter.mutationCalls, 0);
+
+    const verified = service();
+    const verifiedResult = await commit(verified.target, await prepare(verified.target));
+    assert.equal(verifiedResult.status, "verified_success");
+    assert.equal(verified.adapter.mutationCalls, 1);
+
+    const unknown = service();
+    unknown.adapter.unknownAfterDispatch = true;
+    const unknownPreview = await prepare(unknown.target);
+    assert.equal((await commit(unknown.target, unknownPreview)).status, "outcome_unknown");
+    assert.equal((await unknown.target.recheck({ previewId: unknownPreview.previewId, targetIdentity: unknownPreview.targetIdentity, actorIdentity: "actor-one" })).status, "outcome_unknown");
+    assert.equal(unknown.adapter.mutationCalls, 1);
+  }
 });
