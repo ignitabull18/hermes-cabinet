@@ -591,6 +591,21 @@ export async function startConversationRun(
   const baseAdapterConfig: Record<string, unknown> | undefined = requestedSkillSlugs
     ? { ...(input.adapterConfig || {}), skills: requestedSkillSlugs }
     : input.adapterConfig;
+  const executionCwd = input.cwd || resolveAgentCwd(
+    input.cabinetPath,
+    skillsPersona?.workdir,
+  );
+  const executionAdapter = agentAdapterRegistry.get(resolvedAdapterType);
+  const executionPreflight = resolvedAdapterType === "hermes_runtime"
+    ? await executionAdapter?.preflight?.({
+        adapterType: resolvedAdapterType,
+        config: baseAdapterConfig || {},
+        cwd: executionCwd,
+      })
+    : undefined;
+  if (resolvedAdapterType === "hermes_runtime" && !executionPreflight) {
+    throw new Error("Hermes model readiness is unavailable.");
+  }
 
   const meta = await createConversation({
     agentSlug: input.agentSlug,
@@ -709,7 +724,8 @@ export async function startConversationRun(
           adapterType: adapter.type,
           config: spawnAdapterConfig || {},
           prompt: finalPrompt,
-          cwd: input.cwd || (input.cabinetPath ? path.join(DATA_DIR, input.cabinetPath) : DATA_DIR),
+          cwd: executionCwd,
+          executionPreflight,
           timeoutMs: (input.timeoutSeconds ?? 900) * 1_000,
           sessionId: null,
           sessionParams: null,
@@ -1292,6 +1308,8 @@ export interface ContinueConversationInput {
   adapterType?: string;
   model?: string;
   effort?: string;
+  /** Server-owned preflight resolved before an accepted HTTP prompt is persisted. */
+  executionPreflight?: Record<string, unknown>;
 }
 
 async function runContinueInProcess(input: {
@@ -1308,6 +1326,7 @@ async function runContinueInProcess(input: {
   prompt: string;
   replayPrompt: string;
   timeoutMs: number;
+  executionPreflight?: Record<string, unknown>;
   isSessionExpiredError: (errorMessage?: string | null) => boolean;
 }): Promise<ConversationMeta | null> {
   const {
@@ -1324,6 +1343,7 @@ async function runContinueInProcess(input: {
     prompt,
     replayPrompt,
     timeoutMs,
+    executionPreflight,
     isSessionExpiredError,
   } = input;
 
@@ -1369,6 +1389,7 @@ async function runContinueInProcess(input: {
       timeoutMs,
       sessionId: effectiveSessionId,
       sessionParams: effectiveSessionParams,
+      executionPreflight,
       onLog: async (stream, chunk) => {
         if (stream === "stderr") {
           stderrChunks.push(chunk);
@@ -1688,22 +1709,7 @@ export async function continueConversationRun(
   const cp = meta.cabinetPath || input.cabinetPath;
   const requestId = input.requestId?.trim() || randomUUID();
 
-  // 1. Record the user turn immediately unless the HTTP acceptance primitive
-  // already committed the exact same request/user identity before dispatch.
-  if (!input.acceptedUserTurn) {
-    await appendUserTurn(
-      conversationId,
-      {
-        content: input.userMessage,
-        mentionedPaths: input.mentionedPaths,
-        attachmentPaths: input.attachmentPaths,
-        requestId,
-      },
-      cp
-    );
-  }
-
-  // 2. Resolve adapter, honoring per-turn runtime override (§9 of PRD).
+  // 1. Resolve adapter, honoring per-turn runtime override (§9 of PRD).
   //    When the user switches runtime mid-conversation, the new adapter takes
   //    over for this turn; session resume is only valid when we stay on the
   //    same adapter, so a switch forces replay mode.
@@ -1725,6 +1731,18 @@ export async function continueConversationRun(
     meta.adapterType ||
     defaultAdapterTypeForProvider(meta.providerId);
   const adapter = agentAdapterRegistry.get(adapterType);
+  if (adapterType !== "hermes_runtime" && !input.acceptedUserTurn) {
+    await appendUserTurn(
+      conversationId,
+      {
+        content: input.userMessage,
+        mentionedPaths: input.mentionedPaths,
+        attachmentPaths: input.attachmentPaths,
+        requestId,
+      },
+      cp
+    );
+  }
 
   // Legacy PTY adapters don't implement adapter.execute — they delegate the
   // whole conversation to the daemon's PTY session machinery. For terminal-mode
@@ -1940,6 +1958,34 @@ export async function continueConversationRun(
       })
     : replayPrompt;
 
+  const executionPreflight = input.executionPreflight ?? (
+    adapter.type === "hermes_runtime"
+      ? await adapter.preflight?.({
+          adapterType: adapter.type,
+          config: turnAdapterConfig,
+          cwd,
+        })
+      : undefined
+  );
+  if (adapter.type === "hermes_runtime" && !executionPreflight) {
+    throw new Error("Hermes model readiness is unavailable.");
+  }
+
+  // Readiness is now proven. Record the user turn unless the HTTP acceptance
+  // primitive already committed the exact same request/user identity.
+  if (adapter.type === "hermes_runtime" && !input.acceptedUserTurn) {
+    await appendUserTurn(
+      conversationId,
+      {
+        content: input.userMessage,
+        mentionedPaths: input.mentionedPaths,
+        attachmentPaths: input.attachmentPaths,
+        requestId,
+      },
+      cp
+    );
+  }
+
   // 6. Create the pending agent turn. Empty content so the UI shows only the
   // typing indicator (no placeholder text) until bytes stream in.
   const pending = await appendAgentTurn(
@@ -1986,6 +2032,7 @@ export async function continueConversationRun(
       prompt,
       replayPrompt,
       timeoutMs: input.timeoutMs ?? DEFAULT_RUN_TIMEOUT_MS,
+      executionPreflight,
       isSessionExpiredError,
     });
   }

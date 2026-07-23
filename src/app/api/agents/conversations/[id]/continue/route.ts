@@ -6,6 +6,9 @@ import {
 } from "@/lib/agents/conversation-store";
 import { normalizeRuntimeOverride } from "@/lib/agents/runtime-overrides";
 import { listDaemonSessions } from "@/lib/agents/daemon-client";
+import { agentAdapterRegistry } from "@/lib/agents/adapters/registry";
+import { resolveAgentCwd } from "@/lib/storage/path-utils";
+import { readPersona } from "@/lib/agents/persona-manager";
 
 /**
  * A conversation's live run may be keyed under the bare conversation id
@@ -125,6 +128,38 @@ export async function POST(
       adapterConfig: existing.adapterConfig,
     }
   );
+  let executionPreflight: Record<string, unknown> | undefined;
+  if (runtime.adapterType === "hermes_runtime") {
+    const adapter = agentAdapterRegistry.get("hermes_runtime");
+    if (!adapter?.preflight) {
+      return NextResponse.json(
+        { ok: false, error: "Hermes model readiness is unavailable.", errorKind: "model_unavailable" },
+        { status: 503 },
+      );
+    }
+    try {
+      const executionCabinetPath = existing.cabinetPath ?? cabinetPath;
+      const persona = existing.agentSlug
+        ? await readPersona(existing.agentSlug, executionCabinetPath)
+        : null;
+      executionPreflight = await adapter.preflight({
+        adapterType: adapter.type,
+        config: runtime.adapterConfig || {},
+        cwd: resolveAgentCwd(executionCabinetPath, persona?.workdir),
+      });
+    } catch (error) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: error instanceof Error
+            ? error.message
+            : "Hermes model readiness is unavailable.",
+          errorKind: "model_unavailable",
+        },
+        { status: 503 },
+      );
+    }
+  }
 
   // Fire the continuation in the background; the UI streams updates via SSE.
   // continueConversationRun takes model/effort as separate overrides (it
@@ -166,6 +201,7 @@ export async function POST(
     adapterType: runtime.adapterType,
     model: runtime.isTerminal ? undefined : body.model?.trim() || undefined,
     effort: runtime.isTerminal ? undefined : body.effort?.trim() || undefined,
+    executionPreflight,
   }).catch((err) => {
     console.error(`[conversation-runner] ${id} continue failed`, err);
   });

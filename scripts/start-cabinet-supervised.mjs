@@ -29,6 +29,7 @@ export function validateSupervisedEnvironment(env, runtimeRoot) {
     "CABINET_HERMES_EXECUTION_CLI_PATH",
     "CABINET_HERMES_PROFILE",
     "CABINET_ENV_FILE",
+    "HERMES_HOME",
     "PORT",
   ];
   for (const name of required) {
@@ -48,7 +49,7 @@ export function validateSupervisedEnvironment(env, runtimeRoot) {
       "Supervised Cabinet requires CABINET_HERMES_EXECUTION_NO_TOOLS=true",
     );
   }
-  if (!path.isAbsolute(env.CABINET_DATA_DIR) || !path.isAbsolute(env.CABINET_HERMES_EXECUTION_CLI_PATH) || !path.isAbsolute(env.CABINET_ENV_FILE)) {
+  if (!path.isAbsolute(env.CABINET_DATA_DIR) || !path.isAbsolute(env.CABINET_HERMES_EXECUTION_CLI_PATH) || !path.isAbsolute(env.CABINET_ENV_FILE) || !path.isAbsolute(env.HERMES_HOME)) {
     throw new Error("Supervised Cabinet paths must be absolute");
   }
   const port = Number(env.PORT);
@@ -58,6 +59,7 @@ export function validateSupervisedEnvironment(env, runtimeRoot) {
   const server = path.join(runtimeRoot, ".next", "standalone", "server.js");
   requireFile(server, "Cabinet production build is missing");
   requireDirectory(env.CABINET_DATA_DIR, "Cabinet data directory is unavailable");
+  requireDirectory(env.HERMES_HOME, "Hermes configuration directory is unavailable");
   try {
     fs.accessSync(env.CABINET_HERMES_EXECUTION_CLI_PATH, fs.constants.X_OK);
   } catch {
