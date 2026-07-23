@@ -6,6 +6,7 @@ const ENV_KEYS = [
   "CABINET_HERMES_EXECUTION_CLI_PATH",
   "CABINET_HERMES_EXECUTION_NO_TOOLS",
   "CABINET_HERMES_PROFILE",
+  "OLLAMA_API_KEY",
 ] as const;
 
 async function withExecutionEnv(
@@ -65,6 +66,7 @@ for (const value of [undefined, "false", "unexpected"]) {
       CABINET_HERMES_EXECUTION_CLI_PATH: "/bin/false",
       CABINET_HERMES_EXECUTION_NO_TOOLS: value,
       CABINET_HERMES_PROFILE: "operator-os",
+      OLLAMA_API_KEY: "fixture",
     }, async () => {
       let spawnCount = 0;
       const result = await hermesRuntimeAdapter.execute!({

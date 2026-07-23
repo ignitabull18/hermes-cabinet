@@ -37,6 +37,7 @@ export type HermesSkillsServerConfig = {
 export type HermesExecutionServerConfig = {
   cliPath: string;
   profile: string;
+  providerCredentialEnvName: "OLLAMA_API_KEY";
   timeoutMs: number;
   noTools: true;
 };
@@ -199,9 +200,16 @@ export function readHermesExecutionServerConfig(
       "Invalid server configuration: CABINET_HERMES_PROFILE is not a valid profile name",
     );
   }
+  const providerCredentialEnvName = "OLLAMA_API_KEY" as const;
+  if (!env[providerCredentialEnvName]) {
+    throw new HermesConfigurationError(
+      "Missing server configuration: OLLAMA_API_KEY",
+    );
+  }
   return {
     cliPath,
     profile,
+    providerCredentialEnvName,
     timeoutMs: timeout(env.CABINET_HERMES_TIMEOUT_MS),
     noTools: requiredLiteralTrue(
       "CABINET_HERMES_EXECUTION_NO_TOOLS",
