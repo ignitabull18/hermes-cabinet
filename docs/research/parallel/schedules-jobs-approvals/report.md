@@ -31,7 +31,7 @@ this stream.
 - Installed Hermes: `55759cb2737cd3870f9de4693f66fa38eaf0dd2b`,
   reported as Hermes Agent `0.19.0 (2026.7.20)`.
 - Audit inputs: the exact installed Git checkout under
-  `/Users/ignitabull/.hermes/hermes-agent`, its official checked-in
+  `<user-home>/.hermes/hermes-agent`, its official checked-in
   documentation, and the isolated fixture prototype in this stream.
 - No production, environment, credential, schedule, job, run, queue, approval,
   clarification, worker, or service state was changed.
