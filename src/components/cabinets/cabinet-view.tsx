@@ -35,6 +35,9 @@ import type { ScheduleEvent } from "@/lib/agents/cron-compute";
 import { NextUpRuns } from "./next-up-runs";
 import { dedupFetch } from "@/lib/api/dedup-fetch";
 import { OrgChartModal } from "./org-chart-modal";
+import { startCase } from "./cabinet-utils";
+
+const OVERVIEW_LOADING_DEADLINE_MS = 8_000;
 
 export function CabinetView({ cabinetPath }: { cabinetPath: string }) {
   const [overview, setOverview] = useState<CabinetOverview | null>(null);
@@ -111,17 +114,29 @@ export function CabinetView({ cabinetPath }: { cabinetPath: string }) {
 
   const loadOverview = useCallback(async () => {
     setLoading(true);
+    let deadline: number | undefined;
     try {
-      const data = await fetchCabinetOverviewClient(
-        cabinetPath,
-        cabinetVisibilityMode,
-        { force: true }
-      );
+      const data = await Promise.race([
+        fetchCabinetOverviewClient(
+          cabinetPath,
+          cabinetVisibilityMode,
+          { force: true }
+        ),
+        new Promise<never>((_, reject) => {
+          deadline = window.setTimeout(
+            () => reject(new Error("overview deadline exceeded")),
+            OVERVIEW_LOADING_DEADLINE_MS
+          );
+        }),
+      ]);
       setOverview(data);
       setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load");
+    } catch {
+      // Keep the room shell and composer available. Raw transport/server
+      // exceptions do not belong in the operator-facing page.
+      setError("Room activity is temporarily unavailable.");
     } finally {
+      if (deadline !== undefined) window.clearTimeout(deadline);
       setLoading(false);
     }
   }, [cabinetPath, cabinetVisibilityMode]);
@@ -155,7 +170,7 @@ export function CabinetView({ cabinetPath }: { cabinetPath: string }) {
 
   const cabinetName =
     overview?.cabinet.name ||
-    cabinetPath.split("/").filter(Boolean).pop()?.replace(/-/g, " ") ||
+    startCase(cabinetPath.split("/").filter(Boolean).pop(), "Cabinet") ||
     "Cabinet";
   const ownAgents = useMemo(
     () => (overview?.agents || []).filter((a) => a.cabinetDepth === 0),
@@ -211,13 +226,16 @@ export function CabinetView({ cabinetPath }: { cabinetPath: string }) {
           style={{ paddingInlineStart: `calc(1rem + var(--sidebar-toggle-offset, 0px))` }}
         >
           <div className="flex min-w-0 items-center gap-3">
-            {/* #004: the composer hero owns the single <h1> (the greeting), so
-                this cabinet-name title is a section heading, not a second h1. */}
-            <h2 className="truncate font-ui text-[14px] font-semibold tracking-tight text-foreground">
+            {/* The composer hero below owns the page heading. This compact
+                toolbar label is intentionally non-heading text so direct-load
+                locators have one stable accessible room title. */}
+            <span className="truncate font-ui text-[14px] font-semibold tracking-tight text-foreground">
               {cabinetName}
-            </h2>
+            </span>
             {loading && !overview ? (
-              <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+              <span role="status" aria-label={`Loading ${cabinetName}`}>
+                <Loader2 className="size-3.5 animate-spin text-muted-foreground" aria-hidden="true" />
+              </span>
             ) : null}
           </div>
 
@@ -272,6 +290,8 @@ export function CabinetView({ cabinetPath }: { cabinetPath: string }) {
                 cabinetPath={cabinetPath}
                 agents={overview?.agents || []}
                 displayName={boardName}
+                cabinetName={cabinetName}
+                cabinetDescription={overview?.cabinet.description}
                 requestedAgent={requestedAgent}
                 focusRequest={composerFocusRequest}
                 onNavigate={(_agentSlug, agentCabinetPath, conversationId) =>
@@ -404,4 +424,3 @@ function CountPill({ label, value }: { label: string; value: number }) {
     </span>
   );
 }
-
