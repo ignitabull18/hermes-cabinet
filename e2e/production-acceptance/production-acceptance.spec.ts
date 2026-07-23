@@ -36,6 +36,12 @@ const outputDir = path.resolve(
 const screenshotDir = path.join(outputDir, "screenshots");
 const recorder = new AcceptanceRecorder();
 const transport = selectTransport();
+const skillsMode = process.env.CABINET_ACCEPTANCE_SKILLS_MODE;
+if (skillsMode !== "fixture" && skillsMode !== "production") {
+  throw new Error(
+    "CABINET_ACCEPTANCE_SKILLS_MODE must be explicitly set to fixture or production.",
+  );
+}
 const projection = buildHermesAcceptanceFixtureProjection({
   implementationRevision: acceptanceBaseRevision,
   artifactGeneratedAt: "2026-07-23T00:00:00.000Z",
@@ -135,7 +141,8 @@ async function installPageObservation(page: Page) {
     if (url.pathname === "/api/hermes/health" && response.status() === 200) {
       if (!transport.sendsLiveModelMessages) return;
       try {
-        const body = await response.json() as Record<string, unknown>;
+        await response.finished();
+        const body = JSON.parse((await response.body()).toString("utf8")) as Record<string, unknown>;
         const state = typeof body.sourceState === "string"
           ? body.sourceState
           : typeof body.status === "string"
@@ -225,15 +232,17 @@ async function installPageObservation(page: Page) {
   await page.route("**/api/hermes/control-center", (route) =>
     route.fulfill({ json: projection })
   );
-  await page.route("**/api/hermes/skills-management**", (route) => {
-    if (route.request().method() === "GET") {
-      return route.fulfill({ json: buildHermesSkillsAcceptanceSnapshot() });
-    }
-    return route.fulfill({
-      status: 405,
-      json: { error: "Acceptance harness forbids governed Skill mutations." },
+  if (skillsMode === "fixture") {
+    await page.route("**/api/hermes/skills-management**", (route) => {
+      if (route.request().method() === "GET") {
+        return route.fulfill({ json: buildHermesSkillsAcceptanceSnapshot() });
+      }
+      return route.fulfill({
+        status: 405,
+        json: { error: "Acceptance harness forbids governed Skill mutations." },
+      });
     });
-  });
+  }
 }
 
 async function pageIdentity(page: Page, route: string, meaningful: RegExp) {
@@ -289,7 +298,8 @@ test.afterAll(async () => {
     (file) =>
       !file.startsWith("e2e/production-acceptance/") &&
       !file.startsWith("scripts/production-acceptance/") &&
-      !file.startsWith("docs/research/parallel/acceptance-harness/")
+      !file.startsWith("docs/research/parallel/acceptance-harness/") &&
+      file !== "PROGRESS.md"
   );
   if (applicationDiff.length) {
     recorder.blocker({
@@ -316,6 +326,7 @@ test.afterAll(async () => {
       productionTouched: false,
       liveModelMessagesSent: recorder.network.modelMessageRequests,
       transport: transport.id,
+      skillsMode,
       browserPath: process.env.CABINET_ACCEPTANCE_BROWSER_PATH ?? "Playwright runner",
     },
     routes,
@@ -324,6 +335,7 @@ test.afterAll(async () => {
     blockers: recorder.blockers,
     network: recorder.network,
     browserIssues: recorder.browserIssues,
+    conversationPersistence: recorder.conversationPersistence,
     screenshots: recorder.screenshots,
     productionTouched: false,
   }, recorder.scanText.join("\n"));
@@ -677,7 +689,9 @@ test("authoritative isolated production acceptance", async ({ page }) => {
     "operator-mode",
     "Hermes",
     async () => {
-      await page.goto(`${cabinet.appUrl}/hermes?skillsFixture=acceptance`);
+      await page.goto(
+        `${cabinet.appUrl}/hermes${skillsMode === "fixture" ? "?skillsFixture=acceptance" : ""}`,
+      );
       await expect(page.getByTestId("hermes-control-center")).toBeVisible();
       await expect(page.getByRole("tab", { name: "Operator" })).toHaveAttribute(
         "aria-selected",
@@ -759,7 +773,10 @@ test("authoritative isolated production acceptance", async ({ page }) => {
       : "fixture-two-turn-contract",
     "conversation",
     async () => {
-      const result = await transport.runTwoTurnContract(cabinet);
+      const result = await transport.runTwoTurnContract(
+        cabinet,
+        (evidence) => recorder.recordConversationPersistence(evidence),
+      );
       expect(result.firstResponse).toBe(TRANSPORT_TOKEN);
       expect(result.secondResponse).toBe(TRANSPORT_TOKEN);
       expect(result.sameSession).toBe(true);

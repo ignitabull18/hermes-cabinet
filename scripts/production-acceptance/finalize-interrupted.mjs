@@ -8,6 +8,10 @@ const outputDir = path.resolve(
 );
 const resultPath = path.join(outputDir, "acceptance-result.json");
 const result = JSON.parse(fs.readFileSync(resultPath, "utf8"));
+result.schemaVersion = 2;
+result.conversationPersistence ??= null;
+result.environment.skillsMode ??=
+  process.env.CABINET_ACCEPTANCE_SKILLS_MODE ?? "fixture";
 
 const requiredChecks = [
   ["route-manifest", "routes"],
