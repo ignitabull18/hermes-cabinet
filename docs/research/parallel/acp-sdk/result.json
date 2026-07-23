@@ -1,0 +1,23 @@
+{
+  "stream": "acp-sdk",
+  "status": "blocked",
+  "branch": "research/persistent-acp-sdk-transport",
+  "commit": null,
+  "merge_candidate": false,
+  "tests": {
+    "typescript_build": "passed",
+    "fixture_tests": {
+      "passed": 8,
+      "failed": 0
+    },
+    "fixture_two_turn_acceptance": "passed",
+    "isolated_hermes_initialization": "passed",
+    "live_two_turn_acceptance": "not_run_serialization_required"
+  },
+  "blockers": [
+    "Authorized real-model acceptance is pending serialized execution.",
+    "Hermes ACP startup performs configured MCP discovery even in process-owned no-tools mode."
+  ],
+  "recommendation": "Keep the persistent official-SDK sidecar candidate, suppress all MCP startup discovery in no-tools mode, then run the serialized live two-turn and restart-load acceptance.",
+  "production_touched": false
+}
