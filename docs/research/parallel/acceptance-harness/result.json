@@ -1,0 +1,39 @@
+{
+  "stream": "acceptance-harness",
+  "status": "blocked",
+  "branch": "test/fix-production-acceptance-org-chart",
+  "commit": null,
+  "merge_candidate": true,
+  "tests": {
+    "route-manifest": "passed",
+    "desktop-navigation": "passed",
+    "drawers-data-team": "passed",
+    "new-composer": "passed",
+    "search-terminal-unavailable": "passed",
+    "tasks-route": "passed",
+    "org-chart": "passed",
+    "org-chart-trigger-present": "passed",
+    "org-chart-trigger-enabled": "passed",
+    "org-chart-trigger-click": "passed",
+    "org-chart-dialog": "passed",
+    "org-chart-bounds-and-close": "passed",
+    "operator-mode": "passed",
+    "governed-skills": "passed",
+    "developer-diagnostics-48": "passed",
+    "fixture-two-turn-contract": "passed",
+    "live-two-turn-contract": "blocked",
+    "restart-route-persistence": "passed",
+    "launchd-child-restart": "blocked",
+    "history-navigation": "passed",
+    "mobile-reduced-motion-overflow": "passed",
+    "legacy-daemon-output-accounting": "passed",
+    "console-health": "passed",
+    "mutation-accounting": "passed"
+  },
+  "blockers": [
+    "The exact live two-turn conversation, same-session resume, and live persistence are blocked.",
+    "The supervised wrapper is not proven to recover after the Next child exits."
+  ],
+  "recommendation": "Integrate the harness after stabilization, register only a transport that passes the mandatory live gate, and rerun.",
+  "production_touched": false
+}
