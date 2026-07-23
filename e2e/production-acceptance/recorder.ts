@@ -6,6 +6,7 @@ import type {
   BrowserIssue,
   AcceptanceCheck,
   AcceptanceResult,
+  ConversationPersistenceEvidence,
   NetworkSummary,
   RouteChecklistEntry,
   ScreenshotEntry,
@@ -47,6 +48,7 @@ export class AcceptanceRecorder {
   readonly blockers: AcceptanceBlocker[] = [];
   readonly screenshots: ScreenshotEntry[] = [];
   readonly browserIssues: BrowserIssue[] = [];
+  conversationPersistence: ConversationPersistenceEvidence | null = null;
   readonly navigation = { desktop: [] as string[], mobile: [] as string[] };
   readonly network: NetworkSummary = {
     total: 0,
@@ -77,6 +79,10 @@ export class AcceptanceRecorder {
 
   browserIssue(issue: Omit<BrowserIssue, "stage"> & { stage?: string }): void {
     this.browserIssues.push({ ...issue, stage: issue.stage ?? this.activeStage });
+  }
+
+  recordConversationPersistence(evidence: ConversationPersistenceEvidence): void {
+    this.conversationPersistence = evidence;
   }
 
   relevantBrowserIssues(): BrowserIssue[] {
@@ -177,7 +183,7 @@ export async function writeAcceptanceArtifacts(
       ? "ACCEPTED"
       : "NOT_ACCEPTED";
   const result: AcceptanceResult = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     generatedAt: new Date().toISOString(),
     verdict,
     scans,
