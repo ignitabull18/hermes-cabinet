@@ -71,6 +71,7 @@ import { SystemToasts } from "@/components/layout/system-toasts";
 import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { useHermesMode } from "@/hooks/use-cabinet-runtime-mode";
+import { CabinetView } from "@/components/cabinets/cabinet-view";
 
 // Section components are only rendered when the user navigates to them —
 // load them on demand to keep the first-paint bundle small. Previously all of
@@ -104,10 +105,6 @@ const SettingsPage = dynamic(
 );
 const HelpPage = dynamic(
   () => import("@/components/help/help-page").then((m) => m.HelpPage),
-  { ssr: false }
-);
-const CabinetView = dynamic(
-  () => import("@/components/cabinets/cabinet-view").then((m) => m.CabinetView),
   { ssr: false }
 );
 const RegistryBrowser = dynamic(

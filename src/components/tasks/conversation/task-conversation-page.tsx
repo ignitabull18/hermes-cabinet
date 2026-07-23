@@ -1191,19 +1191,44 @@ export function TaskConversationPage({
 
   if (loadError && !task) {
     return (
-      <div className="relative flex h-full items-center justify-center bg-background text-foreground">
+      <div
+        data-testid="conversation-layout"
+        className="relative flex h-dvh max-h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-background text-foreground"
+      >
         {chromeActions ? (
           <div className="absolute end-2 top-2 flex items-center gap-1">{chromeActions}</div>
         ) : null}
-        <div className="max-w-sm rounded-2xl border border-border/70 bg-card px-6 py-5 text-center">
-          <p className="text-[13px] font-medium">Couldn&rsquo;t load task</p>
-          <p className="mt-1 text-[12px] text-muted-foreground">{loadError}</p>
-          <Link
-            href="/"
-            className="mt-4 inline-flex h-7 items-center justify-center rounded-md px-3 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        <header className="shrink-0 px-6 py-3 max-md:px-3">
+          <h1 className="truncate text-[14px] font-semibold tracking-tight">
+            Conversation
+          </h1>
+        </header>
+        <div className="flex min-h-0 flex-1 items-center justify-center px-4">
+          <div
+            role="alert"
+            className="w-full max-w-sm rounded-2xl border border-border/70 bg-card px-6 py-5 text-center"
           >
-            Back home
-          </Link>
+            <p className="text-[13px] font-medium">Couldn&rsquo;t load this conversation</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">
+              The room is still available. Retry the transcript or return to the room.
+            </p>
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setRetryNonce((value) => value + 1)}
+              >
+                Retry
+              </Button>
+              <Link
+                href={cabinetPath ? `/room/${cabinetPath}` : "/"}
+                className="inline-flex h-8 items-center justify-center rounded-md px-3 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                Back to room
+              </Link>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -1211,11 +1236,47 @@ export function TaskConversationPage({
 
   if (!task && !terminalModeActive) {
     return (
-      <div className="relative flex h-full items-center justify-center bg-background text-muted-foreground">
+      <div
+        data-testid="conversation-layout"
+        aria-busy={!connectTimedOut}
+        className="relative flex h-dvh max-h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-background text-foreground"
+      >
         {chromeActions ? (
           <div className="absolute end-2 top-2 flex items-center gap-1">{chromeActions}</div>
         ) : null}
-        <Loader2 className="size-5 animate-spin" />
+        <header className="shrink-0 px-6 py-3 max-md:px-3">
+          <h1 className="truncate text-[14px] font-semibold tracking-tight">
+            Conversation
+          </h1>
+        </header>
+        <div className="flex min-h-0 flex-1 items-center justify-center px-4">
+          <div className="w-full max-w-sm rounded-2xl border border-border/70 bg-card px-6 py-5 text-center">
+            {connectTimedOut ? (
+              <>
+                <p role="status" className="text-[13px] font-medium">
+                  Transcript is taking longer than expected
+                </p>
+                <p className="mt-1 text-[12px] text-muted-foreground">
+                  You can retry without leaving the room.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-4"
+                  onClick={() => setRetryNonce((value) => value + 1)}
+                >
+                  Retry
+                </Button>
+              </>
+            ) : (
+              <div role="status" className="flex items-center justify-center gap-2 text-[12px] text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                Loading conversation…
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     );
   }
@@ -1897,14 +1958,22 @@ export function TaskConversationPage({
                 </span>
               )}
               <h1
-                {...titleToggleProps}
                 className={cn(
-                  "text-[14px] font-semibold tracking-tight",
-                  summaryOpen ? "whitespace-normal" : "truncate",
-                  titleIsToggle && "cursor-pointer select-text"
+                  "min-w-0 text-[14px] font-semibold tracking-tight",
+                  summaryOpen ? "whitespace-normal" : "truncate"
                 )}
               >
-                {task.meta.title}
+                {titleIsToggle ? (
+                  <button
+                    type="button"
+                    {...titleToggleProps}
+                    className="max-w-full cursor-pointer select-text truncate text-start"
+                  >
+                    {task.meta.title}
+                  </button>
+                ) : (
+                  task.meta.title
+                )}
               </h1>
               <StatusBadge status={task.meta.status} />
               {busy ? (
