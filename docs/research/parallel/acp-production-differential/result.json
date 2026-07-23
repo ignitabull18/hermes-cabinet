@@ -1,0 +1,406 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-23T19:09:35Z",
+  "stream": "acp-production-differential",
+  "branch": "research/acp-production-differential",
+  "testedBaseRevision": "6854d52eb6697c96d1355f1c7f4d443076d68602",
+  "referenceBranch": "integration/production-stabilization-v2",
+  "productionTouched": false,
+  "liveDiagnostic": {
+    "attempts": 1,
+    "followUpsSent": 0,
+    "port": 4301,
+    "data": "isolated",
+    "status": "failed",
+    "exitCode": 124,
+    "errorKind": "timeout",
+    "routeElapsedMs": 3687.2,
+    "assistantTurnCount": 1,
+    "assistantTurnInterpretation": "Cabinet persisted its bounded failure turn; no ACP assistant chunk was observed.",
+    "trace": [
+      {
+        "sequence": 1,
+        "elapsedMs": 0.1,
+        "stage": "child_spawn_started"
+      },
+      {
+        "sequence": 2,
+        "elapsedMs": 14.5,
+        "stage": "child_spawn_completed"
+      },
+      {
+        "sequence": 3,
+        "elapsedMs": 16.7,
+        "stage": "acp_initialize_started"
+      },
+      {
+        "sequence": 4,
+        "elapsedMs": 2443.1,
+        "stage": "shutdown",
+        "signal": "SIGTERM"
+      },
+      {
+        "sequence": 5,
+        "elapsedMs": 2479.3,
+        "stage": "child_exit",
+        "exitCode": null,
+        "signal": "SIGTERM"
+      }
+    ],
+    "absentStages": [
+      "acp_initialize_completed",
+      "session_create_started",
+      "session_create_completed",
+      "prompt_dispatched",
+      "first_notification",
+      "first_assistant_chunk",
+      "final_result"
+    ],
+    "credentialHandling": {
+      "source": "approved non-displaying resolver",
+      "processAllowlist": [
+        "OLLAMA_API_KEY"
+      ],
+      "persisted": false,
+      "logged": false
+    }
+  },
+  "exactExit124Producer": {
+    "origin": "src/lib/hermes/acp-client.ts PersistentHermesAcpClient.start",
+    "deadline": "readHermesExecutionServerConfig().timeoutMs",
+    "configuredDefaultMs": 3000,
+    "operation": "official SDK agent.initialize request",
+    "failure": "HermesAcpError kind timeout",
+    "mapping": "src/lib/agents/adapters/hermes-runtime.ts maps timeout classification to exitCode 124",
+    "notProducedBy": [
+      "shell timeout",
+      "coreutils timeout",
+      "Cabinet HTTP route",
+      "conversation completion poller",
+      "prompt deadline",
+      "provider/model deadline",
+      "child-process exit"
+    ]
+  },
+  "firstDivergence": {
+    "stage": "ACP initialization",
+    "standalone": "The authorized live probe gave initialization the configured 120000 ms budget and completed startup in about 549.9 ms.",
+    "integrated": "The production copy reused the generic Hermes 3000 ms source timeout for initialization. The diagnostic observed initialize dispatch but no initialize response before the adapter stopped the child.",
+    "consequence": "Session creation and model prompt dispatch never happened, so provider/model startup was not the measured failure."
+  },
+  "minimumProductionChange": {
+    "summary": "Extract one shared official-SDK ACP transport core and have both the standalone probe and Cabinet adapter call it. Give ACP initialization its explicit passing-path deadline instead of reusing the 3000 ms read-only Hermes source timeout.",
+    "initializationTimeoutMs": 120000,
+    "promptTimeoutPolicy": "Keep the conversation turn deadline separate; do not increase it and do not add a retry.",
+    "scope": [
+      "shared child launch and environment builder",
+      "official SDK initialization",
+      "session create/load",
+      "prompt dispatch and notifications",
+      "cancellation and shutdown",
+      "bounded stage timing"
+    ],
+    "whyMinimum": "The live diagnostic failed before session creation. No prompt, persistence, route, or model behavior needs to change to clear this measured gate."
+  },
+  "sharedCoreFinding": {
+    "usesSameCore": false,
+    "finding": "The integration branch contains a copied approximation of the passing probe, not a shared transport module.",
+    "evidence": [
+      "The passing implementation lives only on research/persistent-acp-sdk-transport under experiments/transports/acp-sdk/src/probe.ts.",
+      "The integration implementation is a separate src/lib/hermes/acp-client.ts with separately maintained launch, timeouts, frame guard, lifecycle, and notification normalization.",
+      "The two implementations import the same official SDK version but have no shared source import."
+    ]
+  },
+  "fieldByField": {
+    "executable": [
+      {
+        "field": "absolutePath",
+        "standalone": "$COMPANION_WORKTREE/cabinet-hermes-acp-no-tools",
+        "integrated": "$COMPANION_WORKTREE/cabinet-hermes-acp-no-tools via experiment-only metadata proxy",
+        "different": false,
+        "note": "The exact local absolute path was verified identical and is redacted from the artifact by the private-path reporting rule."
+      },
+      {
+        "field": "companionRevision",
+        "standalone": "8a0564d9bc5560879ff432dc753ee560f969b370",
+        "integrated": "8a0564d9bc5560879ff432dc753ee560f969b370",
+        "different": false
+      },
+      {
+        "field": "wrapperFileIdentitySha256",
+        "standalone": "ab00555ce1ad3034d72e074142fc399b56bb4f2f3a75f47fe96f5ca11711a256",
+        "integrated": "ab00555ce1ad3034d72e074142fc399b56bb4f2f3a75f47fe96f5ca11711a256",
+        "different": false
+      },
+      {
+        "field": "venvExecutableIdentitySha256",
+        "standalone": "1d0d830b034bedfad3b4c1a1a91d3065fa04d47f4061dd442d2f58cf41d73e55",
+        "integrated": "1d0d830b034bedfad3b4c1a1a91d3065fa04d47f4061dd442d2f58cf41d73e55",
+        "different": false
+      },
+      {
+        "field": "pythonRuntime",
+        "standalone": "CPython 3.12.11 arm64 from the companion venv",
+        "integrated": "CPython 3.12.11 arm64 from the same companion venv",
+        "different": false
+      }
+    ],
+    "processLaunch": [
+      {
+        "field": "argv",
+        "standalone": "wrapper with no arguments",
+        "integrated": "wrapper with no arguments",
+        "different": false
+      },
+      {
+        "field": "cwd",
+        "standalone": "empty disposable workspace",
+        "integrated": "isolated Cabinet room directory",
+        "different": true,
+        "behavioralImpact": "Not reached beyond initialize; cwd is sent again at session creation."
+      },
+      {
+        "field": "HOME",
+        "standalone": "disposable ACP home",
+        "integrated": "isolated Cabinet diagnostic home",
+        "different": true,
+        "behavioralImpact": "Both contain the same minimal model/provider configuration shape."
+      },
+      {
+        "field": "HERMES_HOME",
+        "standalone": "explicit disposable ACP state directory",
+        "integrated": "derived by the identical companion wrapper from isolated HOME",
+        "different": true,
+        "behavioralImpact": "Effective location shape is equivalent."
+      },
+      {
+        "field": "profile",
+        "standalone": "operator-os",
+        "integrated": "operator-os",
+        "different": false
+      },
+      {
+        "field": "noTools",
+        "standalone": "HERMES_ACP_NO_TOOLS=1 before discovery",
+        "integrated": "HERMES_ACP_NO_TOOLS=1 before discovery",
+        "different": false
+      },
+      {
+        "field": "environmentAllowlist",
+        "standalone": "base process fields plus the one provider credential and explicit isolated Hermes fields",
+        "integrated": "base process fields plus the one provider credential; wrapper freezes Hermes fields",
+        "different": true,
+        "behavioralImpact": "Effective provider credential, profile, no-tools, HOME, and Hermes home were present in both."
+      },
+      {
+        "field": "stdio",
+        "standalone": "three pipes, NDJSON over stdin/stdout, stderr drained",
+        "integrated": "three pipes, NDJSON over stdin/stdout, stderr drained",
+        "different": false
+      },
+      {
+        "field": "buffering",
+        "standalone": "Node Web Streams plus SDK NDJSON stream and 1 MiB frame guard",
+        "integrated": "Node Web Streams plus SDK NDJSON stream and 1 MiB frame guard",
+        "different": false
+      },
+      {
+        "field": "processGroup",
+        "standalone": "inherits parent process group",
+        "integrated": "inherits Cabinet server process group",
+        "different": true,
+        "behavioralImpact": "No independent detached ACP process in either path."
+      },
+      {
+        "field": "termination",
+        "standalone": "SIGTERM then SIGKILL after 1000 ms",
+        "integrated": "SIGTERM then SIGKILL after 2000 ms, plus 15-minute idle stop",
+        "different": true
+      }
+    ],
+    "acpProtocol": [
+      {
+        "field": "sdk",
+        "standalone": "@agentclientprotocol/sdk 1.3.0",
+        "integrated": "@agentclientprotocol/sdk 1.3.0",
+        "different": false
+      },
+      {
+        "field": "protocolVersion",
+        "standalone": "acp.PROTOCOL_VERSION",
+        "integrated": "acp.PROTOCOL_VERSION",
+        "different": false
+      },
+      {
+        "field": "clientIdentity",
+        "standalone": "hermes-cabinet-acp-sdk-probe 0.0.0",
+        "integrated": "cabinet 0.5.3",
+        "different": true
+      },
+      {
+        "field": "clientCapabilities",
+        "standalone": "fs read/write false; terminal false",
+        "integrated": "fs read/write false; terminal false",
+        "different": false
+      },
+      {
+        "field": "agentCapabilities",
+        "standalone": "captured and asserted after initialization",
+        "integrated": "rejected during initialization when forbidden fs/terminal capability names appear",
+        "different": true
+      },
+      {
+        "field": "MCPAdvertisement",
+        "standalone": "empty mcpServers for new/load",
+        "integrated": "empty mcpServers for new/load",
+        "different": false
+      },
+      {
+        "field": "sessionNew",
+        "standalone": "session/new with cwd and empty mcpServers",
+        "integrated": "session/new with cwd and empty mcpServers",
+        "different": false
+      },
+      {
+        "field": "sessionLoad",
+        "standalone": "explicit restartAndLoad",
+        "integrated": "load when a persisted native session is not already loaded in the server-owned client",
+        "different": true
+      },
+      {
+        "field": "prompt",
+        "standalone": "session/prompt with one text content block",
+        "integrated": "session/prompt with one text content block",
+        "different": false
+      },
+      {
+        "field": "notificationHandling",
+        "standalone": "session/update text chunks, tool fail-closed, dedupe metrics",
+        "integrated": "session/update text chunks to Cabinet transcript, tool fail-closed, silent dedupe",
+        "different": true
+      },
+      {
+        "field": "finalCompletion",
+        "standalone": "prompt result plus 25 ms notification drain and non-empty output assertion",
+        "integrated": "prompt result plus 25 ms notification drain and non-empty output assertion",
+        "different": false
+      },
+      {
+        "field": "cancellation",
+        "standalone": "session/cancel on prompt deadline with metric",
+        "integrated": "session/cancel on prompt deadline without metric",
+        "different": true
+      },
+      {
+        "field": "shutdown",
+        "standalone": "explicit stop/restart",
+        "integrated": "error stop, explicit pool shutdown, or idle stop",
+        "different": true
+      }
+    ],
+    "timeouts": [
+      {
+        "field": "CabinetHttpRoute",
+        "standaloneMs": null,
+        "integratedMs": null,
+        "different": false,
+        "note": "The POST returns after scheduling; it did not produce 124."
+      },
+      {
+        "field": "conversationRunnerInitialTurn",
+        "standaloneMs": null,
+        "integratedMs": 900000,
+        "different": true,
+        "note": "Not reached as the failing deadline."
+      },
+      {
+        "field": "adapterPrompt",
+        "standaloneMs": 120000,
+        "integratedMs": 900000,
+        "different": true
+      },
+      {
+        "field": "acpInitialization",
+        "standaloneMs": 120000,
+        "integratedMs": 3000,
+        "different": true,
+        "measuredProducer": true
+      },
+      {
+        "field": "sessionCreateLoad",
+        "standaloneMs": "SDK request without a separate wrapper deadline",
+        "integratedMs": "SDK request without a separate wrapper deadline",
+        "different": false
+      },
+      {
+        "field": "providerModel",
+        "standaloneMs": "inside prompt deadline",
+        "integratedMs": "inside prompt deadline",
+        "different": false,
+        "note": "No model request occurred in the diagnostic."
+      },
+      {
+        "field": "childProcess",
+        "standaloneMs": null,
+        "integratedMs": null,
+        "different": false
+      },
+      {
+        "field": "testHarnessCompletionPoll",
+        "standaloneMs": null,
+        "integratedMs": 180000,
+        "different": true,
+        "note": "The earlier authoritative harness observed the adapter's 124 before its own poll deadline."
+      },
+      {
+        "field": "shellOrCoreutilsTimeout",
+        "standalone": false,
+        "integrated": false,
+        "different": false
+      }
+    ],
+    "persistence": [
+      {
+        "field": "CabinetConversationIdentity",
+        "standalone": "not applicable",
+        "integrated": "Cabinet-generated conversation id persisted in isolated data",
+        "different": true
+      },
+      {
+        "field": "nativeHermesSessionIdentity",
+        "standalone": "caller-held session id",
+        "integrated": "ACP session id returned as adapter session id and persisted as resumeId",
+        "different": true
+      },
+      {
+        "field": "serverOwnedMapping",
+        "standalone": "one probe instance owns one active connection",
+        "integrated": "module map from native session id to persistent client",
+        "different": true
+      },
+      {
+        "field": "reloadPath",
+        "standalone": "explicit loadSession",
+        "integrated": "prepareSession loads a supplied id only when not already loaded",
+        "different": true
+      },
+      {
+        "field": "restartLoadPath",
+        "standalone": "stop, start, load",
+        "integrated": "new Cabinet process receives persisted resumeId, starts a client, then session/load",
+        "different": true,
+        "note": "Not exercised because initialization failed on the first turn."
+      }
+    ]
+  },
+  "safety": {
+    "productionPort4000Touched": false,
+    "canonicalCabinetDataTouched": false,
+    "liveHermesCheckoutOrVenvModified": false,
+    "credentialsModified": false,
+    "toolsEnabled": false,
+    "mcpEnabled": false,
+    "externalHumanCommunications": 0,
+    "productionDeploys": 0
+  }
+}
