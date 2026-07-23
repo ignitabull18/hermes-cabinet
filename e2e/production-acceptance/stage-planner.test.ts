@@ -5,6 +5,7 @@ import type { AcceptanceCheck } from "./contracts";
 import {
   dependencyStatus,
   independentStagesAfterFailure,
+  integrationDiffAllowed,
   summarizeRouteInventory,
   type AcceptanceStage,
 } from "./stage-planner";
@@ -15,6 +16,12 @@ const failedConversation: AcceptanceCheck = {
   status: "failed",
   summary: "Deliberate fixture failure.",
 };
+
+test("integration application diff is allowed only on the authorized branch with the explicit flag", () => {
+  assert.equal(integrationDiffAllowed("fix/acp-production-parity", "1"), true);
+  assert.equal(integrationDiffAllowed("fix/acp-production-parity", undefined), false);
+  assert.equal(integrationDiffAllowed("main", "1"), false);
+});
 
 test("conversation-dependent stages are BLOCKED after a primary conversation failure", () => {
   assert.deepEqual(

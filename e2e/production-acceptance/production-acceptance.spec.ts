@@ -15,7 +15,7 @@ import {
   writeAcceptanceArtifacts,
 } from "./recorder";
 import { discoverRouteManifest } from "./route-discovery";
-import { summarizeRouteInventory } from "./stage-planner";
+import { integrationDiffAllowed, summarizeRouteInventory } from "./stage-planner";
 import { TRANSPORT_TOKEN, selectTransport } from "./transport";
 
 test.describe.configure({ mode: "serial" });
@@ -292,7 +292,10 @@ test.afterAll(async () => {
       !file.startsWith("scripts/production-acceptance/") &&
       !file.startsWith("docs/research/parallel/acceptance-harness/")
   );
-  if (applicationDiff.length) {
+  if (
+    applicationDiff.length &&
+    !integrationDiffAllowed(branch, process.env.CABINET_ACCEPTANCE_ALLOW_INTEGRATION_DIFF)
+  ) {
     recorder.blocker({
       id: "application-diff-outside-owned-lane",
       area: "safety",

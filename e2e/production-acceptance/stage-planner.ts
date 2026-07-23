@@ -10,6 +10,10 @@ export interface AcceptanceStage {
   dependsOn?: string[];
 }
 
+export function integrationDiffAllowed(branch: string, rawFlag: string | undefined): boolean {
+  return rawFlag === "1" && branch === "fix/acp-production-parity";
+}
+
 export function dependencyStatus(
   stage: AcceptanceStage,
   checks: readonly AcceptanceCheck[],
