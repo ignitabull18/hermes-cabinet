@@ -1,0 +1,23 @@
+{
+  "stream": "tui-gateway",
+  "status": "blocked",
+  "branch": "research/tui-gateway-jsonrpc-transport",
+  "commit": null,
+  "merge_candidate": false,
+  "tests": {
+    "unit_and_socket_fixture": {
+      "passed": 8,
+      "failed": 0,
+      "command": "TUI_GATEWAY_FIXTURE_E2E=1 <hermes-venv-python> -m unittest discover -s experiments/transports/tui-gateway/tests -v"
+    },
+    "python_compile": "passed",
+    "live_two_turn_acceptance": "not_run_live_ready"
+  },
+  "blockers": [
+    "Serialized real-model two-turn acceptance is pending",
+    "Installed TUI gateway has no supported explicit empty-toolset setting",
+    "Gateway lifecycle is not exposed in the TUI JSON-RPC namespace"
+  ],
+  "recommendation": "Prefer TUI Gateway WebSocket JSON-RPC as the leading Cabinet runtime candidate if serialized live acceptance passes and Hermes gains a supported explicit no-tools contract; keep gateway lifecycle separately supervised.",
+  "production_touched": false
+}
