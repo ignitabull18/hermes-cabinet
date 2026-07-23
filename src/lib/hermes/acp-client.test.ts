@@ -226,6 +226,7 @@ test("ACP reports the exact pre-dispatch initialization timeout owner", async ()
   const fixture = await fixtureExecutable(`
 setTimeout(() => {}, 5_000);
 `);
+  const trace: Array<{ stage: string; elapsedMs: number; deadlineMs?: number }> = [];
   try {
     await assert.rejects(
       runHermesAcpTurn({
@@ -239,12 +240,20 @@ setTimeout(() => {}, 5_000);
         cwd: fixture.cwd,
         prompt: "must not dispatch",
         timeoutMs: 500,
+        onTrace: (event) => { trace.push(event); },
       }),
       (error: unknown) => error instanceof HermesAcpError
         && error.kind === "timeout"
         && error.stage === "initialization"
         && error.promptDispatched === false,
     );
+    assert.equal(
+      trace.find((event) => event.stage === "acp_initialize_started")?.deadlineMs,
+      20,
+    );
+    assert.ok(trace.some((event) => event.stage === "shutdown"));
+    assert.ok(trace.every((event, index) =>
+      index === 0 || event.elapsedMs >= trace[index - 1].elapsedMs));
   } finally {
     await fs.rm(fixture.cwd, { recursive: true, force: true });
   }

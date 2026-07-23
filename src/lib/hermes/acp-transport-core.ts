@@ -286,7 +286,8 @@ export class HermesAcpTransportCore {
         trace,
       });
     } catch (error) {
-      await this.shutdown(input.onTrace);
+      trace("shutdown", this.deadlines.shutdownMs);
+      await this.shutdown();
       throw this.normalizeError(error);
     }
   }
@@ -704,17 +705,15 @@ export class HermesAcpTransportCore {
     return new TransformStream<Uint8Array, Uint8Array>({
       transform: (chunk, controller) => {
         buffer += decoder.decode(chunk, { stream: true });
-        if (Buffer.byteLength(buffer, "utf8") > MAX_FRAME_BYTES) {
-          this.protocolParseErrors += 1;
-          controller.error(new HermesAcpError("protocol", boundedError("protocol")));
-          return;
-        }
         let newline = buffer.indexOf("\n");
         while (newline >= 0) {
           const line = buffer.slice(0, newline).trim();
           buffer = buffer.slice(newline + 1);
           if (line) {
             try {
+              if (Buffer.byteLength(line, "utf8") > MAX_FRAME_BYTES) {
+                throw new Error("frame exceeds bound");
+              }
               const value: unknown = JSON.parse(line);
               if (!value || typeof value !== "object" || Array.isArray(value)) {
                 throw new Error("frame is not an object");
@@ -726,6 +725,11 @@ export class HermesAcpTransportCore {
             }
           }
           newline = buffer.indexOf("\n");
+        }
+        if (Buffer.byteLength(buffer, "utf8") > MAX_FRAME_BYTES) {
+          this.protocolParseErrors += 1;
+          controller.error(new HermesAcpError("protocol", boundedError("protocol")));
+          return;
         }
         controller.enqueue(chunk);
       },
