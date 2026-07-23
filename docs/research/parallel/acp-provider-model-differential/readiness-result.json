@@ -1,0 +1,31 @@
+{
+  "contract": "cabinet.acp.provider-model-differential",
+  "schemaVersion": 1,
+  "modelRequests": 0,
+  "providerCompletions": 0,
+  "promptDispatches": 0,
+  "passingStandalone": {
+    "blockedReason": null,
+    "configSource": "explicit_hermes_home",
+    "credentialState": "present",
+    "endpointClass": "provider",
+    "fallbackModels": [],
+    "model": "glm-5.2",
+    "modelSource": "profile",
+    "profile": "operator-os",
+    "provider": "ollama-cloud",
+    "ready": true
+  },
+  "failingIntegrated": {
+    "blockedReason": "effective_provider_or_model_unresolved",
+    "configSource": "missing",
+    "credentialState": "present",
+    "endpointClass": "provider",
+    "fallbackModels": [],
+    "model": "",
+    "modelSource": "unresolved",
+    "profile": "operator-os",
+    "provider": "ollama-cloud",
+    "ready": false
+  }
+}
