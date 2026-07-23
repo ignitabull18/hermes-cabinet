@@ -57,8 +57,49 @@ export interface BrowserIssue {
   expectedUnavailableProjection?: boolean;
 }
 
-export interface AcceptanceResult {
+export interface ConversationTurnDiagnostic {
+  identity: string;
+  sequence: number;
+  role: "user" | "agent";
+  lifecycleState: "pending" | "completed" | "failed";
+}
+
+export interface ConversationCheckpointEvidence {
+  checkpoint: "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H";
+  recordedAt: string;
+  eventType: string;
+  conversationIdentity: string | null;
+  nativeSessionIdentity: string | null;
+  requestIdentity: "initial" | "follow-up" | null;
+  turns: ConversationTurnDiagnostic[];
+  durableStoreCounts: {
+    user: number;
+    assistant: number;
+    completedAssistant: number;
+    total: number;
+    duplicateTurnIdentities: number;
+  } | null;
+  inMemoryCounts: {
+    user: number;
+    assistant: number;
+    completedAssistant: number;
+    total: number;
+  } | null;
+  pendingRequiredWrites: number | null;
+}
+
+export interface ConversationPersistenceEvidence {
   schemaVersion: 1;
+  transport: string;
+  checkpoints: ConversationCheckpointEvidence[];
+  nativeSessionIdentityStable: boolean | null;
+  exactFinalCardinality: boolean | null;
+  secondRestartCompleted: boolean;
+  unavailableMeasurements: string[];
+}
+
+export interface AcceptanceResult {
+  schemaVersion: 2;
   generatedAt: string;
   verdict: "ACCEPTED" | "NOT_ACCEPTED";
   stream: "acceptance-harness";
@@ -73,6 +114,7 @@ export interface AcceptanceResult {
     productionTouched: false;
     liveModelMessagesSent: number;
     transport: string;
+    skillsMode: "fixture" | "production";
     browserPath: string;
   };
   routes: RouteChecklistEntry[];
@@ -84,6 +126,7 @@ export interface AcceptanceResult {
   blockers: AcceptanceBlocker[];
   network: NetworkSummary;
   browserIssues: BrowserIssue[];
+  conversationPersistence: ConversationPersistenceEvidence | null;
   screenshots: ScreenshotEntry[];
   scans: {
     secretIndicators: string[];
