@@ -687,6 +687,122 @@ export async function startConversationRun(
       }
     : baseAdapterConfig;
 
+  if (resolvedAdapterType === "hermes_runtime") {
+    const adapter = agentAdapterRegistry.get(resolvedAdapterType);
+    if (!adapter?.execute) {
+      await finalizeConversation(meta.id, {
+        status: "failed",
+        output: "Hermes execution is unavailable.",
+        exitCode: 1,
+        errorKind: "unknown",
+        errorHint: "Hermes execution is unavailable.",
+      });
+      return meta;
+    }
+
+    void (async () => {
+      const chunks: string[] = [];
+      try {
+        const result = await adapter.execute!({
+          runId: randomUUID(),
+          adapterType: adapter.type,
+          config: spawnAdapterConfig || {},
+          prompt: finalPrompt,
+          cwd: input.cwd || (input.cabinetPath ? path.join(DATA_DIR, input.cabinetPath) : DATA_DIR),
+          timeoutMs: (input.timeoutSeconds ?? 900) * 1_000,
+          sessionId: null,
+          sessionParams: null,
+          onLog: async (stream, chunk) => {
+            if (stream !== "stdout" || !chunk) return;
+            chunks.push(chunk);
+            await appendConversationTranscript(meta.id, chunk, meta.cabinetPath);
+            publishConversationEvent({
+              type: "task.updated",
+              taskId: meta.id,
+              cabinetPath: meta.cabinetPath,
+              payload: { streaming: true },
+            });
+          },
+        });
+        const output = result.output?.trim() || chunks.join("").trim();
+        const failed = result.exitCode !== 0 || !!result.errorMessage || result.timedOut;
+        const classified = failed && adapter.classifyError
+          ? adapter.classifyError(result.errorMessage || "", result.exitCode ?? null)
+          : null;
+        let completedMeta = await finalizeConversation(meta.id, {
+          status: failed ? "failed" : "completed",
+          output: output || result.errorMessage || "Hermes returned no response.",
+          exitCode: failed ? result.exitCode ?? 1 : 0,
+          errorKind: classified?.kind,
+          errorHint: classified?.hint,
+          errorRetryAfterSec: classified?.retryAfterSec,
+        }, meta.cabinetPath);
+
+        if (!failed && (result.sessionId || result.sessionParams)) {
+          const codecBlob = adapter.sessionCodec && result.sessionParams
+            ? adapter.sessionCodec.serialize(result.sessionParams)
+            : null;
+          await writeSession(meta.id, {
+            kind: adapter.type,
+            resumeId: result.sessionId ?? undefined,
+            alive: !result.clearSession,
+            lastUsedAt: new Date().toISOString(),
+            codecBlob,
+            displayId: adapter.sessionCodec?.getDisplayId?.(result.sessionParams ?? {})
+              || result.sessionDisplayId
+              || undefined,
+          }, meta.cabinetPath);
+          if (completedMeta && result.sessionId) {
+            completedMeta = {
+              ...completedMeta,
+              hermes: {
+                profile: typeof result.sessionParams?.profile === "string"
+                  ? result.sessionParams.profile
+                  : process.env.CABINET_HERMES_PROFILE || "",
+                sessionId: result.sessionId,
+                runId: meta.id,
+                eventSequence: 0,
+                status: "completed",
+                artifactPaths: completedMeta.artifactPaths,
+                updatedAt: new Date().toISOString(),
+              },
+            };
+            await writeConversationMeta(completedMeta);
+          }
+        }
+
+        emitTelemetry(failed ? "agent.run.failed" : "agent.run.completed", {
+          provider: resolvedProviderId,
+          adapterType: resolvedAdapterType,
+        });
+        if (completedMeta && input.onComplete) {
+          await input.onComplete({
+            meta: completedMeta,
+            output,
+            status: failed ? "failed" : "completed",
+          });
+        }
+      } catch {
+        const completedMeta = await finalizeConversation(meta.id, {
+          status: "failed",
+          output: "Hermes execution failed.",
+          exitCode: 1,
+          errorKind: "unknown",
+          errorHint: "Hermes execution failed.",
+        }, meta.cabinetPath);
+        if (completedMeta && input.onComplete) {
+          await input.onComplete({ meta: completedMeta, output: "", status: "failed" });
+        }
+      }
+    })();
+    emitTelemetry("agent.run.started", {
+      provider: resolvedProviderId,
+      adapterType: resolvedAdapterType,
+    });
+    emitTelemetry("task.created", { source: input.trigger });
+    return meta;
+  }
+
   try {
     await createDaemonSession({
       id: meta.id,
@@ -1799,6 +1915,7 @@ export async function continueConversationRun(
   };
 
   const useDaemon =
+    adapter.type !== "hermes_runtime" &&
     process.env.CABINET_TASK_RUNNER !== "inprocess" &&
     // Next.js server, or the daemon itself (CABINET_DAEMON_SELF, set at daemon
     // boot). The daemon routes its own continues through its session machinery

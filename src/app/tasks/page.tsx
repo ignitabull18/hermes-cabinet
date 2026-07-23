@@ -1,4 +1,5 @@
 import { TasksBoard } from "@/components/tasks/board";
+import { TaskRailProvider } from "@/components/tasks/rail/task-rail-context";
 
 export const dynamic = "force-dynamic";
 
@@ -15,8 +16,10 @@ export default async function TasksIndexPage({
 }) {
   const params = (await searchParams) ?? {};
   return (
-    <div className="h-screen">
-      <TasksBoard cabinetPath={params.cabinet ?? "."} standalone />
-    </div>
+    <TaskRailProvider>
+      <div className="h-screen">
+        <TasksBoard cabinetPath={params.cabinet ?? "."} standalone />
+      </div>
+    </TaskRailProvider>
   );
 }

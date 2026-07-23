@@ -24,6 +24,23 @@ import { PROJECT_ROOT } from "./runtime-config";
 const CABINET_ENV_FILENAME = ".cabinet.env";
 
 export function cabinetEnvPath(): string {
+  const explicit = process.env.CABINET_ENV_FILE?.trim();
+  if (explicit) {
+    if (!path.isAbsolute(explicit)) {
+      throw new Error("CABINET_ENV_FILE must be an absolute path");
+    }
+    const info = fs.lstatSync(explicit);
+    if (!info.isFile() || info.isSymbolicLink()) {
+      throw new Error("CABINET_ENV_FILE must name a regular file, not a symlink");
+    }
+    if (typeof process.getuid === "function" && info.uid !== process.getuid()) {
+      throw new Error("CABINET_ENV_FILE must be owned by the Cabinet user");
+    }
+    if ((info.mode & 0o077) !== 0) {
+      throw new Error("CABINET_ENV_FILE must not grant group or other access");
+    }
+    return explicit;
+  }
   return path.join(PROJECT_ROOT, CABINET_ENV_FILENAME);
 }
 

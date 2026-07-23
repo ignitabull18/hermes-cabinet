@@ -9,7 +9,7 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => { await cabinet?.close(); });
 
-test("management workspace projects Hermes-owned state and confirms writes", async ({ page }) => {
+test("management workspace projects Hermes-owned state and limits writes to supported controls", async ({ page }) => {
   const posts: Record<string, unknown>[] = [];
   let desktopDiagnostic: Record<string, unknown> | null = null;
   await page.route("**/api/hermes/desktop", async (route) => {
@@ -52,27 +52,23 @@ test("management workspace projects Hermes-owned state and confirms writes", asy
   await expect(page.getByText("operator-os:supermemory")).toBeVisible();
   await expect(page.getByText("Cron calendar and run controls")).toBeVisible();
   await expect(page.getByText("Capability lifecycle and evidence")).toBeVisible();
-  await page.getByRole("button", { name: "Disable" }).first().click();
+  await expect(page.getByText("Enable and disable are unsupported because Hermes exposes no fixed native noninteractive mutation.")).toBeVisible();
+  await expect(page.getByPlaceholder("Hermes skill hub identifier, for example official/gifs/gif-search")).toHaveCount(0);
+  await page.getByText("MCP · files", { exact: true }).locator("..").locator("..").getByRole("button", { name: "Disable" }).click();
   await expect.poll(() => posts.length).toBe(1);
   expect(posts[0]?.confirmed).toBe(true);
-  expect(posts[0]?.action).toBe("skill.toggle");
+  expect(posts[0]?.action).toBe("mcp.toggle");
   expect(typeof posts[0]?.idempotencyKey).toBe("string");
-  expect(String(posts[0]?.reason)).toContain("Hermes skill research");
-
-  await page.getByPlaceholder("Hermes skill hub identifier, for example official/gifs/gif-search").fill("official/gifs/gif-search");
-  await page.getByRole("button", { name: "Install from hub" }).click();
-  await expect.poll(() => posts.length).toBe(2);
-  expect(posts[1]?.action).toBe("skill.install");
-  expect(posts[1]?.payload).toEqual({ identifier: "official/gifs/gif-search" });
+  expect(String(posts[0]?.reason)).toContain("Hermes MCP server files");
 
   await page.getByPlaceholder("Job name").fill("Daily intake");
   await page.getByPlaceholder("Schedule, for example every day at 9am").fill("every day at 9am");
   await page.getByPlaceholder("Hermes job prompt").fill("Review new business intake");
   await page.getByPlaceholder("Attached skills, comma separated").fill("research, summarize");
   await page.getByRole("button", { name: "Create Hermes job" }).click();
-  await expect.poll(() => posts.length).toBe(3);
-  expect(posts[2]?.action).toBe("job.create");
-  expect(posts[2]?.payload).toEqual({
+  await expect.poll(() => posts.length).toBe(2);
+  expect(posts[1]?.action).toBe("job.create");
+  expect(posts[1]?.payload).toEqual({
     name: "Daily intake",
     prompt: "Review new business intake",
     schedule: "every day at 9am",

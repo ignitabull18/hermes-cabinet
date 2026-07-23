@@ -69,11 +69,11 @@ export function CompactOrgChart({
   }
 
   return (
-    <div className="overflow-x-auto pb-2">
+    <div className="max-w-full overflow-x-auto pb-2">
       {allAgents.length === 0 ? (
         <p className="py-8 text-sm text-muted-foreground">{t("cabinetsExtras:noAgentsConfigured")}</p>
       ) : (
-        <div className="min-w-[720px] px-2">
+        <div className="min-w-0 px-1 sm:min-w-[720px] sm:px-2">
           <div className="flex justify-center">
             <div
               className="inline-flex items-center gap-2 rounded-xl border px-4 py-2.5"
@@ -93,12 +93,9 @@ export function CompactOrgChart({
             <div key={`row-${rowIndex}`}>
               <VerticalConnector height={20} />
               <HorizontalBranch count={row.length} />
-              <div
-                className="grid gap-4"
-                style={{ gridTemplateColumns: `repeat(${row.length}, minmax(0, 1fr))` }}
-              >
+              <div className="flex flex-wrap justify-center gap-4">
                 {row.map((group) => (
-                  <div key={group.dept} className="flex flex-col items-center">
+                  <div key={group.dept} className="flex min-w-0 flex-[1_1_180px] flex-col items-center sm:max-w-[320px]">
                     <div
                       className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5"
                       style={{

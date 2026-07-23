@@ -1,5 +1,6 @@
 import { assessHermesLiveReadiness, type HermesReadinessSourceState } from "./live-readonly-readiness";
 import { validateHermesUpstreamUrl } from "./upstream-url";
+import path from "node:path";
 
 export type HermesServerConfig = {
   apiBaseUrl: string;
@@ -31,6 +32,13 @@ export type HermesRunServerConfig = Pick<
 
 export type HermesSkillsServerConfig = {
   profile: string | null;
+};
+
+export type HermesExecutionServerConfig = {
+  cliPath: string;
+  profile: string;
+  timeoutMs: number;
+  noTools: boolean;
 };
 
 /** Consequential Hermes runtime interventions are opt-in and server-only. */
@@ -73,6 +81,16 @@ function required(name: string, value: string | undefined): string {
 function optional(value: string | undefined): string | null {
   const normalized = value?.trim();
   return normalized || null;
+}
+
+function strictBoolean(name: string, value: string | undefined): boolean {
+  if (!value?.trim()) return false;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "true") return true;
+  if (normalized === "false") return false;
+  throw new HermesConfigurationError(
+    `Invalid server configuration: ${name} must be true or false`,
+  );
 }
 
 function baseUrl(name: string, value: string | undefined): string {
@@ -163,6 +181,36 @@ export function readHermesSkillsServerConfig(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): HermesSkillsServerConfig {
   return { profile: optional(env.CABINET_HERMES_PROFILE) };
+}
+
+/** Native ACP execution uses only an approved absolute CLI path and profile. */
+export function readHermesExecutionServerConfig(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): HermesExecutionServerConfig {
+  const cliPath = required(
+    "CABINET_HERMES_EXECUTION_CLI_PATH",
+    env.CABINET_HERMES_EXECUTION_CLI_PATH,
+  );
+  if (!path.isAbsolute(cliPath)) {
+    throw new HermesConfigurationError(
+      "Invalid server configuration: CABINET_HERMES_EXECUTION_CLI_PATH must be absolute",
+    );
+  }
+  const profile = required("CABINET_HERMES_PROFILE", env.CABINET_HERMES_PROFILE);
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(profile)) {
+    throw new HermesConfigurationError(
+      "Invalid server configuration: CABINET_HERMES_PROFILE is not a valid profile name",
+    );
+  }
+  return {
+    cliPath,
+    profile,
+    timeoutMs: timeout(env.CABINET_HERMES_TIMEOUT_MS),
+    noTools: strictBoolean(
+      "CABINET_HERMES_EXECUTION_NO_TOOLS",
+      env.CABINET_HERMES_EXECUTION_NO_TOOLS,
+    ),
+  };
 }
 
 /**

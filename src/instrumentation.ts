@@ -24,6 +24,10 @@ export async function register(): Promise<void> {
     loadCabinetEnv();
   } catch (err) {
     console.error("instrumentation: loadCabinetEnv failed", err);
+    // A launchd-supplied path is an explicit security boundary. Continuing
+    // would let ensureAuthSalt create a different secret store in the runtime
+    // checkout, so supervised startup must fail closed instead.
+    if (process.env.CABINET_ENV_FILE?.trim()) throw err;
   }
   // Generate a per-install auth salt on first run (persisted to .cabinet.env)
   // so the kb-auth token is PBKDF2(password, per-install-salt). Best-effort:
