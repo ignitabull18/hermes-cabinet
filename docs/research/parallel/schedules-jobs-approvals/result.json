@@ -1,0 +1,159 @@
+{
+  "stream": "schedules-jobs-approvals",
+  "status": "complete",
+  "cabinet_base": "3c3193a44a34dbe7b047ddd256e3d1aec31e1097",
+  "installed_hermes": {
+    "commit": "55759cb2737cd3870f9de4693f66fa38eaf0dd2b",
+    "version": "0.19.0",
+    "release_date": "2026.7.20"
+  },
+  "production_touched": false,
+  "live_mutations_performed": [],
+  "interfaces": {
+    "desktop_management": {
+      "schedules": {
+        "global_enumeration": true,
+        "known_id": true,
+        "actions": [
+          "create",
+          "update",
+          "pause",
+          "resume",
+          "trigger",
+          "delete"
+        ]
+      },
+      "cron_conversation_sessions": "known_job_only",
+      "auth_note": "loopback SPA session token is ephemeral; not a durable Cabinet service boundary"
+    },
+    "agent_api": {
+      "schedules": {
+        "enumeration": "profile_local",
+        "known_id": true,
+        "actions": [
+          "create",
+          "update",
+          "pause",
+          "resume",
+          "run",
+          "delete"
+        ]
+      },
+      "live_runs": {
+        "global_enumeration": false,
+        "known_id": true,
+        "event_stream": true,
+        "approval": "session_fifo",
+        "stop": "cooperative",
+        "retry": false,
+        "resume": false,
+        "stream_ttl_seconds": 300,
+        "terminal_status_ttl_seconds": 3600
+      }
+    },
+    "tui_gateway": {
+      "approvals": {
+        "global_enumeration": false,
+        "exact_request_targeting": false,
+        "mutation_semantics": "oldest_or_all_in_session"
+      },
+      "clarifications": {
+        "global_enumeration": false,
+        "exact_request_targeting": true,
+        "identifier": "request_id"
+      },
+      "processes": {
+        "enumeration": "session_scoped",
+        "exact_kill": "session_owner_checked",
+        "global_kill_all": "unsafe_for_cabinet"
+      }
+    },
+    "cli_store": {
+      "schedules": "profile_local",
+      "execution_history": {
+        "enumeration": "profile_local_global_or_known_job",
+        "states": [
+          "claimed",
+          "running",
+          "completed",
+          "failed",
+          "unknown"
+        ],
+        "retry_queue": false
+      }
+    },
+    "kanban_plugin": {
+      "separate_subsystem": true,
+      "active_worker_enumeration": true,
+      "termination_in_scope": false
+    }
+  },
+  "management_priority": [
+    {
+      "priority": "P0",
+      "deliverable": "normalized read-only inventory with explicit plane, profile, durability, scope, and redaction"
+    },
+    {
+      "priority": "P0",
+      "deliverable": "shared governance coordinator with fingerprints, typed confirmation, idempotency, stale-state rejection, one-dispatch receipts, verification, and outcome_unknown"
+    },
+    {
+      "priority": "P1",
+      "deliverable": "governed schedule create, update, pause, resume, delete, and verifiable trigger"
+    },
+    {
+      "priority": "P1",
+      "deliverable": "upstream immutable approval request IDs and a durable authenticated cross-profile schedule boundary"
+    },
+    {
+      "priority": "P2",
+      "deliverable": "exact clarification response and separately authorized run cancellation with terminal-state verification"
+    }
+  ],
+  "blocked_actions": [
+    {
+      "action": "resolve_approval",
+      "reason": "upstream only targets the oldest or all pending approvals in a session"
+    },
+    {
+      "action": "retry_run",
+      "reason": "no native Agent API route"
+    },
+    {
+      "action": "resume_run",
+      "reason": "no native Agent API route"
+    },
+    {
+      "action": "cancel_run",
+      "reason": "governed run termination excluded from this stream"
+    }
+  ],
+  "content_handling": {
+    "excluded_by_default": [
+      "prompt",
+      "command",
+      "answer",
+      "queue_contents",
+      "output",
+      "error",
+      "hermes_home",
+      "pid",
+      "process_id"
+    ],
+    "governance_record": "IDs, state, timestamps, provenance, and digests only"
+  },
+  "prototype": {
+    "path": "experiments/management/schedules-jobs-approvals",
+    "test_command": "npm test",
+    "tests_passed": 13,
+    "tests_failed": 0,
+    "dispatches_to_hermes": 0
+  },
+  "common_deliverables": [
+    "plane-profile-native-id resource identity",
+    "adapter capability declaration",
+    "metadata-only list projections",
+    "immutable governance receipt schema",
+    "first-class unsupported capability results"
+  ]
+}

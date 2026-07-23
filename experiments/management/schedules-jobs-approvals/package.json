@@ -1,0 +1,8 @@
+{
+  "name": "hermes-schedules-jobs-approvals-governance-prototype",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test governance.test.js"
+  }
+}
