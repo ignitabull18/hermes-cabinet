@@ -15,6 +15,7 @@ import {
   writeAcceptanceArtifacts,
 } from "./recorder";
 import { discoverRouteManifest } from "./route-discovery";
+import { summarizeRouteInventory } from "./stage-planner";
 import { TRANSPORT_TOKEN, selectTransport } from "./transport";
 
 test.describe.configure({ mode: "serial" });
@@ -951,22 +952,24 @@ test("authoritative isolated production acceptance", async ({ page }) => {
     });
   }
 
-  const incompleteRoutes = routes.filter((entry) => entry.status !== "passed");
+  const routeInventory = summarizeRouteInventory(routes);
   addCheck(
     "complete-route-inventory",
     "routes",
-    incompleteRoutes.length === 0 ? "passed" : "failed",
-    incompleteRoutes.length === 0
+    routeInventory.status,
+    routeInventory.incomplete.length === 0
       ? `Exercised all ${routes.length} discovered and required routes.`
-      : `${incompleteRoutes.length} route(s) were not accepted.`,
-    { incomplete: incompleteRoutes.map((entry) => entry.route) },
+      : routeInventory.independentlyIncomplete.length === 0
+        ? `${routeInventory.incomplete.length} conversation-dependent route(s) were blocked by their prerequisite.`
+        : `${routeInventory.independentlyIncomplete.length} independent route(s) failed or were not run.`,
+    { incomplete: routeInventory.incomplete.map((entry) => entry.route) },
   );
-  if (incompleteRoutes.length > 0) {
+  if (routeInventory.independentlyIncomplete.length > 0) {
     recorder.blocker({
       id: "incomplete-route-inventory",
       area: "routes",
-      summary: `${incompleteRoutes.length} discovered or required route(s) were not accepted.`,
-      reproduction: incompleteRoutes.map((entry) => `Open ${entry.route}.`),
+      summary: `${routeInventory.independentlyIncomplete.length} independent discovered or required route(s) failed or were not run.`,
+      reproduction: routeInventory.independentlyIncomplete.map((entry) => `Open ${entry.route}.`),
       ownerHint: "acceptance harness",
     });
   }

@@ -5,6 +5,7 @@ import type { AcceptanceCheck } from "./contracts";
 import {
   dependencyStatus,
   independentStagesAfterFailure,
+  summarizeRouteInventory,
   type AcceptanceStage,
 } from "./stage-planner";
 
@@ -62,5 +63,71 @@ test("independent routes continue after a conversation failure", () => {
   assert.deepEqual(independentStagesAfterFailure(stages, "live-two-turn-contract"), [
     "settings-route",
     "mobile-room",
+  ]);
+});
+
+test("route inventory remains BLOCKED when only conversation-dependent routes are blocked", () => {
+  const summary = summarizeRouteInventory([
+    {
+      route: "/settings",
+      source: "fixture",
+      kind: "static",
+      discovered: true,
+      exercised: true,
+      status: "passed",
+    },
+    {
+      route: "/agents/conversations/:id",
+      source: "required",
+      kind: "dynamic",
+      discovered: true,
+      exercised: false,
+      status: "blocked",
+    },
+  ]);
+  assert.equal(summary.status, "blocked");
+  assert.deepEqual(summary.incomplete.map((entry) => entry.route), [
+    "/agents/conversations/:id",
+  ]);
+  assert.deepEqual(summary.independentlyIncomplete, []);
+});
+
+test("route inventory reports independently failed and not-run routes", () => {
+  const failedSummary = summarizeRouteInventory([
+    {
+      route: "/settings",
+      source: "fixture",
+      kind: "static",
+      discovered: true,
+      exercised: true,
+      status: "failed",
+    },
+    {
+      route: "/tasks/:id",
+      source: "required",
+      kind: "dynamic",
+      discovered: true,
+      exercised: false,
+      status: "blocked",
+    },
+  ]);
+  assert.equal(failedSummary.status, "failed");
+  assert.deepEqual(failedSummary.independentlyIncomplete.map((entry) => entry.route), [
+    "/settings",
+  ]);
+
+  const notRunSummary = summarizeRouteInventory([
+    {
+      route: "/search",
+      source: "fixture",
+      kind: "static",
+      discovered: true,
+      exercised: false,
+      status: "not_run",
+    },
+  ]);
+  assert.equal(notRunSummary.status, "not_run");
+  assert.deepEqual(notRunSummary.independentlyIncomplete.map((entry) => entry.route), [
+    "/search",
   ]);
 });

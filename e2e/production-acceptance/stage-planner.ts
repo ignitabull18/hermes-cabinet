@@ -1,4 +1,8 @@
-import type { AcceptanceCheck, AcceptanceStatus } from "./contracts";
+import type {
+  AcceptanceCheck,
+  AcceptanceStatus,
+  RouteChecklistEntry,
+} from "./contracts";
 
 export interface AcceptanceStage {
   id: string;
@@ -36,4 +40,25 @@ export function independentStagesAfterFailure(
   return stages
     .filter((stage) => !stage.dependsOn?.includes(failedStageId))
     .map((stage) => stage.id);
+}
+
+export function summarizeRouteInventory(
+  routes: readonly RouteChecklistEntry[],
+): {
+  status: AcceptanceStatus;
+  incomplete: RouteChecklistEntry[];
+  independentlyIncomplete: RouteChecklistEntry[];
+} {
+  const incomplete = routes.filter((entry) => entry.status !== "passed");
+  const independentlyIncomplete = incomplete.filter(
+    (entry) => entry.status === "failed" || entry.status === "not_run",
+  );
+  const status: AcceptanceStatus = incomplete.some((entry) => entry.status === "failed")
+    ? "failed"
+    : incomplete.some((entry) => entry.status === "not_run")
+      ? "not_run"
+      : incomplete.some((entry) => entry.status === "blocked")
+        ? "blocked"
+        : "passed";
+  return { status, incomplete, independentlyIncomplete };
 }
