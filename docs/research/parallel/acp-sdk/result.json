@@ -2,7 +2,7 @@
   "stream": "acp-sdk",
   "status": "blocked",
   "branch": "research/persistent-acp-sdk-transport",
-  "commit": null,
+  "commit": "e905c2a531f2b3cd72e539824cdd62c779fd887b",
   "merge_candidate": false,
   "tests": {
     "typescript_build": "passed",
