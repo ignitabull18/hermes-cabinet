@@ -1,0 +1,22 @@
+{
+  "stream": "settings-profiles",
+  "status": "passed",
+  "branch": "research/hermes-settings-profiles-management",
+  "commit": null,
+  "merge_candidate": true,
+  "tests": {
+    "node --test experiments/management/settings-profiles/contract.test.mjs": {
+      "status": "passed",
+      "tests": 6,
+      "passed": 6,
+      "failed": 0
+    }
+  },
+  "blockers": [
+    "Hermes mutations have no revision preconditions, native idempotency keys, typed confirmation, or durable mutation receipts.",
+    "Profile create can partially succeed because optional post-create operations are best-effort and some work may be asynchronous.",
+    "Safe delete rollback requires an upstream opaque snapshot/restore contract and a lifecycle dry-run."
+  ],
+  "recommendation": "Ship sanitized reads and the persistent prepare/confirm/one-dispatch/reread governance substrate first; allowlist low-blast-radius settings next, and block profile deletion until Hermes provides revisioned dry-run and opaque restore contracts.",
+  "production_touched": false
+}
