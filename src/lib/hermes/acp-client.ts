@@ -5,7 +5,6 @@ import {
   HermesAcpTransportCore,
   type HermesAcpTraceEvent,
   type HermesAcpTurnResult,
-  validateHermesAcpExecutable,
 } from "./acp-transport-core";
 
 export {
