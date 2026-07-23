@@ -1,7 +1,7 @@
 {
   "stream": "acceptance-harness",
   "status": "blocked",
-  "branch": "test/acceptance-harness-final-resilience",
+  "branch": "fix/acp-production-parity",
   "commit": null,
   "merge_candidate": true,
   "tests": {
@@ -19,24 +19,22 @@
     "org-chart-dialog": "passed",
     "org-chart-bounds-and-close": "passed",
     "operator-mode": "passed",
-    "governed-skills": "passed",
+    "governed-skills": "failed",
     "hermes-operator-sections": "passed",
     "developer-diagnostics-48": "passed",
-    "fixture-two-turn-contract": "failed",
-    "live-two-turn-contract": "blocked",
+    "live-two-turn-contract": "failed",
     "conversation-direct-reload-persistence": "blocked",
     "restart-route-persistence": "passed",
     "launchd-child-restart": "passed",
     "history-navigation": "passed",
     "mobile-reduced-motion-overflow": "passed",
     "legacy-daemon-output-accounting": "passed",
-    "complete-route-inventory": "failed",
-    "console-health": "passed",
+    "complete-route-inventory": "blocked",
+    "console-health": "failed",
     "mutation-accounting": "passed"
   },
   "blockers": [
-    "Two-turn transport contract failed: Error: deliberate conversation failure",
-    "2 discovered or required route(s) were not accepted."
+    "Two-turn transport contract failed: Error: follow-up did not persist exactly two user and two assistant turns"
   ],
   "recommendation": "Resolve only the exact acceptance blockers and rerun.",
   "production_touched": false
