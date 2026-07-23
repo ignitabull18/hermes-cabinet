@@ -22,11 +22,11 @@ export function selectRelevantBrowserIssues(issues: BrowserIssue[]): BrowserIssu
   return issues.filter((issue) => {
     if (issue.severity !== "error" || issue.expectedUnavailableProjection) return false;
     if (
-      issue.source === "console" &&
-      issue.stage === "restart-route-persistence" &&
+      issue.expectedControlledRestart &&
       (
         issue.summary.includes("ERR_CONNECTION_REFUSED") ||
-        issue.summary.includes("ERR_INCOMPLETE_CHUNKED_ENCODING")
+        issue.summary.includes("ERR_INCOMPLETE_CHUNKED_ENCODING") ||
+        issue.summary.includes("ERR_CONNECTION_RESET")
       )
     ) {
       return false;

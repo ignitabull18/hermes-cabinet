@@ -74,7 +74,9 @@ test("failed cardinality still exports the complete diagnostic ledger", async ()
   };
   let postCount = 0;
   let restarts = 0;
-  let evidence: ConversationPersistenceEvidence | null = null;
+  const capture: { evidence: ConversationPersistenceEvidence | null } = {
+    evidence: null,
+  };
   globalThis.fetch = async (_input, init) => {
     if (init?.method === "POST") {
       postCount += 1;
@@ -96,7 +98,7 @@ test("failed cardinality still exports the complete diagnostic ledger", async ()
           },
         },
         (value) => {
-          evidence = value;
+          capture.evidence = value;
         },
       ),
       /exactly two user and two assistant turns/,
@@ -106,8 +108,11 @@ test("failed cardinality still exports the complete diagnostic ledger", async ()
   }
 
   assert.equal(restarts, 2);
+  const evidence = capture.evidence;
+  assert.ok(evidence);
   assert.equal(evidence?.checkpoints.length, 8);
   assert.equal(evidence?.checkpoints.at(-1)?.checkpoint, "H");
   assert.equal(evidence?.exactFinalCardinality, false);
+  assert.equal(evidence?.modelRequestCount, 2);
   assert.doesNotMatch(JSON.stringify(evidence), /hidden|private/);
 });

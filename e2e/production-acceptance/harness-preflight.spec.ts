@@ -11,11 +11,16 @@ test.setTimeout(90_000);
 let cabinet: IsolatedCabinet;
 
 test.beforeAll(async () => {
+  const expectedBase = execFileSync(
+    "git",
+    ["rev-parse", process.env.CABINET_ACCEPTANCE_BASE_REVISION ?? "origin/main"],
+    { encoding: "utf8" },
+  ).trim();
   expect(
-    execFileSync("git", ["merge-base", "HEAD", "origin/main"], {
+    execFileSync("git", ["merge-base", "HEAD", expectedBase], {
       encoding: "utf8",
     }).trim(),
-  ).toBe("6854d52eb6697c96d1355f1c7f4d443076d68602");
+  ).toBe(expectedBase);
   cabinet = await bootIsolatedCabinet(process.cwd());
 });
 
@@ -117,12 +122,25 @@ test("typed unavailable projections are attached but excluded from relevant erro
 
 test("controlled restart transport errors stay attributed without failing console health", async () => {
   const recorder = new AcceptanceRecorder();
-  recorder.stage("restart-route-persistence");
+  recorder.stage("live-two-turn-contract");
   recorder.browserIssue({
     source: "console",
     severity: "error",
     summary: "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+    expectedControlledRestart: true,
   });
   expect(recorder.browserIssues).toHaveLength(1);
   expect(recorder.relevantBrowserIssues()).toEqual([]);
+});
+
+test("uncontrolled transport errors remain relevant", async () => {
+  const recorder = new AcceptanceRecorder();
+  recorder.stage("live-two-turn-contract");
+  recorder.browserIssue({
+    source: "console",
+    severity: "error",
+    summary: "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+    expectedControlledRestart: false,
+  });
+  expect(recorder.relevantBrowserIssues()).toHaveLength(1);
 });

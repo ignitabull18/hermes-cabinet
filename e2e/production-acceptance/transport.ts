@@ -183,7 +183,9 @@ export class LiveCabinetAcpTransport implements AcceptanceTransport {
     let first: ConversationDetail | null = null;
     let finalDetail: ConversationDetail | null = null;
     let secondRestartCompleted = false;
+    let modelRequestCount = 0;
     try {
+      modelRequestCount += 1;
       const createdResponse = await fetch(`${cabinet.appUrl}/api/agents/conversations`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -214,6 +216,7 @@ export class LiveCabinetAcpTransport implements AcceptanceTransport {
         buildConversationCheckpoint("D", "first_restart_reloaded", afterRestart, null),
       );
 
+      modelRequestCount += 1;
       const continuedResponse = await fetch(
         `${cabinet.appUrl}/api/agents/conversations/${encodeURIComponent(conversationId)}/continue`,
         {
@@ -275,6 +278,7 @@ export class LiveCabinetAcpTransport implements AcceptanceTransport {
       onEvidence?.({
         schemaVersion: 1,
         transport: this.id,
+        modelRequestCount,
         checkpoints,
         nativeSessionIdentityStable:
           sessionIdentities.length > 0 ? new Set(sessionIdentities).size === 1 : null,

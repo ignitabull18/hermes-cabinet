@@ -136,22 +136,20 @@ test("concurrent Hermes continue requests claim one durable prompt and never exp
   let completed = await store.readConversationDetail(meta.id, undefined, {
     withTurns: true,
   });
-  for (
-    let index = 0;
-    index < 100 && completed?.meta.status !== "completed";
-    index += 1
-  ) {
+  for (let index = 0; index < 100; index += 1) {
     const completedAssistantCount =
       completed?.turns?.filter(
         (turn) => turn.role === "agent" && !turn.pending
       ).length ?? 0;
-    assert.equal(
-      completed?.meta.status === "completed" &&
-        (completedAssistantCount !== 2 ||
-          completed.session?.resumeId !== "native-session-stable"),
-      false,
-      "completed must remain hidden until assistant and native session durability"
-    );
+    if (completed?.meta.status === "completed") {
+      assert.equal(
+        completedAssistantCount === 2 &&
+          completed.session?.resumeId === "native-session-stable",
+        true,
+        "completed must remain hidden until assistant and native session durability"
+      );
+      break;
+    }
     await new Promise<void>((resolve) => setTimeout(resolve, 2));
     completed = await store.readConversationDetail(meta.id, undefined, {
       withTurns: true,

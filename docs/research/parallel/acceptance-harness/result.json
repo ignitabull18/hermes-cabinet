@@ -1,7 +1,7 @@
 {
   "stream": "acceptance-harness",
   "status": "blocked",
-  "branch": "test/acceptance-harness-final-resilience",
+  "branch": "fix/acp-restart-persistence-final",
   "commit": null,
   "merge_candidate": true,
   "tests": {
@@ -19,11 +19,10 @@
     "org-chart-dialog": "passed",
     "org-chart-bounds-and-close": "passed",
     "operator-mode": "passed",
-    "governed-skills": "passed",
+    "governed-skills": "failed",
     "hermes-operator-sections": "passed",
     "developer-diagnostics-48": "passed",
-    "fixture-two-turn-contract": "failed",
-    "live-two-turn-contract": "blocked",
+    "live-two-turn-contract": "failed",
     "conversation-direct-reload-persistence": "blocked",
     "restart-route-persistence": "passed",
     "launchd-child-restart": "passed",
@@ -31,12 +30,13 @@
     "mobile-reduced-motion-overflow": "passed",
     "legacy-daemon-output-accounting": "passed",
     "complete-route-inventory": "failed",
-    "console-health": "passed",
+    "console-health": "failed",
     "mutation-accounting": "passed"
   },
   "blockers": [
-    "Two-turn transport contract failed: Error: deliberate conversation failure",
-    "2 discovered or required route(s) were not accepted."
+    "Two-turn transport contract failed: Error: expect(received).toBe(expected) // Object.is equality Expected: \"CABINET_ACCEPTANCE_OK\" Received: \"API call failed after 3 retries: HTTP 404: model \\\"\\\" not found\"",
+    "2 discovered or required route(s) were not accepted.",
+    "Application or shared files differ from acceptance base 5e94de3e1c789279459c704d4a7f0fa61c747163."
   ],
   "recommendation": "Resolve only the exact acceptance blockers and rerun.",
   "production_touched": false

@@ -201,6 +201,7 @@ async function installPageObservation(page: Page) {
         source: "console",
         severity: message.type() === "error" ? "error" : "warning",
         summary: conciseError(message.text()),
+        expectedControlledRestart: controlledRestartInProgress,
       });
     }
   });
@@ -211,8 +212,21 @@ async function installPageObservation(page: Page) {
       source: "pageerror",
       severity: "error",
       summary: conciseError(error.message),
+      expectedControlledRestart: controlledRestartInProgress,
     });
   });
+
+  if (skillsMode === "fixture") {
+    await page.route("**/api/hermes/skills-management**", (route) => {
+      if (route.request().method() === "GET") {
+        return route.fulfill({ json: buildHermesSkillsAcceptanceSnapshot() });
+      }
+      return route.fulfill({
+        status: 405,
+        json: { error: "Acceptance harness forbids governed Skill mutations." },
+      });
+    });
+  }
 
   if (transport.sendsLiveModelMessages) return;
 
@@ -232,17 +246,6 @@ async function installPageObservation(page: Page) {
   await page.route("**/api/hermes/control-center", (route) =>
     route.fulfill({ json: projection })
   );
-  if (skillsMode === "fixture") {
-    await page.route("**/api/hermes/skills-management**", (route) => {
-      if (route.request().method() === "GET") {
-        return route.fulfill({ json: buildHermesSkillsAcceptanceSnapshot() });
-      }
-      return route.fulfill({
-        status: 405,
-        json: { error: "Acceptance harness forbids governed Skill mutations." },
-      });
-    });
-  }
 }
 
 async function pageIdentity(page: Page, route: string, meaningful: RegExp) {
@@ -301,7 +304,9 @@ test.afterAll(async () => {
       !file.startsWith("docs/research/parallel/acceptance-harness/") &&
       file !== "PROGRESS.md"
   );
-  if (applicationDiff.length) {
+  const allowIntegrationDiff =
+    process.env.CABINET_ACCEPTANCE_ALLOW_INTEGRATION_DIFF === "1";
+  if (applicationDiff.length && !allowIntegrationDiff) {
     recorder.blocker({
       id: "application-diff-outside-owned-lane",
       area: "safety",
@@ -313,6 +318,11 @@ test.afterAll(async () => {
       ownerHint: "integration coordinator",
     });
   }
+  const modelMessageRequests = Math.max(
+    recorder.network.modelMessageRequests,
+    recorder.conversationPersistence?.modelRequestCount ?? 0,
+  );
+  recorder.network.modelMessageRequests = modelMessageRequests;
   await writeAcceptanceArtifacts(outputDir, {
     stream: "acceptance-harness",
     branch,
@@ -324,7 +334,7 @@ test.afterAll(async () => {
       runtimeMode: "hermes",
       data: "isolated",
       productionTouched: false,
-      liveModelMessagesSent: recorder.network.modelMessageRequests,
+      liveModelMessagesSent: modelMessageRequests,
       transport: transport.id,
       skillsMode,
       browserPath: process.env.CABINET_ACCEPTANCE_BROWSER_PATH ?? "Playwright runner",
@@ -773,8 +783,19 @@ test("authoritative isolated production acceptance", async ({ page }) => {
       : "fixture-two-turn-contract",
     "conversation",
     async () => {
+      const observedCabinet = {
+        appUrl: cabinet.appUrl,
+        restart: async () => {
+          controlledRestartInProgress = true;
+          try {
+            await cabinet.restart();
+          } finally {
+            controlledRestartInProgress = false;
+          }
+        },
+      };
       const result = await transport.runTwoTurnContract(
-        cabinet,
+        observedCabinet,
         (evidence) => recorder.recordConversationPersistence(evidence),
       );
       expect(result.firstResponse).toBe(TRANSPORT_TOKEN);

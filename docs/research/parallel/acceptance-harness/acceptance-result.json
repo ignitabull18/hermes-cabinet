@@ -1,23 +1,41 @@
 {
-  "schemaVersion": 1,
-  "generatedAt": "2026-07-23T19:53:53.085Z",
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-23T21:49:54.384Z",
   "verdict": "NOT_ACCEPTED",
   "scans": {
     "secretIndicators": [],
     "localPathIndicators": []
   },
   "stream": "acceptance-harness",
-  "branch": "test/acceptance-harness-final-resilience",
-  "testedBaseRevision": "6854d52eb6697c96d1355f1c7f4d443076d68602",
-  "applicationDiffFromBase": [],
+  "branch": "fix/acp-restart-persistence-final",
+  "testedBaseRevision": "5e94de3e1c789279459c704d4a7f0fa61c747163",
+  "applicationDiffFromBase": [
+    "e2e/hermes-no-tools-fail-closed.spec.ts",
+    "package-lock.json",
+    "package.json",
+    "src/app/api/agents/conversations/[id]/continue/route.test.ts",
+    "src/app/api/agents/conversations/[id]/continue/route.ts",
+    "src/lib/agents/adapters/hermes-runtime.test.ts",
+    "src/lib/agents/conversation-runner-continue.test.ts",
+    "src/lib/agents/conversation-runner.ts",
+    "src/lib/agents/conversation-store-turns.test.ts",
+    "src/lib/agents/conversation-store.ts",
+    "src/lib/agents/conversation-turns.ts",
+    "src/lib/hermes/acp-client.test.ts",
+    "src/lib/hermes/acp-client.ts",
+    "src/lib/hermes/server-config.test.ts",
+    "src/lib/hermes/server-config.ts",
+    "src/types/conversations.ts"
+  ],
   "environment": {
-    "url": "http://127.0.0.1:4304",
-    "appPort": 4304,
+    "url": "http://127.0.0.1:4315",
+    "appPort": 4315,
     "runtimeMode": "hermes",
     "data": "isolated",
     "productionTouched": false,
     "liveModelMessagesSent": 0,
-    "transport": "fixture-deliberate-conversation-failure",
+    "transport": "hermes-acp-official-sdk",
+    "skillsMode": "fixture",
     "browserPath": "in-app Browser preflight plus Playwright authoritative runner"
   },
   "routes": [
@@ -156,25 +174,19 @@
   "visibleNavigation": {
     "desktop": [
       "cabinet",
-      "A",
-      "Acceptance Cabinet",
-      "Cabinet scope: Own",
-      "Add cabinet data",
+      "?",
       "Daily Business IntakeShadow",
       "Hermes",
       "Integrations",
       "New conversation",
+      "Cabinet scope: Own",
       "Org chart",
-      "Stop All",
-      "Run now",
-      "Operator",
-      "Start",
+      "Add your first agent",
       "View all",
-      "Hermes evidence stale",
-      "Degraded",
+      "Hermes status unknown",
+      "Checking…",
       "File history",
-      "9 uncommitted files9",
-      "Sync",
+      "All committed",
       "Help",
       "Share"
     ],
@@ -215,9 +227,9 @@
       "id": "desktop-navigation",
       "area": "navigation",
       "status": "passed",
-      "summary": "Discovered 22 visible desktop button labels.",
+      "summary": "Discovered 16 visible desktop button labels.",
       "evidence": {
-        "count": 22
+        "count": 16
       }
     },
     {
@@ -338,11 +350,8 @@
     {
       "id": "governed-skills",
       "area": "Skills",
-      "status": "passed",
-      "summary": "Governed Skills rendered with explicit fixture provenance and no live mutation.",
-      "evidence": {
-        "mutationRequests": 0
-      }
+      "status": "failed",
+      "summary": "Governed Skills surface failed: Error: expect(locator).toContainText(expected) failed Locator: getByTestId('hermes-skills-fixture-label') Expected substring: \"no live Hermes mutation performed\" Timeout: 15000ms Error: element(s) not found Call log: - Expect \"toContainText\" with timeout 15000ms - waiting for getByTestId('hermes-skills-fixture-label')"
     },
     {
       "id": "hermes-operator-sections",
@@ -363,16 +372,10 @@
       }
     },
     {
-      "id": "fixture-two-turn-contract",
-      "area": "conversation",
-      "status": "failed",
-      "summary": "Two-turn transport contract failed: Error: deliberate conversation failure"
-    },
-    {
       "id": "live-two-turn-contract",
       "area": "conversation",
-      "status": "blocked",
-      "summary": "No live transport was selected; zero live model messages were sent."
+      "status": "failed",
+      "summary": "Two-turn transport contract failed: Error: expect(received).toBe(expected) // Object.is equality Expected: \"CABINET_ACCEPTANCE_OK\" Received: \"API call failed after 3 retries: HTTP 404: model \\\"\\\" not found\""
     },
     {
       "id": "conversation-direct-reload-persistence",
@@ -384,7 +387,7 @@
       "id": "restart-route-persistence",
       "area": "restart",
       "status": "passed",
-      "summary": "Isolated Cabinet restarted on port 4304 and the room route persisted.",
+      "summary": "Isolated Cabinet restarted on port 4315 and the room route persisted.",
       "evidence": {
         "cabinetRestart": true,
         "routePersisted": true
@@ -442,16 +445,87 @@
     {
       "id": "console-health",
       "area": "browser",
-      "status": "passed",
-      "summary": "No relevant browser or framework errors were observed."
+      "status": "failed",
+      "summary": "11 relevant browser issue(s) were observed with stage ownership.",
+      "evidence": {
+        "issues": [
+          {
+            "source": "http",
+            "severity": "error",
+            "path": "/api/hermes/skills-management",
+            "summary": "Unexpected HTTP 404.",
+            "stage": "governed-skills"
+          },
+          {
+            "source": "console",
+            "severity": "error",
+            "summary": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+            "stage": "governed-skills"
+          },
+          {
+            "source": "console",
+            "severity": "error",
+            "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+            "stage": "live-two-turn-contract"
+          },
+          {
+            "source": "console",
+            "severity": "error",
+            "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+            "stage": "live-two-turn-contract"
+          },
+          {
+            "source": "console",
+            "severity": "error",
+            "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+            "stage": "live-two-turn-contract"
+          },
+          {
+            "source": "console",
+            "severity": "error",
+            "summary": "Failed to load resource: net::ERR_INCOMPLETE_CHUNKED_ENCODING",
+            "stage": "live-two-turn-contract"
+          },
+          {
+            "source": "console",
+            "severity": "error",
+            "summary": "Failed to load resource: net::ERR_INCOMPLETE_CHUNKED_ENCODING",
+            "stage": "live-two-turn-contract"
+          },
+          {
+            "source": "console",
+            "severity": "error",
+            "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+            "stage": "live-two-turn-contract"
+          },
+          {
+            "source": "console",
+            "severity": "error",
+            "summary": "Failed to load resource: net::ERR_INCOMPLETE_CHUNKED_ENCODING",
+            "stage": "live-two-turn-contract"
+          },
+          {
+            "source": "console",
+            "severity": "error",
+            "summary": "Failed to load resource: net::ERR_INCOMPLETE_CHUNKED_ENCODING",
+            "stage": "live-two-turn-contract"
+          },
+          {
+            "source": "console",
+            "severity": "error",
+            "summary": "Failed to load resource: net::ERR_CONNECTION_RESET",
+            "stage": "restart-route-persistence"
+          }
+        ]
+      }
     },
     {
       "id": "mutation-accounting",
       "area": "safety",
       "status": "passed",
-      "summary": "Recorded 34 isolated HTTP mutation request(s) and 0 consequential Hermes mutation(s).",
+      "summary": "Recorded 30 isolated HTTP mutation request(s) and 0 consequential Hermes mutation(s).",
       "evidence": {
-        "isolatedMutations": 34,
+        "isolatedMutations": 30,
         "consequentialHermesMutations": 0
       }
     }
@@ -460,7 +534,7 @@
     {
       "id": "live-two-turn-contract-failed",
       "area": "conversation",
-      "summary": "Two-turn transport contract failed: Error: deliberate conversation failure",
+      "summary": "Two-turn transport contract failed: Error: expect(received).toBe(expected) // Object.is equality Expected: \"CABINET_ACCEPTANCE_OK\" Received: \"API call failed after 3 retries: HTTP 404: model \\\"\\\" not found\"",
       "reproduction": [
         "Dispatch the bounded initial acceptance message once.",
         "Continue the persisted native session once.",
@@ -477,13 +551,23 @@
         "Open /tasks/:id."
       ],
       "ownerHint": "acceptance harness"
+    },
+    {
+      "id": "application-diff-outside-owned-lane",
+      "area": "safety",
+      "summary": "Application or shared files differ from acceptance base 5e94de3e1c789279459c704d4a7f0fa61c747163.",
+      "reproduction": [
+        "Run git diff --name-only 5e94de3e1c789279459c704d4a7f0fa61c747163.",
+        "Inspect paths outside the acceptance lane."
+      ],
+      "ownerHint": "integration coordinator"
     }
   ],
   "network": {
-    "total": 1629,
+    "total": 1748,
     "byMethod": {
-      "GET": 1595,
-      "POST": 34
+      "GET": 1718,
+      "POST": 30
     },
     "byPath": {
       "/room/acceptance-cabinet": 7,
@@ -508,97 +592,155 @@
       "/_next/static/chunks/1ntn7efqc-iiw.js": 20,
       "/_next/static/chunks/39584fr7m-887.js": 20,
       "/_next/static/chunks/0ebku1ynmkiw1.js": 20,
-      "/_next/static/chunks/1hguoey93xu7g.js": 14,
-      "/_next/static/chunks/2aiagnia9ov0k.js": 16,
-      "/_next/static/chunks/0r0e765yjyza4.js": 14,
-      "/_next/static/chunks/13v5mk2a3n77a.js": 16,
-      "/_next/static/chunks/26zhr-vq375l0.js": 14,
+      "/_next/static/chunks/3pmjfbxwi_bu0.js": 14,
+      "/_next/static/chunks/1bb-4oq45b6i8.js": 19,
+      "/_next/static/chunks/2aiagnia9ov0k.js": 19,
+      "/_next/static/chunks/1vof9z54a9ec2.js": 19,
+      "/_next/static/chunks/3qipf1xc8hd7a.js": 19,
       "/_next/static/chunks/15nppxs5n9k_b.js": 19,
-      "/_next/static/chunks/1ief6uxt6divm.js": 19,
-      "/_next/static/chunks/0hf0eekvnfpq8.js": 19,
-      "/_next/static/chunks/32gfit6-__lf8.js": 14,
-      "/_next/static/chunks/0s480nbrpeg-f.js": 16,
-      "/_next/static/chunks/1lao04f6htbi5.js": 14,
+      "/_next/static/chunks/2auv91yiugulf.js": 19,
+      "/_next/static/chunks/3y7-r3avub-x3.js": 19,
+      "/_next/static/chunks/0s480nbrpeg-f.js": 19,
+      "/_next/static/chunks/3gwtmmt_e8eyn.js": 19,
+      "/_next/static/chunks/0lknv44yz3uzk.js": 19,
       "/_next/static/chunks/234li3s4ez88g.js": 19,
       "/_next/static/chunks/0--zv55iukt1w.js": 19,
-      "/_next/static/chunks/0hoxad-12p4d0.js": 16,
-      "/_next/static/chunks/0745nq7rx3h96.js": 16,
-      "/_next/static/chunks/16tcapwkvc2r9.js": 16,
+      "/_next/static/chunks/0hf0eekvnfpq8.js": 19,
+      "/_next/static/chunks/0tljva0jq1rrx.js": 19,
+      "/_next/static/chunks/0c_c2b4z1yc02.js": 19,
+      "/_next/static/chunks/1ief6uxt6divm.js": 19,
+      "/_next/static/chunks/1247k5smur00p.js": 19,
+      "/_next/static/chunks/3x9axfn5_cp4f.js": 19,
+      "/_next/static/chunks/1kvx5yxpbh40v.js": 19,
       "/_next/static/chunks/0otnz87x_6ex2.js": 19,
-      "/_next/static/chunks/0c_c2b4z1yc02.js": 16,
-      "/_next/static/chunks/2auv91yiugulf.js": 16,
-      "/_next/static/chunks/3y7-r3avub-x3.js": 16,
-      "/_next/static/chunks/3ifn04nr3ipwn.js": 14,
-      "/_next/static/chunks/0olkreitc-5nv.js": 16,
-      "/_next/static/chunks/1yrgu-ckz-ab-.js": 14,
-      "/_next/static/chunks/1247k5smur00p.js": 16,
+      "/_next/static/chunks/0745nq7rx3h96.js": 19,
+      "/_next/static/chunks/21wpbbrk018go.js": 14,
+      "/_next/static/chunks/1_co8ksbzhhz3.js": 19,
       "/api/rooms": 20,
-      "/api/hermes/health": 38,
-      "/api/tree": 15,
-      "/api/agents/providers": 18,
+      "/api/hermes/health": 29,
+      "/api/tree": 17,
+      "/api/agents/providers": 21,
       "/api/user/profile": 24,
-      "/api/agents/config/mcp-catalog": 24,
-      "/api/cloud/status": 119,
+      "/api/agents/config/mcp-catalog": 25,
+      "/api/cloud/status": 118,
       "/api/agents/providers/status": 9,
       "/api/cabinets/overview": 66,
       "/api/registry": 9,
-      "/api/agents/skills": 15,
-      "/api/health": 25,
-      "/api/git/commit": 18,
+      "/api/agents/skills": 19,
+      "/api/health": 28,
+      "/api/git/commit": 17,
       "/api/github/repo": 14,
       "/api/system/diagnostics": 15,
-      "/api/agents/conversations": 50,
+      "/api/agents/conversations": 51,
       "/api/telemetry": 10,
       "/api/pages/acceptance-cabinet": 9,
-      "/integrations/slack-logo.png": 9,
-      "/integrations/discord-logo.png": 9,
-      "/logos/telegram.svg": 9,
-      "/logos/google-ads.svg": 9,
-      "/logos/facebook.svg": 9,
-      "/logos/notion.svg": 9,
-      "/logos/google-drive.svg": 9,
-      "/_next/static/chunks/3apnr2u2-v40v.js": 9,
+      "/integrations/slack-logo.png": 10,
+      "/integrations/discord-logo.png": 10,
+      "/logos/telegram.svg": 10,
+      "/logos/google-ads.svg": 10,
+      "/logos/facebook.svg": 10,
+      "/logos/notion.svg": 10,
+      "/logos/google-drive.svg": 10,
+      "/api/agents/config": 16,
       "/api/agents/conversations/events": 23,
       "/api/agents/events": 19,
       "/api/git/pull": 14,
-      "/api/system/update": 15,
-      "/api/agents/config": 20,
-      "/api/rooms/active": 9,
+      "/api/system/update": 13,
       "/api/google-drive/tree": 28,
-      "/_next/static/chunks/2_38pk6xwud05.js": 1,
+      "/api/rooms/active": 5,
+      "/_next/static/chunks/2xhirlpv0lqcb.js": 1,
       "/_next/static/chunks/0hklpkbit2l81.js": 1,
-      "/_next/static/chunks/2kdhmnepw3sq1.js": 1,
+      "/_next/static/chunks/0y344hh36vxwu.js": 1,
       "/tasks": 4,
-      "/_next/static/chunks/2mu1ttpagha-n.js": 4,
-      "/_next/static/chunks/1qn8bjk716cju.js": 4,
-      "/_next/static/chunks/3469fdu4_qs76.js": 4,
-      "/_next/static/chunks/2dbyd6b98rrkt.js": 4,
+      "/_next/static/chunks/1_1oh0glzmv3v.js": 4,
       "/_next/static/chunks/2x-ezcwbxq1q-.js": 4,
+      "/_next/static/chunks/1k6om5b3c6-ah.js": 4,
+      "/_next/static/chunks/2dkpyrh7e37ue.js": 4,
+      "/_next/static/chunks/2r13pv07ah_kq.js": 4,
       "/_next/static/chunks/0rerxcvi7n9ds.js": 4,
-      "/_next/static/chunks/27kq-ynttm93w.js": 5,
-      "/_next/static/chunks/14o35rrqc8dch.js": 4,
       "/_next/static/chunks/0ber_cyiwis_e.js": 4,
-      "/_next/static/chunks/2_hlyl4jd02md.js": 5,
-      "/": 11,
-      "/_next/static/chunks/0yj1lqcespp_l.js": 2,
-      "/_next/static/chunks/2a72b3t2-dvc9.js": 2,
-      "/_next/static/chunks/1wtcqcxzshze5.js": 2,
-      "/_next/static/chunks/3bc1wakudxb24.js": 2,
-      "/_next/static/chunks/04as-438put60.js": 2,
-      "/_next/static/chunks/0093762yn0iy4.js": 2,
+      "/_next/static/chunks/2etb84fpys_4c.js": 4,
+      "/_next/static/chunks/27kq-ynttm93w.js": 5,
+      "/_next/static/chunks/0lz7w3gpgy94q.js": 5,
+      "/": 17,
+      "/_next/static/chunks/2z6d9uo4ld2sv.js": 5,
+      "/_next/static/chunks/0581qjt473zrl.js": 5,
       "/room/acceptance-cabinet/-/tasks": 1,
-      "/_next/static/chunks/065wz65yrxe3t.js": 1,
+      "/_next/static/chunks/2qbc6tx0s7tak.js": 1,
       "/cockpit": 1,
-      "/_next/static/chunks/0rwic0dh1rvbf.js": 1,
+      "/_next/static/chunks/0kvpys5oyeui2.js": 1,
       "/_next/static/chunks/1yafn6hzduomh.js": 1,
       "/api/hermes/cockpit": 2,
       "/integrations": 1,
       "/_next/static/chunks/1pqga6e57hyq1.js": 1,
       "/_next/static/chunks/2xvtm5slksjqh.js": 3,
       "/_next/static/chunks/0c0rva8lb7wm7.js": 1,
+      "/logos/microsoft-teams.svg": 1,
+      "/logos/zoom.webp": 1,
+      "/logos/loom.svg": 1,
+      "/integrations/google-workspace-logo.webp": 1,
+      "/logos/microsoft-365.svg": 1,
+      "/logos/airtable.svg": 1,
+      "/logos/asana.webp": 1,
+      "/logos/clickup.webp": 1,
+      "/logos/calendly.webp": 1,
+      "/logos/google-calendar.svg": 1,
+      "/logos/gmail.svg": 1,
+      "/logos/monday.svg": 1,
+      "/logos/motion.svg": 1,
+      "/logos/clockwise.svg": 1,
+      "/logos/miro.svg": 1,
+      "/logos/apple-notes.svg": 1,
+      "/logos/confluence.svg": 1,
+      "/logos/icloud.svg": 1,
+      "/logos/onedrive.svg": 1,
+      "/logos/sharepoint.svg": 1,
+      "/logos/dropbox.webp": 1,
+      "/logos/box.webp": 1,
+      "/logos/tiktok.svg": 1,
+      "/logos/instagram.svg": 1,
+      "/logos/x.svg": 1,
+      "/logos/github.svg": 1,
+      "/logos/gitlab.webp": 1,
+      "/logos/jira.webp": 1,
+      "/logos/linear.webp": 1,
+      "/logos/figma.svg": 1,
+      "/logos/servicenow.svg": 1,
+      "/logos/datadog.webp": 1,
+      "/logos/sentry.svg": 1,
+      "/logos/pagerduty.svg": 1,
+      "/logos/salesforce.webp": 1,
+      "/logos/hubspot.svg": 1,
+      "/logos/intercom.svg": 1,
+      "/logos/zendesk.svg": 1,
+      "/logos/gong.svg": 1,
+      "/logos/greenhouse.svg": 1,
+      "/logos/linkedin.svg": 1,
+      "/logos/pipedrive.svg": 1,
+      "/logos/stripe.svg": 1,
+      "/logos/brex.svg": 1,
+      "/logos/quickbooks.svg": 1,
+      "/logos/docusign.svg": 1,
+      "/logos/shopify.svg": 1,
+      "/logos/expensify.svg": 1,
+      "/logos/snowflake.webp": 1,
+      "/logos/stackadapt.svg": 1,
+      "/logos/bigquery.svg": 1,
+      "/logos/databricks.webp": 1,
+      "/logos/looker.svg": 1,
+      "/logos/tableau.svg": 1,
+      "/logos/amplitude.webp": 1,
+      "/logos/mixpanel.svg": 1,
+      "/logos/workday.svg": 1,
+      "/logos/bamboohr.svg": 1,
+      "/logos/zapier.svg": 1,
+      "/logos/make.svg": 1,
       "/settings": 1,
       "/_next/static/chunks/2j1g3vzt0-236.js": 2,
       "/_next/static/chunks/2wpxcro3id1mg.js": 2,
+      "/api/telemetry/settings": 2,
+      "/api/agents/config/integrations": 2,
+      "/api/system/data-dir": 2,
       "/agent-avatars/avatar-01.svg": 1,
       "/agent-avatars/avatar-02.svg": 1,
       "/agent-avatars/avatar-03.svg": 1,
@@ -611,15 +753,15 @@
       "/agent-avatars/avatar-10.svg": 1,
       "/agent-avatars/avatar-11.svg": 1,
       "/agent-avatars/avatar-12.svg": 1,
-      "/api/telemetry/settings": 1,
-      "/api/agents/config/integrations": 1,
-      "/api/system/data-dir": 1,
       "/settings/providers": 1,
+      "/api/hermes/management": 1,
+      "/api/hermes/capabilities": 1,
+      "/api/hermes/runs": 1,
       "/login": 1,
       "/_next/static/chunks/1rz_0x9oo-802.js": 1,
       "/acceptance-catchall-check": 1,
       "/hermes": 1,
-      "/_next/static/chunks/1r52lv5994t63.js": 1,
+      "/_next/static/chunks/26m6jdhzb071l.js": 1,
       "/_next/static/chunks/33zmwsy0qzi44.js": 1,
       "/api/hermes/control-center": 1,
       "/api/hermes/skills-management": 1,
@@ -633,6 +775,11 @@
       },
       {
         "method": "GET",
+        "path": "/api/agents/conversations/events",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
         "path": "/api/agents/events",
         "reason": "net::ERR_ABORTED"
       },
@@ -643,137 +790,7 @@
       },
       {
         "method": "GET",
-        "path": "/",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
         "path": "/api/agents/conversations/events",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/cabinets/overview",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/cabinets/overview",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/_next/static/chunks/1247k5smur00p.js",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/_next/static/chunks/1wtcqcxzshze5.js",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/_next/static/chunks/0c_c2b4z1yc02.js",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/_next/static/chunks/0s480nbrpeg-f.js",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/_next/static/chunks/04as-438put60.js",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations/events",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/_next/static/chunks/0745nq7rx3h96.js",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/_next/static/chunks/0093762yn0iy4.js",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/_next/static/chunks/3bc1wakudxb24.js",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/_next/static/chunks/0olkreitc-5nv.js",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/_next/static/chunks/16tcapwkvc2r9.js",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/_next/static/chunks/2auv91yiugulf.js",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/_next/static/chunks/0hoxad-12p4d0.js",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "POST",
-        "path": "/api/telemetry",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/config/mcp-catalog",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations/events",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/system/update",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/events",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "POST",
-        "path": "/api/rooms/active",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/cabinets/overview",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/google-drive/tree",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/_next/static/chunks/3apnr2u2-v40v.js",
         "reason": "net::ERR_ABORTED"
       },
       {
@@ -783,202 +800,12 @@
       },
       {
         "method": "GET",
-        "path": "/api/system/diagnostics",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
         "path": "/api/cabinets/overview",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/cabinets/overview",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/system/update",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/config",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/events",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/health",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/github/repo",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/git/commit",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations/events",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/cabinets/overview",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations",
         "reason": "net::ERR_ABORTED"
       },
       {
         "method": "POST",
         "path": "/api/telemetry",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/config/mcp-catalog",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/logos/google-drive.svg",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/integrations/discord-logo.png",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/logos/facebook.svg",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/logos/notion.svg",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/logos/telegram.svg",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/logos/google-ads.svg",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/integrations/slack-logo.png",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/events",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/system/update",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations/events",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/cabinets/overview",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/cloud/status",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/cloud/status",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/cloud/status",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/system/update",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/_next/static/chunks/2xvtm5slksjqh.js",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/github/repo",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/cloud/status",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/cloud/status",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/cloud/status",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations/events",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/user/profile",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/health",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/google-drive/tree",
         "reason": "net::ERR_ABORTED"
       },
       {
@@ -988,7 +815,17 @@
       },
       {
         "method": "GET",
-        "path": "/api/cloud/status",
+        "path": "/api/cabinets/overview",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/config",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/system/update",
         "reason": "net::ERR_ABORTED"
       },
       {
@@ -997,13 +834,18 @@
         "reason": "net::ERR_ABORTED"
       },
       {
-        "method": "POST",
-        "path": "/api/git/pull",
+        "method": "GET",
+        "path": "/api/agents/events",
         "reason": "net::ERR_ABORTED"
       },
       {
         "method": "GET",
-        "path": "/api/system/diagnostics",
+        "path": "/api/agents/conversations",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/conversations",
         "reason": "net::ERR_ABORTED"
       },
       {
@@ -1018,157 +860,12 @@
       },
       {
         "method": "GET",
-        "path": "/api/agents/events",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/config",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/providers",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/_next/static/chunks/0c0rva8lb7wm7.js",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
         "path": "/api/git/commit",
         "reason": "net::ERR_ABORTED"
       },
       {
         "method": "GET",
-        "path": "/api/google-drive/tree",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/providers",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/events",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
         "path": "/api/agents/conversations/events",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/agent-avatars/avatar-08.svg",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/agent-avatars/avatar-05.svg",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/providers",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/agent-avatars/avatar-04.svg",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/agent-avatars/avatar-06.svg",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/agent-avatars/avatar-10.svg",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/system/update",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/agent-avatars/avatar-03.svg",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/agent-avatars/avatar-09.svg",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/agent-avatars/avatar-12.svg",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/agent-avatars/avatar-11.svg",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/agent-avatars/avatar-07.svg",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/_next/static/chunks/2wpxcro3id1mg.js",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "POST",
-        "path": "/api/git/pull",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/events",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations/events",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/config",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/system/update",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/google-drive/tree",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/github/repo",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "POST",
-        "path": "/api/git/pull",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations",
         "reason": "net::ERR_ABORTED"
       },
       {
@@ -1178,17 +875,12 @@
       },
       {
         "method": "GET",
-        "path": "/api/user/profile",
+        "path": "/api/agents/conversations",
         "reason": "net::ERR_ABORTED"
       },
       {
         "method": "GET",
-        "path": "/api/system/update",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/user/profile",
+        "path": "/api/google-drive/tree",
         "reason": "net::ERR_ABORTED"
       },
       {
@@ -1198,32 +890,12 @@
       },
       {
         "method": "GET",
-        "path": "/api/agents/config/mcp-catalog",
+        "path": "/api/agents/providers",
         "reason": "net::ERR_ABORTED"
       },
       {
         "method": "GET",
-        "path": "/api/git/commit",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/health",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/skills",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/events",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/system/diagnostics",
+        "path": "/api/cabinets/overview",
         "reason": "net::ERR_ABORTED"
       },
       {
@@ -1232,8 +904,8 @@
         "reason": "net::ERR_ABORTED"
       },
       {
-        "method": "GET",
-        "path": "/_next/static/chunks/3apnr2u2-v40v.js",
+        "method": "POST",
+        "path": "/api/rooms/active",
         "reason": "net::ERR_ABORTED"
       },
       {
@@ -1243,12 +915,17 @@
       },
       {
         "method": "GET",
-        "path": "/api/agents/config/mcp-catalog",
+        "path": "/api/system/update",
         "reason": "net::ERR_ABORTED"
       },
       {
         "method": "GET",
         "path": "/api/cabinets/overview",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/events",
         "reason": "net::ERR_ABORTED"
       },
       {
@@ -1263,362 +940,482 @@
       },
       {
         "method": "GET",
-        "path": "/api/google-drive/tree",
+        "path": "/api/agents/conversations",
         "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/system/update",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/events",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/conversations/events",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/events",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/conversations/events",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/logos/snowflake.webp",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/logos/pipedrive.svg",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/logos/docusign.svg",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/logos/bigquery.svg",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/logos/quickbooks.svg",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/logos/mixpanel.svg",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/logos/looker.svg",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/logos/amplitude.webp",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/logos/brex.svg",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/logos/workday.svg",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/logos/greenhouse.svg",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/logos/stackadapt.svg",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/logos/expensify.svg",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/logos/databricks.webp",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/logos/stripe.svg",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/logos/zapier.svg",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/logos/shopify.svg",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/logos/gong.svg",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/logos/bamboohr.svg",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/logos/make.svg",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/logos/tableau.svg",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/logos/linkedin.svg",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/config/mcp-catalog",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/system/update",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/conversations/events",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/events",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/hermes/runs",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/conversations/events",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/events",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/system/update",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/config/mcp-catalog",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "POST",
+        "path": "/api/telemetry",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/conversations",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/system/update",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/events",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/conversations/events",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "POST",
+        "path": "/api/telemetry",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/events",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/conversations/events",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/conversations",
+        "reason": "net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/tree",
+        "reason": "net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/health",
+        "reason": "net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/conversations/events",
+        "reason": "net::ERR_INCOMPLETE_CHUNKED_ENCODING"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/events",
+        "reason": "net::ERR_INCOMPLETE_CHUNKED_ENCODING"
+      },
+      {
+        "method": "GET",
+        "path": "/api/health",
+        "reason": "net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/events",
+        "reason": "net::ERR_INCOMPLETE_CHUNKED_ENCODING"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/conversations/events",
+        "reason": "net::ERR_INCOMPLETE_CHUNKED_ENCODING"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/conversations/events",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/events",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/cloud/status",
+        "reason": "net::ERR_CONNECTION_RESET"
       },
       {
         "method": "GET",
         "path": "/api/agents/providers/status",
-        "reason": "net::ERR_ABORTED"
+        "reason": "net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/config/mcp-catalog",
+        "reason": "net::ERR_CONNECTION_REFUSED"
       },
       {
         "method": "GET",
         "path": "/api/cloud/status",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "POST",
-        "path": "/api/rooms/active",
-        "reason": "net::ERR_ABORTED"
+        "reason": "net::ERR_CONNECTION_REFUSED"
       },
       {
         "method": "GET",
-        "path": "/api/tree",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/registry",
-        "reason": "net::ERR_ABORTED"
+        "path": "/api/user/profile",
+        "reason": "net::ERR_CONNECTION_REFUSED"
       },
       {
         "method": "GET",
         "path": "/api/cabinets/overview",
-        "reason": "net::ERR_ABORTED"
+        "reason": "net::ERR_CONNECTION_REFUSED"
       },
       {
         "method": "GET",
-        "path": "/logos/telegram.svg",
-        "reason": "net::ERR_ABORTED"
+        "path": "/api/registry",
+        "reason": "net::ERR_CONNECTION_REFUSED"
       },
       {
         "method": "GET",
-        "path": "/integrations/discord-logo.png",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/logos/notion.svg",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/logos/facebook.svg",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/integrations/slack-logo.png",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/logos/google-drive.svg",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/logos/google-ads.svg",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "POST",
-        "path": "/api/telemetry",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/events",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations/events",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/agents",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/agents",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/events",
-        "reason": "net::ERR_ABORTED"
+        "path": "/api/agents/skills",
+        "reason": "net::ERR_CONNECTION_REFUSED"
       },
       {
         "method": "GET",
         "path": "/api/hermes/health",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations/events",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/health",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "POST",
-        "path": "/api/telemetry",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations",
         "reason": "net::ERR_CONNECTION_REFUSED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/cabinets/overview",
-        "reason": "net::ERR_CONNECTION_REFUSED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations/events",
-        "reason": "net::ERR_INCOMPLETE_CHUNKED_ENCODING"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/events",
-        "reason": "net::ERR_INCOMPLETE_CHUNKED_ENCODING"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations",
-        "reason": "net::ERR_CONNECTION_REFUSED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/health",
-        "reason": "net::ERR_CONNECTION_REFUSED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/git/commit",
-        "reason": "net::ERR_CONNECTION_REFUSED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations/events",
-        "reason": "net::ERR_CONNECTION_REFUSED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/events",
-        "reason": "net::ERR_CONNECTION_REFUSED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations/events",
-        "reason": "net::ERR_CONNECTION_REFUSED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/events",
-        "reason": "net::ERR_CONNECTION_REFUSED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations",
-        "reason": "net::ERR_CONNECTION_REFUSED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/health",
-        "reason": "net::ERR_CONNECTION_REFUSED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations/events",
-        "reason": "net::ERR_CONNECTION_REFUSED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/events",
-        "reason": "net::ERR_CONNECTION_REFUSED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/cabinets/overview",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/health",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/events",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations/events",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "POST",
-        "path": "/api/telemetry",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/cabinets/overview",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/config",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/health",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/events",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/git/commit",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations/events",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations",
-        "reason": "net::ERR_ABORTED"
       },
       {
         "method": "GET",
         "path": "/api/cloud/status",
-        "reason": "net::ERR_ABORTED"
+        "reason": "net::ERR_CONNECTION_REFUSED"
       },
       {
         "method": "GET",
-        "path": "/api/cabinets/overview",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/providers",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations",
-        "reason": "net::ERR_ABORTED"
+        "path": "/api/health",
+        "reason": "net::ERR_CONNECTION_REFUSED"
       },
       {
         "method": "GET",
         "path": "/api/git/commit",
-        "reason": "net::ERR_ABORTED"
+        "reason": "net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/github/repo",
+        "reason": "net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/system/diagnostics",
+        "reason": "net::ERR_CONNECTION_REFUSED"
       },
       {
         "method": "GET",
         "path": "/api/agents/conversations",
-        "reason": "net::ERR_ABORTED"
+        "reason": "net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/pages/acceptance-cabinet",
+        "reason": "net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "method": "POST",
+        "path": "/api/telemetry",
+        "reason": "net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/google-drive/tree",
+        "reason": "net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/skills",
+        "reason": "net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/conversations",
+        "reason": "net::ERR_CONNECTION_REFUSED"
       },
       {
         "method": "GET",
         "path": "/api/cabinets/overview",
-        "reason": "net::ERR_ABORTED"
+        "reason": "net::ERR_CONNECTION_REFUSED"
       },
       {
         "method": "GET",
-        "path": "/",
-        "reason": "net::ERR_ABORTED"
+        "path": "/api/agents/config",
+        "reason": "net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/conversations",
+        "reason": "net::ERR_CONNECTION_REFUSED"
       },
       {
         "method": "GET",
         "path": "/api/cabinets/overview",
+        "reason": "net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/conversations/events",
+        "reason": "net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "method": "GET",
+        "path": "/integrations/discord-logo.png",
+        "reason": "net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/events",
+        "reason": "net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "method": "POST",
+        "path": "/api/git/pull",
+        "reason": "net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/system/update",
+        "reason": "net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/cloud/status",
+        "reason": "net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "method": "GET",
+        "path": "/logos/telegram.svg",
+        "reason": "net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/config/mcp-catalog",
+        "reason": "net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/cabinets/overview",
+        "reason": "net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "method": "GET",
+        "path": "/logos/google-ads.svg",
+        "reason": "net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "method": "GET",
+        "path": "/logos/facebook.svg",
+        "reason": "net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "method": "GET",
+        "path": "/logos/notion.svg",
+        "reason": "net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "method": "GET",
+        "path": "/logos/google-drive.svg",
+        "reason": "net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/conversations/events",
+        "reason": "net::ERR_INCOMPLETE_CHUNKED_ENCODING"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/events",
+        "reason": "net::ERR_INCOMPLETE_CHUNKED_ENCODING"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/events",
         "reason": "net::ERR_ABORTED"
       },
       {
         "method": "GET",
         "path": "/api/agents/conversations/events",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/cabinets/overview",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "POST",
-        "path": "/api/rooms/active",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/user/profile",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/cabinets/overview",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "POST",
-        "path": "/api/git/pull",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/tree",
         "reason": "net::ERR_ABORTED"
       },
       {
@@ -1628,7 +1425,32 @@
       },
       {
         "method": "GET",
-        "path": "/api/rooms",
+        "path": "/api/agents/events",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/conversations/events",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/conversations/events",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "POST",
+        "path": "/api/telemetry",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/cabinets/overview",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/cabinets/overview",
         "reason": "net::ERR_ABORTED"
       },
       {
@@ -1638,32 +1460,12 @@
       },
       {
         "method": "GET",
-        "path": "/api/git/commit",
+        "path": "/api/agents/config/mcp-catalog",
         "reason": "net::ERR_ABORTED"
       },
       {
-        "method": "GET",
-        "path": "/api/agents/conversations/events",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/registry",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/github/repo",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/cabinets/overview",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/pages/acceptance-cabinet",
+        "method": "POST",
+        "path": "/api/git/pull",
         "reason": "net::ERR_ABORTED"
       },
       {
@@ -1673,17 +1475,12 @@
       },
       {
         "method": "GET",
-        "path": "/api/cloud/status",
+        "path": "/api/cabinets/overview",
         "reason": "net::ERR_ABORTED"
       },
       {
         "method": "GET",
-        "path": "/api/cloud/status",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/user/profile",
+        "path": "/api/git/commit",
         "reason": "net::ERR_ABORTED"
       },
       {
@@ -1693,22 +1490,12 @@
       },
       {
         "method": "GET",
-        "path": "/api/system/update",
+        "path": "/api/cabinets/overview",
         "reason": "net::ERR_ABORTED"
       },
       {
         "method": "GET",
-        "path": "/api/system/diagnostics",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/config",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/health",
+        "path": "/api/agents/conversations/events",
         "reason": "net::ERR_ABORTED"
       },
       {
@@ -1718,27 +1505,17 @@
       },
       {
         "method": "GET",
-        "path": "/api/google-drive/tree",
+        "path": "/logos/telegram.svg",
         "reason": "net::ERR_ABORTED"
       },
       {
         "method": "GET",
-        "path": "/api/agents/config/mcp-catalog",
+        "path": "/logos/notion.svg",
         "reason": "net::ERR_ABORTED"
       },
       {
         "method": "GET",
-        "path": "/api/agents/skills",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/_next/static/chunks/3apnr2u2-v40v.js",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/logos/facebook.svg",
+        "path": "/integrations/slack-logo.png",
         "reason": "net::ERR_ABORTED"
       },
       {
@@ -1753,52 +1530,12 @@
       },
       {
         "method": "GET",
-        "path": "/logos/notion.svg",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
         "path": "/logos/google-ads.svg",
         "reason": "net::ERR_ABORTED"
       },
       {
         "method": "GET",
-        "path": "/logos/telegram.svg",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/integrations/slack-logo.png",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/cabinets/overview",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/cabinets/overview",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/",
+        "path": "/logos/facebook.svg",
         "reason": "net::ERR_ABORTED"
       },
       {
@@ -1813,22 +1550,17 @@
       },
       {
         "method": "GET",
-        "path": "/api/agents/config/mcp-catalog",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/api/agents/conversations/events",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
         "path": "/api/system/update",
         "reason": "net::ERR_ABORTED"
       },
       {
         "method": "GET",
-        "path": "/_next/static/chunks/3apnr2u2-v40v.js",
+        "path": "/api/agents/config/mcp-catalog",
+        "reason": "net::ERR_ABORTED"
+      },
+      {
+        "method": "GET",
+        "path": "/api/agents/config",
         "reason": "net::ERR_ABORTED"
       },
       {
@@ -1842,48 +1574,8 @@
         "reason": "net::ERR_ABORTED"
       },
       {
-        "method": "POST",
-        "path": "/api/rooms/active",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
         "method": "GET",
-        "path": "/api/cabinets/overview",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/logos/google-ads.svg",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/logos/facebook.svg",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/logos/telegram.svg",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/logos/notion.svg",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/integrations/slack-logo.png",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/logos/google-drive.svg",
-        "reason": "net::ERR_ABORTED"
-      },
-      {
-        "method": "GET",
-        "path": "/integrations/discord-logo.png",
+        "path": "/api/agents/conversations/events",
         "reason": "net::ERR_ABORTED"
       },
       {
@@ -1897,14 +1589,20 @@
     "ptyCreateOrWriteRequests": 0,
     "modelMessageRequests": 0,
     "consequentialHermesMutations": 0,
-    "mutations": 34
+    "mutations": 30
   },
   "browserIssues": [
     {
       "source": "console",
       "severity": "warning",
-      "summary": "[board] overview refresh failed TypeError: Failed to fetch at http://127.0.0.1:4304/_next/static/chunks/0--zv55iukt1w.js:1:418 at o (http://127.0.0.1:4304/_next/static/chunks/0--zv55iukt1w.js:1:667) at http://127.0.0.1:4304/_next/static/chunks/27kq-ynttm93w.js:1:89589 at http://127.0.0.1:4304/_next/static/chunks/27kq-ynttm93w.js:1:90258 at iv (http://127.0.0.1:4304/_next/static/chunks/34oyci46fsc5w.js:1:103000) at up (http://127.0.0.1:4304/_next/static/chunks/34oyci46fsc5w.js:1:127039) at ud (http://127.0.0.1:4304/_next/static/chunks/34oyci46fsc5w.js:1:126701) at up (http://127.0.0.1:4304/_next/static/chunks/34oyci46fsc5w.js:1:127084) at ud (http://127.0.0.1:4304/_next/static/chunks/34oyci46",
-      "stage": "tasks-route"
+      "summary": "[board] overview refresh failed TypeError: Failed to fetch at http://127.0.0.1:4315/_next/static/chunks/0--zv55iukt1w.js:1:418 at o (http://127.0.0.1:4315/_next/static/chunks/0--zv55iukt1w.js:1:667) at http://127.0.0.1:4315/_next/static/chunks/27kq-ynttm93w.js:1:89589 at http://127.0.0.1:4315/_next/static/chunks/27kq-ynttm93w.js:1:90258 at iv (http://127.0.0.1:4315/_next/static/chunks/34oyci46fsc5w.js:1:103000) at e (http://127.0.0.1:4315/_next/static/chunks/34oyci46fsc5w.js:1:128162) at e (http://127.0.0.1:4315/_next/static/chunks/34oyci46fsc5w.js:1:128149) at up (http://127.0.0.1:4315/_next/static/chunks/34oyci46fsc5w.js:1:128433) at ud (http://127.0.0.1:4315/_next/static/chunks/34oyci46fs",
+      "stage": "primary-application-routes"
+    },
+    {
+      "source": "console",
+      "severity": "warning",
+      "summary": "[board] conversations refresh failed TypeError: Failed to fetch at http://127.0.0.1:4315/_next/static/chunks/2eh57gd64d64i.js:1:28971 at http://127.0.0.1:4315/_next/static/chunks/27kq-ynttm93w.js:1:89845 at http://127.0.0.1:4315/_next/static/chunks/27kq-ynttm93w.js:1:90262 at iv (http://127.0.0.1:4315/_next/static/chunks/34oyci46fsc5w.js:1:103000) at e (http://127.0.0.1:4315/_next/static/chunks/34oyci46fsc5w.js:1:128162) at e (http://127.0.0.1:4315/_next/static/chunks/34oyci46fsc5w.js:1:128149) at up (http://127.0.0.1:4315/_next/static/chunks/34oyci46fsc5w.js:1:128433) at ud (http://127.0.0.1:4315/_next/static/chunks/34oyci46fsc5w.js:1:126701) at up (http://127.0.0.1:4315/_next/static/chunks",
+      "stage": "primary-application-routes"
     },
     {
       "source": "http",
@@ -1921,6 +1619,291 @@
       "stage": "primary-application-routes"
     },
     {
+      "source": "http",
+      "severity": "warning",
+      "path": "/api/hermes/runs",
+      "summary": "Expected read-only source unavailability rendered by its owning surface.",
+      "expectedUnavailableProjection": true,
+      "stage": "primary-application-routes"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+      "stage": "primary-application-routes"
+    },
+    {
+      "source": "http",
+      "severity": "error",
+      "path": "/api/hermes/skills-management",
+      "summary": "Unexpected HTTP 404.",
+      "stage": "governed-skills"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "stage": "governed-skills"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "live-two-turn-contract"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "live-two-turn-contract"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "live-two-turn-contract"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_INCOMPLETE_CHUNKED_ENCODING",
+      "stage": "live-two-turn-contract"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_INCOMPLETE_CHUNKED_ENCODING",
+      "stage": "live-two-turn-contract"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "live-two-turn-contract"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_INCOMPLETE_CHUNKED_ENCODING",
+      "stage": "live-two-turn-contract"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_INCOMPLETE_CHUNKED_ENCODING",
+      "stage": "live-two-turn-contract"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_RESET",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
+      "source": "console",
+      "severity": "error",
+      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "stage": "restart-route-persistence"
+    },
+    {
       "source": "console",
       "severity": "error",
       "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
@@ -1943,86 +1926,292 @@
       "severity": "error",
       "summary": "Failed to load resource: net::ERR_INCOMPLETE_CHUNKED_ENCODING",
       "stage": "restart-route-persistence"
-    },
-    {
-      "source": "console",
-      "severity": "error",
-      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
-      "stage": "restart-route-persistence"
-    },
-    {
-      "source": "console",
-      "severity": "error",
-      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
-      "stage": "restart-route-persistence"
-    },
-    {
-      "source": "console",
-      "severity": "error",
-      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
-      "stage": "restart-route-persistence"
-    },
-    {
-      "source": "console",
-      "severity": "error",
-      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
-      "stage": "restart-route-persistence"
-    },
-    {
-      "source": "console",
-      "severity": "error",
-      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
-      "stage": "restart-route-persistence"
-    },
-    {
-      "source": "console",
-      "severity": "error",
-      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
-      "stage": "restart-route-persistence"
-    },
-    {
-      "source": "console",
-      "severity": "error",
-      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
-      "stage": "restart-route-persistence"
-    },
-    {
-      "source": "console",
-      "severity": "error",
-      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
-      "stage": "restart-route-persistence"
-    },
-    {
-      "source": "console",
-      "severity": "error",
-      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
-      "stage": "restart-route-persistence"
-    },
-    {
-      "source": "console",
-      "severity": "error",
-      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
-      "stage": "restart-route-persistence"
-    },
-    {
-      "source": "console",
-      "severity": "error",
-      "summary": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
-      "stage": "restart-route-persistence"
-    },
-    {
-      "source": "console",
-      "severity": "warning",
-      "summary": "[board] overview refresh failed TypeError: Failed to fetch at http://127.0.0.1:4304/_next/static/chunks/0--zv55iukt1w.js:1:418 at o (http://127.0.0.1:4304/_next/static/chunks/0--zv55iukt1w.js:1:667) at http://127.0.0.1:4304/_next/static/chunks/27kq-ynttm93w.js:1:89589 at http://127.0.0.1:4304/_next/static/chunks/27kq-ynttm93w.js:1:90258 at iv (http://127.0.0.1:4304/_next/static/chunks/34oyci46fsc5w.js:1:103000) at up (http://127.0.0.1:4304/_next/static/chunks/34oyci46fsc5w.js:1:127039) at ud (http://127.0.0.1:4304/_next/static/chunks/34oyci46fsc5w.js:1:126701) at up (http://127.0.0.1:4304/_next/static/chunks/34oyci46fsc5w.js:1:127084) at ud (http://127.0.0.1:4304/_next/static/chunks/34oyci46",
-      "stage": "history-navigation"
-    },
-    {
-      "source": "console",
-      "severity": "warning",
-      "summary": "[board] overview refresh failed TypeError: Failed to fetch at http://127.0.0.1:4304/_next/static/chunks/0--zv55iukt1w.js:1:418 at o (http://127.0.0.1:4304/_next/static/chunks/0--zv55iukt1w.js:1:667) at http://127.0.0.1:4304/_next/static/chunks/27kq-ynttm93w.js:1:89589 at http://127.0.0.1:4304/_next/static/chunks/27kq-ynttm93w.js:1:90258 at iv (http://127.0.0.1:4304/_next/static/chunks/34oyci46fsc5w.js:1:103000) at up (http://127.0.0.1:4304/_next/static/chunks/34oyci46fsc5w.js:1:127039) at ud (http://127.0.0.1:4304/_next/static/chunks/34oyci46fsc5w.js:1:126701) at up (http://127.0.0.1:4304/_next/static/chunks/34oyci46fsc5w.js:1:127084) at ud (http://127.0.0.1:4304/_next/static/chunks/34oyci46",
-      "stage": "history-navigation"
     }
   ],
+  "conversationPersistence": {
+    "schemaVersion": 1,
+    "transport": "hermes-acp-official-sdk",
+    "checkpoints": [
+      {
+        "checkpoint": "A",
+        "recordedAt": "2026-07-23T21:48:51.369Z",
+        "eventType": "before_initial_submission",
+        "conversationIdentity": null,
+        "nativeSessionIdentity": null,
+        "requestIdentity": null,
+        "turns": [],
+        "durableStoreCounts": null,
+        "inMemoryCounts": null,
+        "pendingRequiredWrites": null
+      },
+      {
+        "checkpoint": "B",
+        "recordedAt": "2026-07-23T21:49:04.871Z",
+        "eventType": "initial_completed_emitted",
+        "conversationIdentity": "0daf5c3a2544f0d1",
+        "nativeSessionIdentity": "7f4ad50bb2cd8fe5",
+        "requestIdentity": "initial",
+        "turns": [
+          {
+            "identity": "a85f4b5839dad556",
+            "sequence": 1,
+            "role": "user",
+            "lifecycleState": "completed"
+          },
+          {
+            "identity": "1c80c74690161240",
+            "sequence": 1,
+            "role": "agent",
+            "lifecycleState": "completed"
+          }
+        ],
+        "durableStoreCounts": {
+          "user": 1,
+          "assistant": 1,
+          "completedAssistant": 1,
+          "total": 2,
+          "duplicateTurnIdentities": 0
+        },
+        "inMemoryCounts": null,
+        "pendingRequiredWrites": null
+      },
+      {
+        "checkpoint": "C",
+        "recordedAt": "2026-07-23T21:49:04.879Z",
+        "eventType": "initial_persistence_drained",
+        "conversationIdentity": "0daf5c3a2544f0d1",
+        "nativeSessionIdentity": "7f4ad50bb2cd8fe5",
+        "requestIdentity": "initial",
+        "turns": [
+          {
+            "identity": "a85f4b5839dad556",
+            "sequence": 1,
+            "role": "user",
+            "lifecycleState": "completed"
+          },
+          {
+            "identity": "1c80c74690161240",
+            "sequence": 1,
+            "role": "agent",
+            "lifecycleState": "completed"
+          }
+        ],
+        "durableStoreCounts": {
+          "user": 1,
+          "assistant": 1,
+          "completedAssistant": 1,
+          "total": 2,
+          "duplicateTurnIdentities": 0
+        },
+        "inMemoryCounts": null,
+        "pendingRequiredWrites": null
+      },
+      {
+        "checkpoint": "D",
+        "recordedAt": "2026-07-23T21:49:13.237Z",
+        "eventType": "first_restart_reloaded",
+        "conversationIdentity": "0daf5c3a2544f0d1",
+        "nativeSessionIdentity": "7f4ad50bb2cd8fe5",
+        "requestIdentity": null,
+        "turns": [
+          {
+            "identity": "a85f4b5839dad556",
+            "sequence": 1,
+            "role": "user",
+            "lifecycleState": "completed"
+          },
+          {
+            "identity": "1c80c74690161240",
+            "sequence": 1,
+            "role": "agent",
+            "lifecycleState": "completed"
+          }
+        ],
+        "durableStoreCounts": {
+          "user": 1,
+          "assistant": 1,
+          "completedAssistant": 1,
+          "total": 2,
+          "duplicateTurnIdentities": 0
+        },
+        "inMemoryCounts": null,
+        "pendingRequiredWrites": null
+      },
+      {
+        "checkpoint": "E",
+        "recordedAt": "2026-07-23T21:49:13.281Z",
+        "eventType": "follow_up_accepted",
+        "conversationIdentity": "0daf5c3a2544f0d1",
+        "nativeSessionIdentity": "7f4ad50bb2cd8fe5",
+        "requestIdentity": "follow-up",
+        "turns": [
+          {
+            "identity": "a85f4b5839dad556",
+            "sequence": 1,
+            "role": "user",
+            "lifecycleState": "completed"
+          },
+          {
+            "identity": "1c80c74690161240",
+            "sequence": 1,
+            "role": "agent",
+            "lifecycleState": "completed"
+          },
+          {
+            "identity": "d1b1d873a900d5e9",
+            "sequence": 2,
+            "role": "user",
+            "lifecycleState": "completed"
+          }
+        ],
+        "durableStoreCounts": {
+          "user": 2,
+          "assistant": 1,
+          "completedAssistant": 1,
+          "total": 3,
+          "duplicateTurnIdentities": 0
+        },
+        "inMemoryCounts": null,
+        "pendingRequiredWrites": null
+      },
+      {
+        "checkpoint": "F",
+        "recordedAt": "2026-07-23T21:49:23.504Z",
+        "eventType": "follow_up_completed_emitted",
+        "conversationIdentity": "0daf5c3a2544f0d1",
+        "nativeSessionIdentity": "7f4ad50bb2cd8fe5",
+        "requestIdentity": "follow-up",
+        "turns": [
+          {
+            "identity": "a85f4b5839dad556",
+            "sequence": 1,
+            "role": "user",
+            "lifecycleState": "completed"
+          },
+          {
+            "identity": "1c80c74690161240",
+            "sequence": 1,
+            "role": "agent",
+            "lifecycleState": "completed"
+          },
+          {
+            "identity": "d1b1d873a900d5e9",
+            "sequence": 2,
+            "role": "user",
+            "lifecycleState": "completed"
+          },
+          {
+            "identity": "5fa591bfb8a6988b",
+            "sequence": 2,
+            "role": "agent",
+            "lifecycleState": "completed"
+          }
+        ],
+        "durableStoreCounts": {
+          "user": 2,
+          "assistant": 2,
+          "completedAssistant": 2,
+          "total": 4,
+          "duplicateTurnIdentities": 0
+        },
+        "inMemoryCounts": null,
+        "pendingRequiredWrites": null
+      },
+      {
+        "checkpoint": "G",
+        "recordedAt": "2026-07-23T21:49:23.514Z",
+        "eventType": "follow_up_persistence_drained",
+        "conversationIdentity": "0daf5c3a2544f0d1",
+        "nativeSessionIdentity": "7f4ad50bb2cd8fe5",
+        "requestIdentity": "follow-up",
+        "turns": [
+          {
+            "identity": "a85f4b5839dad556",
+            "sequence": 1,
+            "role": "user",
+            "lifecycleState": "completed"
+          },
+          {
+            "identity": "1c80c74690161240",
+            "sequence": 1,
+            "role": "agent",
+            "lifecycleState": "completed"
+          },
+          {
+            "identity": "d1b1d873a900d5e9",
+            "sequence": 2,
+            "role": "user",
+            "lifecycleState": "completed"
+          },
+          {
+            "identity": "5fa591bfb8a6988b",
+            "sequence": 2,
+            "role": "agent",
+            "lifecycleState": "completed"
+          }
+        ],
+        "durableStoreCounts": {
+          "user": 2,
+          "assistant": 2,
+          "completedAssistant": 2,
+          "total": 4,
+          "duplicateTurnIdentities": 0
+        },
+        "inMemoryCounts": null,
+        "pendingRequiredWrites": null
+      },
+      {
+        "checkpoint": "H",
+        "recordedAt": "2026-07-23T21:49:30.474Z",
+        "eventType": "second_restart_reloaded",
+        "conversationIdentity": "0daf5c3a2544f0d1",
+        "nativeSessionIdentity": "7f4ad50bb2cd8fe5",
+        "requestIdentity": null,
+        "turns": [
+          {
+            "identity": "a85f4b5839dad556",
+            "sequence": 1,
+            "role": "user",
+            "lifecycleState": "completed"
+          },
+          {
+            "identity": "1c80c74690161240",
+            "sequence": 1,
+            "role": "agent",
+            "lifecycleState": "completed"
+          },
+          {
+            "identity": "d1b1d873a900d5e9",
+            "sequence": 2,
+            "role": "user",
+            "lifecycleState": "completed"
+          },
+          {
+            "identity": "5fa591bfb8a6988b",
+            "sequence": 2,
+            "role": "agent",
+            "lifecycleState": "completed"
+          }
+        ],
+        "durableStoreCounts": {
+          "user": 2,
+          "assistant": 2,
+          "completedAssistant": 2,
+          "total": 4,
+          "duplicateTurnIdentities": 0
+        },
+        "inMemoryCounts": null,
+        "pendingRequiredWrites": null
+      }
+    ],
+    "nativeSessionIdentityStable": true,
+    "exactFinalCardinality": true,
+    "secondRestartCompleted": true,
+    "unavailableMeasurements": [
+      "inMemoryCounts",
+      "pendingRequiredWrites"
+    ]
+  },
   "screenshots": [
     {
       "id": "desktop-room",

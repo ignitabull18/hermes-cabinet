@@ -55,6 +55,7 @@ export interface BrowserIssue {
   summary: string;
   path?: string;
   expectedUnavailableProjection?: boolean;
+  expectedControlledRestart?: boolean;
 }
 
 export interface ConversationTurnDiagnostic {
@@ -91,6 +92,7 @@ export interface ConversationCheckpointEvidence {
 export interface ConversationPersistenceEvidence {
   schemaVersion: 1;
   transport: string;
+  modelRequestCount: number;
   checkpoints: ConversationCheckpointEvidence[];
   nativeSessionIdentityStable: boolean | null;
   exactFinalCardinality: boolean | null;
