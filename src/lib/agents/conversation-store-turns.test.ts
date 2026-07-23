@@ -437,6 +437,283 @@ test("readConversationDetail with withTurns returns turns + session", async () =
   assert.equal(detail.session?.resumeId, "s1");
 });
 
+test("synthetic restart keeps one stable 2/2 turn sequence", async () => {
+  const meta = await makeSingleShotConversation(
+    "Restart durability",
+    "User request:\ninitial",
+    "Initial response.\n```cabinet\nSUMMARY: initial\n```"
+  );
+  await store.writeSession(meta.id, {
+    kind: "hermes_runtime",
+    resumeId: "native-session-stable",
+    alive: true,
+  });
+
+  // Checkpoint D: a fresh disk read after the initial completion.
+  const afterInitialRestart = await store.readConversationTurns(meta.id);
+  assert.deepEqual(
+    afterInitialRestart.map((turn) => [turn.turn, turn.role]),
+    [[1, "user"], [1, "agent"]]
+  );
+
+  const userInput = {
+    content: "follow-up",
+    requestId: "request-follow-up",
+  };
+  const firstUser = await store.appendUserTurn(meta.id, userInput);
+  const duplicateUser = await store.appendUserTurn(meta.id, userInput);
+  assert.equal(
+    duplicateUser?.id,
+    firstUser?.id,
+    "duplicate submission must return the stable server-owned user turn"
+  );
+
+  const placeholderInput = {
+    content: "",
+    pending: true,
+    requestId: "request-follow-up",
+  };
+  const firstPlaceholder = await store.appendAgentTurn(meta.id, placeholderInput);
+  const duplicatePlaceholder = await store.appendAgentTurn(meta.id, placeholderInput);
+  assert.equal(
+    duplicatePlaceholder?.id,
+    firstPlaceholder?.id,
+    "duplicate placeholder creation must return the stable assistant turn"
+  );
+
+  const committed = await store.commitTurnResult(meta.id, {
+    requestId: "request-follow-up",
+    assistant: {
+      content: "Follow-up response.",
+      sessionId: "native-session-stable",
+    },
+    session: {
+      kind: "hermes_runtime",
+      resumeId: "native-session-stable",
+      alive: true,
+    },
+  });
+  assert.equal(committed?.assistantTurn.id, firstPlaceholder?.id);
+  const duplicateCompletion = await store.commitTurnResult(meta.id, {
+    requestId: "request-follow-up",
+    assistant: {
+      content: "ignored duplicate completion",
+      sessionId: "native-session-stable",
+    },
+    session: {
+      kind: "hermes_runtime",
+      resumeId: "native-session-stable",
+      alive: true,
+    },
+  });
+  assert.equal(duplicateCompletion?.assistantTurn.id, firstPlaceholder?.id);
+
+  // Checkpoint H: a second fresh disk read must prove exact cardinality.
+  const afterSecondRestart = await store.readConversationTurns(meta.id);
+  assert.equal(
+    afterSecondRestart.filter((turn) => turn.role === "user").length,
+    2
+  );
+  assert.equal(
+    afterSecondRestart.filter((turn) => turn.role === "agent").length,
+    2
+  );
+  assert.equal((await store.readSession(meta.id))?.resumeId, "native-session-stable");
+});
+
+test("stream chunks are idempotent and late chunks cannot reopen completion", async () => {
+  const meta = await makeSingleShotConversation(
+    "Chunk durability",
+    "User request:\ninitial",
+    "Initial.\n```cabinet\nSUMMARY: initial\n```"
+  );
+  await store.appendUserTurn(meta.id, {
+    content: "follow-up",
+    requestId: "chunk-request",
+  });
+  const first = await store.appendAgentTurnChunk(meta.id, {
+    requestId: "chunk-request",
+    chunkId: "chunk-1",
+    content: "Hello",
+  });
+  const duplicate = await store.appendAgentTurnChunk(meta.id, {
+    requestId: "chunk-request",
+    chunkId: "chunk-1",
+    content: "Hello",
+  });
+  assert.equal(duplicate?.id, first?.id);
+  assert.equal(duplicate?.content, "Hello");
+
+  await store.appendAgentTurnChunk(meta.id, {
+    requestId: "chunk-request",
+    chunkId: "chunk-2",
+    content: " world",
+  });
+  const completed = await store.appendAgentTurn(meta.id, {
+    requestId: "chunk-request",
+    content: "Hello world",
+    pending: false,
+  });
+  const late = await store.appendAgentTurnChunk(meta.id, {
+    requestId: "chunk-request",
+    chunkId: "chunk-late",
+    content: " ignored",
+  });
+  assert.equal(late?.id, completed?.id);
+  assert.equal(late?.content, "Hello world");
+  assert.equal(late?.pending, undefined);
+});
+
+test("restart preserves crash-before and crash-after finalization states", async () => {
+  const meta = await makeSingleShotConversation(
+    "Crash boundaries",
+    "User request:\ninitial",
+    "Initial.\n```cabinet\nSUMMARY: initial\n```"
+  );
+  await store.appendUserTurn(meta.id, {
+    content: "follow-up",
+    requestId: "crash-request",
+  });
+  const pending = await store.appendAgentTurn(meta.id, {
+    content: "partial",
+    pending: true,
+    requestId: "crash-request",
+  });
+
+  const afterCrashBefore = await store.readConversationTurns(meta.id);
+  const pendingAfterRestart = afterCrashBefore.find(
+    (turn) => turn.id === pending?.id
+  );
+  assert.equal(pendingAfterRestart?.pending, true);
+  assert.equal(pendingAfterRestart?.content, "partial");
+
+  const committed = await store.commitTurnResult(meta.id, {
+    requestId: "crash-request",
+    assistant: { content: "final" },
+    session: {
+      kind: "hermes_runtime",
+      resumeId: "crash-session",
+      alive: true,
+    },
+  });
+  const afterCrashAfter = await store.readConversationTurns(meta.id);
+  const finalizedAfterRestart = afterCrashAfter.find(
+    (turn) => turn.id === pending?.id
+  );
+  assert.equal(finalizedAfterRestart?.pending, undefined);
+  assert.equal(finalizedAfterRestart?.content, "final");
+  assert.ok(finalizedAfterRestart?.completedAt);
+
+  // Simulate a process dying after each canonical turn rename but before its
+  // meta write. Replaying the same request repairs meta without new turn IDs.
+  await store.writeConversationMeta({
+    ...meta,
+    status: "completed",
+    turnCount: 1,
+  });
+  const repairedUser = await store.appendUserTurn(meta.id, {
+    content: "follow-up",
+    requestId: "crash-request",
+  });
+  assert.equal(repairedUser?.id, pendingAfterRestart && afterCrashBefore.find(
+    (turn) => turn.role === "user" && turn.requestId === "crash-request"
+  )?.id);
+  assert.equal((await store.readConversationMeta(meta.id))?.status, "running");
+  assert.equal((await store.readConversationMeta(meta.id))?.turnCount, 2);
+
+  await store.writeConversationMeta({
+    ...meta,
+    status: "running",
+    turnCount: 2,
+  });
+  const repairedAssistant = await store.appendAgentTurn(meta.id, {
+    content: "final",
+    pending: false,
+    requestId: "crash-request",
+  });
+  assert.equal(repairedAssistant?.id, committed?.assistantTurn.id);
+  assert.equal((await store.readConversationMeta(meta.id))?.status, "completed");
+});
+
+test("session-load replay is rejected by the turn store", async () => {
+  const meta = await makeSingleShotConversation(
+    "Replay gate",
+    "User request:\ninitial",
+    "Initial.\n```cabinet\nSUMMARY: initial\n```"
+  );
+  assert.equal(
+    await store.appendUserTurn(meta.id, {
+      content: "historical user",
+      requestId: "load-history",
+      source: "session-load",
+    }),
+    null
+  );
+  assert.equal(
+    await store.appendAgentTurn(meta.id, {
+      content: "historical assistant",
+      requestId: "load-history",
+      source: "session-load",
+    }),
+    null
+  );
+  const turns = await store.readConversationTurns(meta.id);
+  assert.equal(turns.length, 2);
+});
+
+test("separate conversations never share generated turn identities", async () => {
+  const first = await makeSingleShotConversation(
+    "Identity A",
+    "User request:\na",
+    "A.\n```cabinet\nSUMMARY: a\n```"
+  );
+  const second = await makeSingleShotConversation(
+    "Identity B",
+    "User request:\nb",
+    "B.\n```cabinet\nSUMMARY: b\n```"
+  );
+  const firstTurn = await store.appendUserTurn(first.id, {
+    content: "next",
+    requestId: "same-request-label",
+  });
+  const secondTurn = await store.appendUserTurn(second.id, {
+    content: "next",
+    requestId: "same-request-label",
+  });
+  assert.notEqual(firstTurn?.id, secondTurn?.id);
+});
+
+test("history delay and failure remain visible without erasing canonical turns", async () => {
+  const meta = await makeSingleShotConversation(
+    "History isolation",
+    "User request:\ninitial",
+    "Initial.\n```cabinet\nSUMMARY: initial\n```"
+  );
+  const user = await store.appendUserTurn(meta.id, {
+    content: "durable",
+    requestId: "history-request",
+  });
+
+  const lifecycle = new store.ConversationStoreLifecycle();
+  let release!: () => void;
+  const delay = new Promise<void>((resolve) => { release = resolve; });
+  lifecycle.schedule(async () => {
+    await delay;
+    throw new Error("synthetic history failure");
+  });
+  const closing = lifecycle.close();
+  assert.equal(
+    (await store.readConversationTurns(meta.id)).some((turn) => turn.id === user?.id),
+    true
+  );
+  release();
+  await assert.rejects(closing, /background work failed during shutdown/);
+  assert.equal(
+    (await store.readConversationTurns(meta.id)).some((turn) => turn.id === user?.id),
+    true
+  );
+});
+
 test("backward compat: existing single-shot conversations without withTurns look identical", async () => {
   const meta = await makeSingleShotConversation(
     "Legacy",

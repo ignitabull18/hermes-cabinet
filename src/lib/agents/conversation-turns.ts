@@ -104,6 +104,7 @@ export function deserializeTurn(
   const data = parsed.data as Partial<ConversationTurn>;
   return {
     id: data.id || shortId(),
+    requestId: data.requestId,
     turn: data.turn ?? fallback.turn,
     role: (data.role as TurnRole) || fallback.role,
     ts: data.ts || new Date().toISOString(),
@@ -117,5 +118,7 @@ export function deserializeTurn(
     mentionedPaths: data.mentionedPaths,
     attachmentPaths: data.attachmentPaths,
     artifacts: data.artifacts,
+    chunkIds: data.chunkIds,
+    completedAt: data.completedAt,
   };
 }
