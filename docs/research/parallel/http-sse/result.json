@@ -1,0 +1,34 @@
+{
+  "stream": "http-sse",
+  "status": "blocked",
+  "branch": "research/profile-http-sse-transport",
+  "commit": null,
+  "merge_candidate": false,
+  "tests": {
+    "owned_probe": {
+      "status": "passed",
+      "passed": 7,
+      "failed": 0
+    },
+    "fixture_two_turn": "passed",
+    "fixture_adapter_restart_resume": "passed",
+    "fixture_zero_tool_events": "passed",
+    "fixture_sse_deduplication": "passed",
+    "upstream_api_sse": {
+      "status": "partial",
+      "passed": 257,
+      "failed": 1,
+      "failure": "isolated empty-home readiness was degraded while one health test expected ok"
+    },
+    "live_two_turn": "not_run_serialization_required"
+  },
+  "blockers": [
+    "Authorized real-model two-turn acceptance has not been run.",
+    "Live authentication requires a supported provider credential already exported in the overseer environment; retrieving or copying production credentials is not authorized.",
+    "Native API server lacks an explicit final-schema no-tools contract.",
+    "Run SSE has no Last-Event-ID replay history.",
+    "Session chat SSE disconnect does not directly interrupt the executor-backed agent."
+  ],
+  "recommendation": "Keep research-only until serialized live acceptance passes, then require an upstream conversation-only sidecar mode with explicit no-tools, SSE replay, and session-stream interruption.",
+  "production_touched": false
+}
