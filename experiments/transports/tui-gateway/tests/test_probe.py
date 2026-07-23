@@ -65,6 +65,33 @@ class ProbeUnitTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises((TimeoutError, IndexError)):
             await client.request("never", {}, timeout=0.001)
 
+    async def test_turn_drains_stream_buffered_before_rpc_response(self):
+        def event(event_type, payload=None):
+            params = {"type": event_type, "session_id": "session-1"}
+            if payload is not None:
+                params["payload"] = payload
+            return {"jsonrpc": "2.0", "method": "event", "params": params}
+
+        frames = [
+            event("message.start"),
+            event("message.delta", {"text": "CABINET_"}),
+            event(
+                "message.complete",
+                {"text": "CABINET_TRANSPORT_OK", "status": "complete"},
+            ),
+            {
+                "jsonrpc": "2.0",
+                "id": "1",
+                "result": {"status": "streaming"},
+            },
+        ]
+        client = RpcClient(_FakeWebSocket([json.dumps(frame) for frame in frames]))
+
+        turn = await client.run_turn("session-1", "fixture")
+
+        self.assertEqual(turn.response, "CABINET_TRANSPORT_OK")
+        self.assertEqual(turn.event_count, 3)
+
 
 class SidecarGuards(unittest.TestCase):
     def setUp(self):

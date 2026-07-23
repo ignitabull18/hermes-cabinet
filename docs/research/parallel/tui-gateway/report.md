@@ -2,10 +2,12 @@
 
 ## Outcome
 
-**Status: LIVE_READY.** Static checks and an isolated socket fixture pass. The
-authorized real-model two-turn acceptance has deliberately not been run. Until
-the overseer serializes that run, the mandatory transport conditions are not
-accepted and this research branch is not a merge candidate.
+**Status: failed mandatory live gate; not retryable in this execution.** The
+authorized initial live message was sent once. The probe stopped with
+`ProtocolError: message stream arrived before message.start`. No follow-up was
+sent because no assistant token was persisted, so the authorized follow-up
+could not truthfully ask for a previous token. Another initial message requires
+new authorization.
 
 The installed TUI gateway is the strongest native Hermes conversation and
 management boundary found in this stream, but it has one material contract gap:
@@ -13,6 +15,15 @@ Hermes cannot express an empty TUI toolset through its documented environment
 or JSON-RPC surface. The disposable sidecar pins the installed agent factory to
 an explicit empty list and the client independently rejects any advertised
 tool inventory, `tool.*` event, or `subagent.*` event.
+
+The live failure was in the probe, not evidence of corrupt Hermes ordering.
+Installed source emits `message.start` synchronously before launching the turn
+thread. The generic `request()` method consumed and buffered that event while
+waiting for the `prompt.submit` response. `run_turn()` then reset its local
+ordering flag and ignored the buffered start event. A later stream frame
+therefore triggered the false error. `run_turn()` now drains buffered events
+from its pre-request cursor before awaiting more frames, preserving their
+original receive timestamps.
 
 ## Audited baseline and primary sources
 
@@ -80,6 +91,22 @@ types, `message.start` before streamed content, and a terminal completion. It
 deduplicates identical event envelopes by SHA-256 of canonical event params and
 records duplicate count rather than rendering duplicates.
 
+### Live evidence
+
+The failed run left exactly one unambiguous operator profile conversation with
+the acceptance source:
+
+- one conversation, `message_count=1`, `tool_call_count=0`;
+- one user-role message row only;
+- zero assistant rows;
+- zero exact assistant acceptance tokens;
+- zero tool calls.
+
+Port 4202 was cleaned after failure. These facts explain why neither a resume
+nor a follow-up was attempted: there is no prior assistant token to recall.
+They do not prove first-turn correctness, two-turn correctness, streaming
+correctness, or restart durability.
+
 ### Profile and secret behavior
 
 `session.create` and `session.resume` accept `profile`. Hermes resolves that to
@@ -102,9 +129,10 @@ transport ownership. Across a sidecar process restart, in-memory live state is
 lost, but the first turn is persisted in the profile `state.db`; a new process
 can resume by `stored_session_id`.
 
-The guarded live harness proves the stronger case: first turn, client close,
+The harness is designed to test the stronger case: first turn, client close,
 sidecar termination, fresh sidecar process, durable resume, transcript check,
-and follow-up. That proof remains pending until the overseer runs it.
+and follow-up. The authorized execution stopped during the first turn, so none
+of the restart/resume claims received live proof.
 
 ## No-tools result
 
@@ -131,6 +159,10 @@ tool schemas to send on the first model request. Acceptance then requires
 hydrated `tools` to be empty and forbids all tool/subagent events. The isolated
 fixture uses Hermes' installed synthetic agent seam, which has an empty tool
 list and performs no model, credential, tool, MCP, or external call.
+
+The live database metadata independently showed `tool_call_count=0`. This is
+consistent with the no-tools boundary, but because no assistant row persisted,
+it is not a substitute for a successful response plus zero-event assertion.
 
 This is adequate for a disposable acceptance probe. Production adoption should
 add an upstream, supported explicit no-tools option rather than retain a private
@@ -166,63 +198,53 @@ The socket fixture starts only the disposable sidecar with a temporary
 - unknown-method error framing;
 - malformed envelopes, oversized frames, event-envelope validation;
 - identical-event deduplication;
+- start/delta/completion buffered before the `prompt.submit` RPC response;
 - bounded request failure;
 - loopback and fixed-port guards.
 
-Result: **8 tests passed**. Python compilation also passed. No real model
-request was made.
+Result after the live-derived regression fix: **9 tests passed**. Python
+compilation also passed. The fixture itself makes no real model request.
 
 ## Common rubric
 
-Current score is **66/100, provisional**. A failing or unrun mandatory
-condition cannot win.
+Current score is **55/100**. The mandatory live gate failed, so this transport
+cannot win in this execution regardless of the static score.
 
 | Criterion | Score | Basis |
 | --- | ---: | --- |
-| Two-turn correctness | 0/20 | Guarded live test prepared, not run |
-| Session durability across Cabinet restart | 10/15 | Native persistence audited; restart harness prepared |
-| Streaming correctness/deduplication | 9/10 | Ordered synthetic stream and client validation pass |
-| No-tools enforcement | 8/10 | Hard pin and fixture pass; real-model zero-event proof pending |
-| Failure/cancellation semantics | 9/10 | Bounded errors and synthetic interrupt pass |
+| Two-turn correctness | 0/20 | First live turn did not complete in the probe |
+| Session durability across Cabinet restart | 0/15 | Restart/resume was correctly not attempted |
+| Streaming correctness/deduplication | 7/10 | Root cause fixed with regression; no authorized live recheck |
+| No-tools enforcement | 10/10 | Dual pre-session pin; MCP disabled; live metadata has zero tool calls |
+| Failure/cancellation semantics | 8/10 | Probe failed closed; bounded errors and synthetic interrupt pass |
 | Native Hermes fit | 10/10 | Exact installed Desktop/TUI dispatcher |
 | Future management breadth | 8/10 | Broad methods; gateway lifecycle missing |
 | Operational simplicity | 3/5 | Native `serve` is simple; no-tools needs wrapper |
 | Security boundary | 5/5 | Loopback, fixed port/profile, bounded frames, no secret output |
 | Maintenance burden | 4/5 | Thin wrapper, but private no-tools seam is revision-sensitive |
 
-If the guarded live acceptance passes, the expected score is 93/100. That
-projection is not a result.
-
 ## Blockers and recommendation
 
 Blockers:
 
-1. The serialized real-model acceptance is pending.
+1. The mandatory live gate failed and this execution's initial-message
+   authorization is consumed. A retry requires new authorization.
 2. Explicit no-tools is not a supported native TUI gateway setting.
 3. Gateway lifecycle is outside this JSON-RPC namespace.
 
-Recommendation: prefer the TUI Gateway WebSocket JSON-RPC interface as
-Cabinet's leading durable Hermes runtime candidate, contingent on the serialized
-live pass and an upstream/native explicit no-tools contract. Keep gateway
-lifecycle under a separate supervised process boundary and wrap all management
-mutators with Cabinet governance.
-
-## Overseer live command
-
-Run only when the overseer has serialized this transport's authorized turn:
-
-```bash
-cd /Users/ignitabull/projects/worktrees/hermes-cabinet-parallel/tui-gateway && /Users/ignitabull/.hermes/hermes-agent/venv/bin/python experiments/transports/tui-gateway/probe.py --python /Users/ignitabull/.hermes/hermes-agent/venv/bin/python --sidecar /Users/ignitabull/projects/worktrees/hermes-cabinet-parallel/tui-gateway/experiments/transports/tui-gateway/sidecar.py --hermes-source /Users/ignitabull/.hermes/hermes-agent --output /tmp/hermes-cabinet-tui-gateway-live-result.json --confirm-live
-```
-
-The harness refuses an existing port-4202 listener. It runs exactly the
-authorized initial prompt and follow-up, sequentially, with a sidecar restart
-between them.
+Recommendation: retain TUI Gateway as a technically strong candidate, but do
+not select or retry it from this execution. If a fresh serialized acceptance is
+authorized later, use the corrected buffered-event client and still require a
+supported upstream no-tools contract before production adoption. Keep gateway
+lifecycle separately supervised and wrap management mutators with Cabinet
+governance.
 
 ## Safety confirmation
 
 Production Cabinet, canonical Cabinet data, `.cabinet.env`, Hermes source,
 Hermes services, launchd jobs, gateway jobs, existing gateways, Skills,
 settings, schedules, providers, models, MCP, plugins, and UI were not modified.
-Port 4000 was not used. The only writes are in this stream's owned experiment
-and research-report directories plus temporary fixture homes.
+Port 4000 was not used. Port 4202 was cleaned. The one authorized acceptance
+conversation mutation is the sole live-state change: one operator profile
+conversation with one user row and no assistant/tool rows. All other writes are
+in this stream's owned experiment/research directories or temporary fixtures.

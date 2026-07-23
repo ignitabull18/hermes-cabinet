@@ -1,23 +1,30 @@
 {
   "stream": "tui-gateway",
-  "status": "blocked",
+  "status": "failed",
   "branch": "research/tui-gateway-jsonrpc-transport",
-  "commit": "48e4f15d2d3013168b5fbea455e5c7c0ede768aa",
+  "commit": null,
   "merge_candidate": false,
   "tests": {
     "unit_and_socket_fixture": {
-      "passed": 8,
+      "passed": 9,
       "failed": 0,
       "command": "TUI_GATEWAY_FIXTURE_E2E=1 <hermes-venv-python> -m unittest discover -s experiments/transports/tui-gateway/tests -v"
     },
     "python_compile": "passed",
-    "live_two_turn_acceptance": "not_run_live_ready"
+    "live_two_turn_acceptance": {
+      "status": "failed_not_retryable_in_this_execution",
+      "failure": "client ignored message.start buffered before prompt.submit response",
+      "follow_up_sent": false,
+      "persisted_user_rows": 1,
+      "persisted_assistant_rows": 0,
+      "persisted_tool_calls": 0
+    }
   },
   "blockers": [
-    "Serialized real-model two-turn acceptance is pending",
+    "Mandatory live gate failed and a retry requires new authorization",
     "Installed TUI gateway has no supported explicit empty-toolset setting",
     "Gateway lifecycle is not exposed in the TUI JSON-RPC namespace"
   ],
-  "recommendation": "Prefer TUI Gateway WebSocket JSON-RPC as the leading Cabinet runtime candidate if serialized live acceptance passes and Hermes gains a supported explicit no-tools contract; keep gateway lifecycle separately supervised.",
-  "production_touched": false
+  "recommendation": "Retain TUI Gateway as a candidate but do not select or retry it from this execution; any newly authorized run must use the corrected buffered-event client, and production adoption still requires a supported explicit no-tools contract.",
+  "production_touched": true
 }

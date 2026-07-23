@@ -56,6 +56,7 @@ class RpcClient:
     next_id: int = 1
     responses: dict[str, dict] = field(default_factory=dict)
     events: list[dict] = field(default_factory=list)
+    event_received_at: list[float] = field(default_factory=list)
     seen_events: set[str] = field(default_factory=set)
     duplicate_count: int = 0
 
@@ -114,6 +115,7 @@ class RpcClient:
             return
         self.seen_events.add(digest)
         self.events.append(frame)
+        self.event_received_at.append(time.monotonic())
         if len(self.events) > MAX_EVENTS:
             raise ProtocolError("event limit exceeded")
 
@@ -207,41 +209,55 @@ class RpcClient:
         response_text = ""
         saw_message_start = False
         deadline = start + TURN_TIMEOUT_S
-        while True:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise TimeoutError("turn timed out")
-            frame = await self._next(timeout=remaining)
-            if frame.get("method") != "event":
-                continue
+        cursor = before
+
+        def consume(frame: dict, received_at: float) -> TurnMetrics | None:
+            nonlocal first_event_at, response_text, saw_message_start
             params = frame["params"]
             if params.get("session_id") != session_id:
-                continue
+                return None
             event_type = params["type"]
             if event_type == "message.start":
                 saw_message_start = True
             if event_type in {"message.delta", "message.complete", "error"}:
                 if event_type != "error" and not saw_message_start:
                     raise ProtocolError("message stream arrived before message.start")
-                first_event_at = first_event_at or time.monotonic()
+                first_event_at = first_event_at or received_at
             payload = params.get("payload") or {}
             if event_type == "message.delta":
                 response_text += str(payload.get("text") or "")
             elif event_type == "message.complete":
-                completed = time.monotonic()
                 final = str(payload.get("text") or response_text).strip()
                 self.assert_no_tools()
                 return TurnMetrics(
                     response=final,
                     first_event_ms=round(
-                        ((first_event_at or completed) - start) * 1000, 2
+                        ((first_event_at or received_at) - start) * 1000, 2
                     ),
-                    completed_ms=round((completed - start) * 1000, 2),
+                    completed_ms=round((received_at - start) * 1000, 2),
                     event_count=len(self.events) - before,
                     duplicate_count=self.duplicate_count - duplicates_before,
                 )
             elif event_type == "error":
                 raise ProtocolError(str(payload.get("message") or "turn error"))
+            return None
+
+        while True:
+            # prompt.submit is dispatched on Hermes' worker pool. Its synchronous
+            # message.start (and, for a fast response, later stream frames) may
+            # reach request() before the RPC response. Drain those buffered
+            # events before awaiting another frame.
+            while cursor < len(self.events):
+                frame = self.events[cursor]
+                received_at = self.event_received_at[cursor]
+                cursor += 1
+                if outcome := consume(frame, received_at):
+                    return outcome
+
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("turn timed out")
+            await self._next(timeout=remaining)
 
 
 def _wait_for_port(proc: subprocess.Popen, timeout: float = READY_TIMEOUT_S) -> None:
