@@ -186,6 +186,29 @@ export class ConversationStoreLifecycle {
 }
 
 const conversationStoreLifecycle = new ConversationStoreLifecycle();
+const conversationWriteChains = new Map<string, Promise<unknown>>();
+
+async function withConversationWrite<T>(
+  id: string,
+  work: () => Promise<T>
+): Promise<T> {
+  const previous = conversationWriteChains.get(id) ?? Promise.resolve();
+  const current = previous.catch(() => undefined).then(work);
+  conversationWriteChains.set(id, current);
+  try {
+    return await current;
+  } finally {
+    if (conversationWriteChains.get(id) === current) {
+      conversationWriteChains.delete(id);
+    }
+  }
+}
+
+export async function flushConversation(id: string): Promise<void> {
+  while (conversationWriteChains.has(id)) {
+    await conversationWriteChains.get(id);
+  }
+}
 
 // In-memory running counts — bootstrapped once from disk, then delta-updated
 // from notifications so the SSE tick never opens meta.json files.
@@ -1432,11 +1455,31 @@ const transcriptEventThrottle = new Map<string, number>();
  * removed. Idempotent: repeated callers await the same completed shutdown.
  */
 export async function closeConversationStore(): Promise<void> {
-  await conversationStoreLifecycle.close();
+  const writeResults = await Promise.allSettled([
+    ...conversationWriteChains.values(),
+  ]);
+  let lifecycleFailure: unknown;
+  try {
+    await conversationStoreLifecycle.close();
+  } catch (error) {
+    lifecycleFailure = error;
+  }
   transcriptEventThrottle.clear();
   notificationQueue.length = 0;
   _runningCounts.clear();
   _runningCountsBootstrapped = false;
+  const failures = writeResults
+    .filter(
+      (result): result is PromiseRejectedResult => result.status === "rejected"
+    )
+    .map((result) => result.reason);
+  if (lifecycleFailure) failures.push(lifecycleFailure);
+  if (failures.length > 0) {
+    throw new AggregateError(
+      failures,
+      "Conversation store failed to close durably"
+    );
+  }
 }
 
 export async function appendConversationTranscript(
@@ -2099,6 +2142,11 @@ export async function moveStagingAttachments(args: {
 
 export interface AppendUserTurnInput {
   content: string;
+  /** Stable server request identity. Replays with the same value are no-ops. */
+  requestId?: string;
+  /** Optional preallocated server turn identity. */
+  turnId?: string;
+  source?: "prompt" | "session-load";
   mentionedPaths?: string[];
   /**
    * Composer attachments for this user turn. Persisted on the turn file
@@ -2111,6 +2159,10 @@ export interface AppendUserTurnInput {
 
 export interface AppendAgentTurnInput {
   content: string;
+  requestId?: string;
+  turnId?: string;
+  source?: "prompt" | "session-load";
+  chunkIds?: string[];
   ts?: string;
   sessionId?: string;
   tokens?: TurnTokens;
@@ -2123,6 +2175,7 @@ export interface AppendAgentTurnInput {
 
 export interface UpdateAgentTurnInput {
   content?: string;
+  requestId?: string;
   sessionId?: string;
   tokens?: TurnTokens;
   awaitingInput?: boolean;
@@ -2130,6 +2183,8 @@ export interface UpdateAgentTurnInput {
   exitCode?: number | null;
   error?: string;
   artifacts?: string[];
+  chunkIds?: string[];
+  completedAt?: string;
 }
 
 /**
@@ -2671,6 +2726,24 @@ async function writeTurnFile(
   await writeFileContent(turnFileFs(dir, turn.turn, turn.role), serializeTurn(turn));
 }
 
+async function findAdditionalTurn(
+  id: string,
+  role: TurnRole,
+  identity: { requestId?: string; turnId?: string },
+  cabinetPath?: string
+): Promise<ConversationTurn | null> {
+  if (!identity.requestId && !identity.turnId) return null;
+  const turns = await readAdditionalTurns(id, cabinetPath);
+  return (
+    turns.find(
+      (turn) =>
+        turn.role === role &&
+        ((identity.turnId && turn.id === identity.turnId) ||
+          (identity.requestId && turn.requestId === identity.requestId))
+    ) ?? null
+  );
+}
+
 function mergeArtifactPaths(
   existing: string[],
   incoming: string[] | undefined
@@ -2696,15 +2769,52 @@ export async function appendUserTurn(
   input: AppendUserTurnInput,
   cabinetPath?: string
 ): Promise<ConversationTurn | null> {
+  return withConversationWrite(id, () =>
+    appendUserTurnUnlocked(id, input, cabinetPath)
+  );
+}
+
+async function appendUserTurnUnlocked(
+  id: string,
+  input: AppendUserTurnInput,
+  cabinetPath?: string
+): Promise<ConversationTurn | null> {
+  if (input.source === "session-load") return null;
   const meta = await readConversationMeta(id, cabinetPath);
   if (!meta) return null;
   const cp = meta.cabinetPath || cabinetPath;
+  const existing = await findAdditionalTurn(
+    id,
+    "user",
+    { requestId: input.requestId, turnId: input.turnId },
+    cp
+  );
+  if (existing) {
+    if (meta.status !== "running" || (meta.turnCount ?? 1) < existing.turn) {
+      const allTurns = await readConversationTurns(id, cp);
+      await writeConversationMeta({
+        ...meta,
+        turnCount: Math.max(Math.ceil(allTurns.length / 2), 1),
+        lastActivityAt: existing.ts,
+        status: "running",
+        awaitingInput: false,
+        doneAt: undefined,
+        archivedAt: undefined,
+        mentionedPaths: mergeArtifactPaths(
+          meta.mentionedPaths,
+          existing.mentionedPaths
+        ),
+      });
+    }
+    return existing;
+  }
 
   const turnNumber = await nextTurnNumber(id, cp);
   const ts = input.ts || new Date().toISOString();
 
   const turn: ConversationTurn = {
-    id: shortId(),
+    id: input.turnId || shortId(),
+    requestId: input.requestId,
     turn: turnNumber,
     role: "user",
     ts,
@@ -2722,7 +2832,7 @@ export async function appendUserTurn(
   const allTurns = await readConversationTurns(id, cp);
   const updatedMeta: ConversationMeta = {
     ...meta,
-    turnCount: Math.max(allTurns.length / 2 | 0, 1),
+    turnCount: Math.max(Math.ceil(allTurns.length / 2), 1),
     lastActivityAt: ts,
     status: "running",
     awaitingInput: false,
@@ -2773,9 +2883,74 @@ export async function appendAgentTurn(
   input: AppendAgentTurnInput,
   cabinetPath?: string
 ): Promise<ConversationTurn | null> {
+  return withConversationWrite(id, () =>
+    appendAgentTurnUnlocked(id, input, cabinetPath)
+  );
+}
+
+async function appendAgentTurnUnlocked(
+  id: string,
+  input: AppendAgentTurnInput,
+  cabinetPath?: string
+): Promise<ConversationTurn | null> {
+  if (input.source === "session-load") return null;
   const meta = await readConversationMeta(id, cabinetPath);
   if (!meta) return null;
   const cp = meta.cabinetPath || cabinetPath;
+  const existing = await findAdditionalTurn(
+    id,
+    "agent",
+    { requestId: input.requestId, turnId: input.turnId },
+    cp
+  );
+  if (existing) {
+    if (input.pending) return existing;
+    if (!existing.pending) {
+      const failed =
+        (typeof existing.exitCode === "number" && existing.exitCode !== 0) ||
+        !!existing.error;
+      const expectedStatus = failed ? "failed" : "completed";
+      if (meta.status !== expectedStatus || (meta.turnCount ?? 1) < existing.turn) {
+        return updateAgentTurnUnlocked(
+          id,
+          existing.turn,
+          {
+            content: existing.content,
+            requestId: existing.requestId,
+            sessionId: existing.sessionId,
+            tokens: existing.tokens,
+            awaitingInput: existing.awaitingInput,
+            pending: false,
+            exitCode: existing.exitCode,
+            error: existing.error,
+            artifacts: existing.artifacts,
+            chunkIds: existing.chunkIds,
+            completedAt: existing.completedAt,
+          },
+          cp
+        );
+      }
+      return existing;
+    }
+    return updateAgentTurnUnlocked(
+      id,
+      existing.turn,
+      {
+        content: input.content,
+        requestId: input.requestId,
+        sessionId: input.sessionId,
+        tokens: input.tokens,
+        awaitingInput: input.awaitingInput,
+        pending: false,
+        exitCode: input.exitCode,
+        error: input.error,
+        artifacts: input.artifacts,
+        chunkIds: input.chunkIds,
+        completedAt: new Date().toISOString(),
+      },
+      cp
+    );
+  }
 
   const turnNumber = await nextTurnNumber(id, cp);
   const ts = input.ts || new Date().toISOString();
@@ -2790,7 +2965,8 @@ export async function appendAgentTurn(
     : stripCabinetTrailer(input.content) || input.content;
 
   const turn: ConversationTurn = {
-    id: shortId(),
+    id: input.turnId || shortId(),
+    requestId: input.requestId,
     turn: turnNumber,
     role: "agent",
     ts,
@@ -2802,6 +2978,8 @@ export async function appendAgentTurn(
     exitCode: input.exitCode,
     error: input.error,
     artifacts: input.artifacts ?? parsed.artifactPaths,
+    chunkIds: input.chunkIds,
+    completedAt: input.pending ? undefined : new Date().toISOString(),
   };
 
   await writeTurnFile(id, cp, turn);
@@ -2866,6 +3044,17 @@ export async function updateAgentTurn(
   patch: UpdateAgentTurnInput,
   cabinetPath?: string
 ): Promise<ConversationTurn | null> {
+  return withConversationWrite(id, () =>
+    updateAgentTurnUnlocked(id, turnNumber, patch, cabinetPath)
+  );
+}
+
+async function updateAgentTurnUnlocked(
+  id: string,
+  turnNumber: number,
+  patch: UpdateAgentTurnInput,
+  cabinetPath?: string
+): Promise<ConversationTurn | null> {
   const meta = await readConversationMeta(id, cabinetPath);
   if (!meta) return null;
   const cp = meta.cabinetPath || cabinetPath;
@@ -2888,6 +3077,7 @@ export async function updateAgentTurn(
 
   const nextTurn: ConversationTurn = {
     ...existing,
+    requestId: patch.requestId ?? existing.requestId,
     content,
     sessionId: patch.sessionId ?? existing.sessionId,
     tokens: patch.tokens ?? existing.tokens,
@@ -2896,6 +3086,11 @@ export async function updateAgentTurn(
     exitCode: patch.exitCode ?? existing.exitCode,
     error: patch.error ?? existing.error,
     artifacts: patch.artifacts ?? parsed.artifactPaths ?? existing.artifacts,
+    chunkIds: patch.chunkIds ?? existing.chunkIds,
+    completedAt:
+      patch.pending === false
+        ? patch.completedAt ?? existing.completedAt ?? new Date().toISOString()
+        : existing.completedAt,
   };
 
   await writeTurnFile(id, cp, nextTurn);
@@ -2949,6 +3144,135 @@ export async function updateAgentTurn(
   });
 
   return nextTurn;
+}
+
+export interface AppendAgentTurnChunkInput {
+  requestId?: string;
+  turnId?: string;
+  chunkId: string;
+  content: string;
+}
+
+export async function appendAgentTurnChunk(
+  id: string,
+  input: AppendAgentTurnChunkInput,
+  cabinetPath?: string
+): Promise<ConversationTurn | null> {
+  return withConversationWrite(id, async () => {
+    const meta = await readConversationMeta(id, cabinetPath);
+    if (!meta) return null;
+    const cp = meta.cabinetPath || cabinetPath;
+    const existing = await findAdditionalTurn(
+      id,
+      "agent",
+      { requestId: input.requestId, turnId: input.turnId },
+      cp
+    );
+    if (!existing) {
+      return appendAgentTurnUnlocked(
+        id,
+        {
+          content: input.content,
+          pending: true,
+          requestId: input.requestId,
+          turnId: input.turnId,
+          chunkIds: [input.chunkId],
+        },
+        cp
+      );
+    }
+    if (!existing.pending || existing.chunkIds?.includes(input.chunkId)) {
+      return existing;
+    }
+    return updateAgentTurnUnlocked(
+      id,
+      existing.turn,
+      {
+        content: existing.content + input.content,
+        pending: true,
+        chunkIds: [...(existing.chunkIds ?? []), input.chunkId],
+      },
+      cp
+    );
+  });
+}
+
+export interface CommitTurnResultInput {
+  requestId: string;
+  user?: Omit<AppendUserTurnInput, "requestId" | "source">;
+  assistant: Omit<AppendAgentTurnInput, "requestId" | "source" | "pending">;
+  session: SessionHandle;
+}
+
+export interface CommittedTurnResult {
+  requestId: string;
+  userTurn: ConversationTurn | null;
+  assistantTurn: ConversationTurn;
+  session: SessionHandle;
+  committedAt: string;
+}
+
+function committedTurnResultPath(
+  id: string,
+  requestId: string,
+  cabinetPath?: string
+): string {
+  const digest = createHash("sha256").update(requestId).digest("hex");
+  return path.join(conversationDir(id, cabinetPath), "turn-results", `${digest}.json`);
+}
+
+/**
+ * Durable completion barrier for one prompt. The atomic result marker is
+ * written only after both canonical turns and the native session handle have
+ * reached disk. Callers must await this before publishing `completed`.
+ */
+export async function commitTurnResult(
+  id: string,
+  input: CommitTurnResultInput,
+  cabinetPath?: string
+): Promise<CommittedTurnResult | null> {
+  const result = await withConversationWrite(id, async () => {
+    const meta = await readConversationMeta(id, cabinetPath);
+    if (!meta) return null;
+    const cp = meta.cabinetPath || cabinetPath;
+    const markerPath = committedTurnResultPath(id, input.requestId, cp);
+    if (await fileExists(markerPath)) {
+      return JSON.parse(await readFileContent(markerPath)) as CommittedTurnResult;
+    }
+
+    const userTurn = input.user
+      ? await appendUserTurnUnlocked(
+          id,
+          { ...input.user, requestId: input.requestId, source: "prompt" },
+          cp
+        )
+      : await findAdditionalTurn(id, "user", { requestId: input.requestId }, cp);
+    const assistantTurn = await appendAgentTurnUnlocked(
+      id,
+      {
+        ...input.assistant,
+        requestId: input.requestId,
+        pending: false,
+        source: "prompt",
+      },
+      cp
+    );
+    if (!assistantTurn) return null;
+
+    await writeSession(id, input.session, cp);
+    const committed: CommittedTurnResult = {
+      requestId: input.requestId,
+      userTurn,
+      assistantTurn,
+      session: input.session,
+      committedAt: new Date().toISOString(),
+    };
+    await ensureDirectory(path.dirname(markerPath));
+    await writeFileAtomic(markerPath, JSON.stringify(committed, null, 2));
+    return committed;
+  });
+  await flushConversation(id);
+  return result;
 }
 
 // ── Agent action proposals ────────────────────────────────────────────────

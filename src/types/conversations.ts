@@ -54,6 +54,8 @@ export interface TurnTokens {
 
 export interface ConversationTurn {
   id: string;
+  /** Stable prompt request identity used to make persistence idempotent. */
+  requestId?: string;
   turn: number;
   role: TurnRole;
   ts: string;
@@ -71,6 +73,10 @@ export interface ConversationTurn {
    */
   attachmentPaths?: string[];
   artifacts?: string[];
+  /** Stable streamed-event identities already applied to this turn. */
+  chunkIds?: string[];
+  /** Set only after this exact assistant turn has been durably finalized. */
+  completedAt?: string;
 }
 
 export interface SessionHandle {
