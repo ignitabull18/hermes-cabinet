@@ -1,6 +1,24 @@
 {
   "stream": "schedules-jobs-approvals",
-  "status": "complete",
+  "status": "blocked",
+  "branch": "research/hermes-schedules-jobs-approvals",
+  "commit": "6302e6d6220eab7317b20ddd9b81bafaa8b102dd",
+  "merge_candidate": false,
+  "tests": {
+    "prototype_npm_test": {
+      "command": "npm test",
+      "tests": 13,
+      "passed": 13,
+      "failed": 0
+    }
+  },
+  "blockers": [
+    "Approval resolution cannot target an immutable exact request; upstream only resolves the oldest or all pending approvals in a session.",
+    "The Agent API has no native retry or resume route for live runs.",
+    "Governed live-run termination is outside this stream and lacks the required exact-target lifecycle contract.",
+    "Desktop Management authentication is ephemeral and is not a durable Cabinet service boundary."
+  ],
+  "recommendation": "Ship metadata-only inventory and the shared governance coordinator first; upstream immutable approval request IDs and a durable authenticated cross-profile schedules boundary before enabling live Cabinet mutations.",
   "cabinet_base": "3c3193a44a34dbe7b047ddd256e3d1aec31e1097",
   "installed_hermes": {
     "commit": "55759cb2737cd3870f9de4693f66fa38eaf0dd2b",
