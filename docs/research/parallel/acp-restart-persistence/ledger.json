@@ -1,0 +1,676 @@
+{
+  "schemaVersion": 1,
+  "port": 4311,
+  "synthetic": true,
+  "syntheticFollowUpDelayMs": 3500,
+  "contentPolicy": "fixed-token-classification-only",
+  "checkpoints": [
+    {
+      "checkpoint": "A",
+      "capturedAt": "2026-07-23T21:21:59.617Z",
+      "cabinetConversationId": null,
+      "nativeSessionId": null,
+      "turnIds": [],
+      "requestIds": [],
+      "conversationLifecycleState": null,
+      "roles": [],
+      "lifecycleStates": [],
+      "sequenceNumbers": [],
+      "eventTypes": [],
+      "durableStoreCounts": {
+        "conversations": 0,
+        "userTurns": 0,
+        "assistantTurns": 0,
+        "pendingAssistantTurns": 0,
+        "eventRows": 0,
+        "nativeSessions": 0
+      },
+      "inMemoryCounts": {
+        "loadedTurns": 0,
+        "loadedUserTurns": 0,
+        "loadedAssistantTurns": 0
+      },
+      "timestamps": [],
+      "pendingBackgroundOperations": 0,
+      "turns": []
+    },
+    {
+      "checkpoint": "B",
+      "capturedAt": "2026-07-23T21:21:59.825Z",
+      "cabinetConversationId": "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual",
+      "nativeSessionId": "fixture-acp-session",
+      "turnIds": [
+        "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual-t1u",
+        "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual-t1a"
+      ],
+      "requestIds": [
+        "process-1:request-2"
+      ],
+      "conversationLifecycleState": "completed",
+      "roles": [
+        "user",
+        "assistant"
+      ],
+      "lifecycleStates": [
+        "final",
+        "final"
+      ],
+      "sequenceNumbers": [
+        1,
+        2
+      ],
+      "eventTypes": [
+        "task.updated",
+        "task.updated"
+      ],
+      "durableStoreCounts": {
+        "conversations": 1,
+        "userTurns": 1,
+        "assistantTurns": 1,
+        "pendingAssistantTurns": 0,
+        "eventRows": 2,
+        "nativeSessions": 1
+      },
+      "inMemoryCounts": {
+        "loadedTurns": 2,
+        "loadedUserTurns": 1,
+        "loadedAssistantTurns": 1
+      },
+      "timestamps": [
+        "2026-07-23T21:21:59.640Z",
+        "2026-07-23T21:21:59.783Z"
+      ],
+      "pendingBackgroundOperations": 0,
+      "turns": [
+        {
+          "id": "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual-t1u",
+          "turn": 1,
+          "role": "user",
+          "lifecycle": "final",
+          "fixedTokenClass": "initial-test-token",
+          "timestamp": "2026-07-23T21:21:59.640Z"
+        },
+        {
+          "id": "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual-t1a",
+          "turn": 1,
+          "role": "assistant",
+          "lifecycle": "final",
+          "fixedTokenClass": "acceptance-token",
+          "timestamp": "2026-07-23T21:21:59.783Z"
+        }
+      ]
+    },
+    {
+      "checkpoint": "C",
+      "capturedAt": "2026-07-23T21:22:01.210Z",
+      "cabinetConversationId": "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual",
+      "nativeSessionId": "fixture-acp-session",
+      "turnIds": [
+        "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual-t1u",
+        "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual-t1a"
+      ],
+      "requestIds": [
+        "process-1:request-2"
+      ],
+      "conversationLifecycleState": "completed",
+      "roles": [
+        "user",
+        "assistant"
+      ],
+      "lifecycleStates": [
+        "final",
+        "final"
+      ],
+      "sequenceNumbers": [
+        1,
+        2
+      ],
+      "eventTypes": [
+        "task.updated",
+        "task.updated"
+      ],
+      "durableStoreCounts": {
+        "conversations": 1,
+        "userTurns": 1,
+        "assistantTurns": 1,
+        "pendingAssistantTurns": 0,
+        "eventRows": 2,
+        "nativeSessions": 1
+      },
+      "inMemoryCounts": {
+        "loadedTurns": 2,
+        "loadedUserTurns": 1,
+        "loadedAssistantTurns": 1
+      },
+      "timestamps": [
+        "2026-07-23T21:21:59.640Z",
+        "2026-07-23T21:21:59.783Z"
+      ],
+      "pendingBackgroundOperations": 0,
+      "turns": [
+        {
+          "id": "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual-t1u",
+          "turn": 1,
+          "role": "user",
+          "lifecycle": "final",
+          "fixedTokenClass": "initial-test-token",
+          "timestamp": "2026-07-23T21:21:59.640Z"
+        },
+        {
+          "id": "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual-t1a",
+          "turn": 1,
+          "role": "assistant",
+          "lifecycle": "final",
+          "fixedTokenClass": "acceptance-token",
+          "timestamp": "2026-07-23T21:21:59.783Z"
+        }
+      ]
+    },
+    {
+      "checkpoint": "D",
+      "capturedAt": "2026-07-23T21:22:05.305Z",
+      "cabinetConversationId": "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual",
+      "nativeSessionId": "fixture-acp-session",
+      "turnIds": [
+        "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual-t1u",
+        "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual-t1a"
+      ],
+      "requestIds": [
+        "process-1:request-2"
+      ],
+      "conversationLifecycleState": "completed",
+      "roles": [
+        "user",
+        "assistant"
+      ],
+      "lifecycleStates": [
+        "final",
+        "final"
+      ],
+      "sequenceNumbers": [
+        1,
+        2
+      ],
+      "eventTypes": [
+        "task.updated",
+        "task.updated"
+      ],
+      "durableStoreCounts": {
+        "conversations": 1,
+        "userTurns": 1,
+        "assistantTurns": 1,
+        "pendingAssistantTurns": 0,
+        "eventRows": 2,
+        "nativeSessions": 1
+      },
+      "inMemoryCounts": {
+        "loadedTurns": 2,
+        "loadedUserTurns": 1,
+        "loadedAssistantTurns": 1
+      },
+      "timestamps": [
+        "2026-07-23T21:21:59.640Z",
+        "2026-07-23T21:21:59.783Z"
+      ],
+      "pendingBackgroundOperations": 0,
+      "turns": [
+        {
+          "id": "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual-t1u",
+          "turn": 1,
+          "role": "user",
+          "lifecycle": "final",
+          "fixedTokenClass": "initial-test-token",
+          "timestamp": "2026-07-23T21:21:59.640Z"
+        },
+        {
+          "id": "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual-t1a",
+          "turn": 1,
+          "role": "assistant",
+          "lifecycle": "final",
+          "fixedTokenClass": "acceptance-token",
+          "timestamp": "2026-07-23T21:21:59.783Z"
+        }
+      ]
+    },
+    {
+      "checkpoint": "E",
+      "capturedAt": "2026-07-23T21:22:05.462Z",
+      "cabinetConversationId": "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual",
+      "nativeSessionId": "fixture-acp-session",
+      "turnIds": [
+        "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual-t1u",
+        "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual-t1a",
+        "HMTFY8Eu"
+      ],
+      "requestIds": [
+        "process-1:request-2"
+      ],
+      "conversationLifecycleState": "completed",
+      "roles": [
+        "user",
+        "assistant",
+        "user"
+      ],
+      "lifecycleStates": [
+        "final",
+        "final",
+        "final"
+      ],
+      "sequenceNumbers": [
+        1,
+        2,
+        3
+      ],
+      "eventTypes": [
+        "task.updated",
+        "task.updated",
+        "turn.appended"
+      ],
+      "durableStoreCounts": {
+        "conversations": 1,
+        "userTurns": 2,
+        "assistantTurns": 1,
+        "pendingAssistantTurns": 0,
+        "eventRows": 3,
+        "nativeSessions": 1
+      },
+      "inMemoryCounts": {
+        "loadedTurns": 3,
+        "loadedUserTurns": 2,
+        "loadedAssistantTurns": 1
+      },
+      "timestamps": [
+        "2026-07-23T21:21:59.640Z",
+        "2026-07-23T21:21:59.783Z",
+        "2026-07-23T21:22:05.398Z"
+      ],
+      "pendingBackgroundOperations": 1,
+      "turns": [
+        {
+          "id": "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual-t1u",
+          "turn": 1,
+          "role": "user",
+          "lifecycle": "final",
+          "fixedTokenClass": "initial-test-token",
+          "timestamp": "2026-07-23T21:21:59.640Z"
+        },
+        {
+          "id": "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual-t1a",
+          "turn": 1,
+          "role": "assistant",
+          "lifecycle": "final",
+          "fixedTokenClass": "acceptance-token",
+          "timestamp": "2026-07-23T21:21:59.783Z"
+        },
+        {
+          "id": "HMTFY8Eu",
+          "turn": 2,
+          "role": "user",
+          "lifecycle": "final",
+          "fixedTokenClass": "follow-up-test-token",
+          "timestamp": "2026-07-23T21:22:05.398Z"
+        }
+      ]
+    },
+    {
+      "checkpoint": "F",
+      "capturedAt": "2026-07-23T21:22:05.462Z",
+      "cabinetConversationId": "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual",
+      "nativeSessionId": "fixture-acp-session",
+      "turnIds": [
+        "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual-t1u",
+        "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual-t1a",
+        "HMTFY8Eu"
+      ],
+      "requestIds": [
+        "process-1:request-2"
+      ],
+      "conversationLifecycleState": "completed",
+      "roles": [
+        "user",
+        "assistant",
+        "user"
+      ],
+      "lifecycleStates": [
+        "final",
+        "final",
+        "final"
+      ],
+      "sequenceNumbers": [
+        1,
+        2,
+        3
+      ],
+      "eventTypes": [
+        "task.updated",
+        "task.updated",
+        "turn.appended"
+      ],
+      "durableStoreCounts": {
+        "conversations": 1,
+        "userTurns": 2,
+        "assistantTurns": 1,
+        "pendingAssistantTurns": 0,
+        "eventRows": 3,
+        "nativeSessions": 1
+      },
+      "inMemoryCounts": {
+        "loadedTurns": 3,
+        "loadedUserTurns": 2,
+        "loadedAssistantTurns": 1
+      },
+      "timestamps": [
+        "2026-07-23T21:21:59.640Z",
+        "2026-07-23T21:21:59.783Z",
+        "2026-07-23T21:22:05.398Z"
+      ],
+      "pendingBackgroundOperations": 1,
+      "turns": [
+        {
+          "id": "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual-t1u",
+          "turn": 1,
+          "role": "user",
+          "lifecycle": "final",
+          "fixedTokenClass": "initial-test-token",
+          "timestamp": "2026-07-23T21:21:59.640Z"
+        },
+        {
+          "id": "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual-t1a",
+          "turn": 1,
+          "role": "assistant",
+          "lifecycle": "final",
+          "fixedTokenClass": "acceptance-token",
+          "timestamp": "2026-07-23T21:21:59.783Z"
+        },
+        {
+          "id": "HMTFY8Eu",
+          "turn": 2,
+          "role": "user",
+          "lifecycle": "final",
+          "fixedTokenClass": "follow-up-test-token",
+          "timestamp": "2026-07-23T21:22:05.398Z"
+        }
+      ]
+    },
+    {
+      "checkpoint": "G",
+      "capturedAt": "2026-07-23T21:22:09.843Z",
+      "cabinetConversationId": "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual",
+      "nativeSessionId": "fixture-acp-session",
+      "turnIds": [
+        "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual-t1u",
+        "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual-t1a",
+        "HMTFY8Eu",
+        "-jlN_82G"
+      ],
+      "requestIds": [
+        "process-1:request-2",
+        "process-2:request-2"
+      ],
+      "conversationLifecycleState": "completed",
+      "roles": [
+        "user",
+        "assistant",
+        "user",
+        "assistant"
+      ],
+      "lifecycleStates": [
+        "final",
+        "final",
+        "final",
+        "final"
+      ],
+      "sequenceNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "eventTypes": [
+        "task.updated",
+        "task.updated",
+        "turn.appended",
+        "turn.appended",
+        "turn.updated",
+        "turn.updated"
+      ],
+      "durableStoreCounts": {
+        "conversations": 1,
+        "userTurns": 2,
+        "assistantTurns": 2,
+        "pendingAssistantTurns": 0,
+        "eventRows": 6,
+        "nativeSessions": 1
+      },
+      "inMemoryCounts": {
+        "loadedTurns": 4,
+        "loadedUserTurns": 2,
+        "loadedAssistantTurns": 2
+      },
+      "timestamps": [
+        "2026-07-23T21:21:59.640Z",
+        "2026-07-23T21:21:59.783Z",
+        "2026-07-23T21:22:05.398Z",
+        "2026-07-23T21:22:05.518Z"
+      ],
+      "pendingBackgroundOperations": 0,
+      "turns": [
+        {
+          "id": "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual-t1u",
+          "turn": 1,
+          "role": "user",
+          "lifecycle": "final",
+          "fixedTokenClass": "initial-test-token",
+          "timestamp": "2026-07-23T21:21:59.640Z"
+        },
+        {
+          "id": "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual-t1a",
+          "turn": 1,
+          "role": "assistant",
+          "lifecycle": "final",
+          "fixedTokenClass": "acceptance-token",
+          "timestamp": "2026-07-23T21:21:59.783Z"
+        },
+        {
+          "id": "HMTFY8Eu",
+          "turn": 2,
+          "role": "user",
+          "lifecycle": "final",
+          "fixedTokenClass": "follow-up-test-token",
+          "timestamp": "2026-07-23T21:22:05.398Z"
+        },
+        {
+          "id": "-jlN_82G",
+          "turn": 2,
+          "role": "assistant",
+          "lifecycle": "final",
+          "fixedTokenClass": "acceptance-token",
+          "timestamp": "2026-07-23T21:22:05.518Z"
+        }
+      ]
+    },
+    {
+      "checkpoint": "H",
+      "capturedAt": "2026-07-23T21:22:15.411Z",
+      "cabinetConversationId": "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual",
+      "nativeSessionId": "fixture-acp-session",
+      "turnIds": [
+        "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual-t1u",
+        "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual-t1a",
+        "HMTFY8Eu",
+        "-jlN_82G"
+      ],
+      "requestIds": [
+        "process-1:request-2",
+        "process-2:request-2"
+      ],
+      "conversationLifecycleState": "completed",
+      "roles": [
+        "user",
+        "assistant",
+        "user",
+        "assistant"
+      ],
+      "lifecycleStates": [
+        "final",
+        "final",
+        "final",
+        "final"
+      ],
+      "sequenceNumbers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "eventTypes": [
+        "task.updated",
+        "task.updated",
+        "turn.appended",
+        "turn.appended",
+        "turn.updated",
+        "turn.updated"
+      ],
+      "durableStoreCounts": {
+        "conversations": 1,
+        "userTurns": 2,
+        "assistantTurns": 2,
+        "pendingAssistantTurns": 0,
+        "eventRows": 6,
+        "nativeSessions": 1
+      },
+      "inMemoryCounts": {
+        "loadedTurns": 4,
+        "loadedUserTurns": 2,
+        "loadedAssistantTurns": 2
+      },
+      "timestamps": [
+        "2026-07-23T21:21:59.640Z",
+        "2026-07-23T21:21:59.783Z",
+        "2026-07-23T21:22:05.398Z",
+        "2026-07-23T21:22:05.518Z"
+      ],
+      "pendingBackgroundOperations": 0,
+      "turns": [
+        {
+          "id": "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual-t1u",
+          "turn": 1,
+          "role": "user",
+          "lifecycle": "final",
+          "fixedTokenClass": "initial-test-token",
+          "timestamp": "2026-07-23T21:21:59.640Z"
+        },
+        {
+          "id": "2026-07-23T21-21-59-640Z-0b2bf194-editor-manual-t1a",
+          "turn": 1,
+          "role": "assistant",
+          "lifecycle": "final",
+          "fixedTokenClass": "acceptance-token",
+          "timestamp": "2026-07-23T21:21:59.783Z"
+        },
+        {
+          "id": "HMTFY8Eu",
+          "turn": 2,
+          "role": "user",
+          "lifecycle": "final",
+          "fixedTokenClass": "follow-up-test-token",
+          "timestamp": "2026-07-23T21:22:05.398Z"
+        },
+        {
+          "id": "-jlN_82G",
+          "turn": 2,
+          "role": "assistant",
+          "lifecycle": "final",
+          "fixedTokenClass": "acceptance-token",
+          "timestamp": "2026-07-23T21:22:05.518Z"
+        }
+      ]
+    }
+  ],
+  "protocolEvents": [
+    {
+      "at": "2026-07-23T21:21:59.736Z",
+      "type": "initialize",
+      "requestId": 0
+    },
+    {
+      "at": "2026-07-23T21:21:59.748Z",
+      "type": "session.new",
+      "requestId": 1,
+      "sessionId": "fixture-acp-session",
+      "mcpServerCount": 0
+    },
+    {
+      "at": "2026-07-23T21:21:59.750Z",
+      "type": "prompt.dispatch",
+      "requestId": 2,
+      "requestOrdinal": 1,
+      "sessionId": "fixture-acp-session",
+      "fixedTokenClass": "acceptance-token"
+    },
+    {
+      "at": "2026-07-23T21:21:59.750Z",
+      "type": "assistant.chunk",
+      "requestOrdinal": 1,
+      "sessionId": "fixture-acp-session",
+      "sequence": 1,
+      "fixedTokenClass": "acceptance-token"
+    },
+    {
+      "at": "2026-07-23T21:21:59.750Z",
+      "type": "prompt.completed",
+      "requestOrdinal": 1,
+      "sessionId": "fixture-acp-session",
+      "sequence": 2
+    },
+    {
+      "at": "2026-07-23T21:22:05.924Z",
+      "type": "initialize",
+      "requestId": 0
+    },
+    {
+      "at": "2026-07-23T21:22:05.935Z",
+      "type": "session.load",
+      "requestId": 1,
+      "sessionId": "fixture-acp-session",
+      "identityMatches": true,
+      "replayNotificationCount": 0,
+      "mcpServerCount": 0
+    },
+    {
+      "at": "2026-07-23T21:22:05.938Z",
+      "type": "prompt.dispatch",
+      "requestId": 2,
+      "requestOrdinal": 2,
+      "sessionId": "fixture-acp-session",
+      "fixedTokenClass": "acceptance-token"
+    },
+    {
+      "at": "2026-07-23T21:22:05.938Z",
+      "type": "synthetic.response_delay",
+      "requestOrdinal": 2,
+      "sessionId": "fixture-acp-session",
+      "durationMs": 3500
+    },
+    {
+      "at": "2026-07-23T21:22:09.460Z",
+      "type": "assistant.chunk",
+      "requestOrdinal": 2,
+      "sessionId": "fixture-acp-session",
+      "sequence": 1,
+      "fixedTokenClass": "acceptance-token"
+    },
+    {
+      "at": "2026-07-23T21:22:09.470Z",
+      "type": "prompt.completed",
+      "requestOrdinal": 2,
+      "sessionId": "fixture-acp-session",
+      "sequence": 2
+    }
+  ],
+  "processLogClassification": "captured-not-persisted"
+}
