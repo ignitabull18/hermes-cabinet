@@ -1,0 +1,18 @@
+{
+  "stream": "memory-supermemory",
+  "status": "passed",
+  "branch": "research/hermes-memory-supermemory-management",
+  "commit": null,
+  "merge_candidate": false,
+  "tests": {
+    "prototype": {
+      "command": "node --test experiments/management/memory-supermemory/governed-memory.test.mjs",
+      "status": "passed",
+      "passed": 7,
+      "failed": 0
+    }
+  },
+  "blockers": [],
+  "recommendation": "Do not add Supermemory management to Cabinet until Hermes exposes a structured metadata-only state contract and governed mutation receipts. Query-based forget is forbidden.",
+  "production_touched": false
+}
