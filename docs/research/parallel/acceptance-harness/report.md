@@ -9,7 +9,7 @@ The runner exercised an isolated exact-main application build on port 4207. It s
 | Area | Check | Status | Result |
 | --- | --- | --- | --- |
 | routes | route-manifest | PASSED | Discovered 12 application and SPA routes from exact source. |
-| navigation | desktop-navigation | PASSED | Discovered 22 visible desktop button labels. |
+| navigation | desktop-navigation | PASSED | Discovered 18 visible desktop button labels. |
 | drawers | drawers-data-team | PASSED | Data and Team drawers changed selected state and rendered their target surfaces. |
 | new | new-composer | PASSED | New opened one keyboard-usable conversation composer. |
 | availability | search-terminal-unavailable | PASSED | Search and Terminal were visibly unavailable with zero Search/PTY requests. |
@@ -31,7 +31,7 @@ The runner exercised an isolated exact-main application build on port 4207. It s
 | responsive | mobile-reduced-motion-overflow | PASSED | 390x844 reduced-motion room had 0px horizontal overflow. |
 | network | legacy-daemon-output-accounting | PASSED | Observed 0 legacy daemon-output request(s). |
 | browser | console-health | PASSED | No relevant browser errors were observed. |
-| safety | mutation-accounting | PASSED | Recorded 20 isolated HTTP mutation request(s); no production or governed Skill mutation was authorized. |
+| safety | mutation-accounting | PASSED | Recorded 24 isolated HTTP mutation request(s); no production or governed Skill mutation was authorized. |
 
 ## Exact blockers
 
@@ -40,8 +40,8 @@ The runner exercised an isolated exact-main application build on port 4207. It s
 
 ## Accounting
 
-- Requests: 1008
-- Mutations observed: 20
+- Requests: 1076
+- Mutations observed: 24
 - Legacy daemon-output requests: 0
 - Search requests: 0
 - PTY create/write requests: 0

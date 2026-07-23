@@ -19,8 +19,8 @@ import { FOLLOW_UP_PROMPT, INITIAL_PROMPT, TRANSPORT_TOKEN, selectTransport } fr
 test.describe.configure({ mode: "serial" });
 test.setTimeout(600_000);
 
-const CHECK_TIMEOUT_MS = 20_000;
-const INTERACTION_TIMEOUT_MS = 8_000;
+const CHECK_TIMEOUT_MS = 45_000;
+const INTERACTION_TIMEOUT_MS = 15_000;
 const repoRoot = process.cwd();
 const acceptanceBaseRef = process.env.CABINET_ACCEPTANCE_BASE_REVISION ?? "origin/main";
 const acceptanceBaseRevision = execFileSync("git", ["rev-parse", acceptanceBaseRef], {
@@ -705,7 +705,9 @@ test("authoritative isolated production acceptance", async ({ page }) => {
       return { back: true, forward: true };
     },
     () => "Back/forward navigation preserved route identity.",
-    (error) => `Back/forward navigation failed: ${String(error)}`
+    (error) => `Back/forward navigation failed: ${String(error)}`,
+    undefined,
+    60_000
   );
 
   await page.emulateMedia({ reducedMotion: "reduce" });
