@@ -1,0 +1,27 @@
+{
+  "stream": "hermes-update",
+  "status": "passed",
+  "branch": "research/hermes-update-management",
+  "commit": null,
+  "merge_candidate": false,
+  "tests": {
+    "preview_state_machine": {
+      "command": "npm test",
+      "passed": 7,
+      "failed": 0
+    },
+    "installed_source_audit": "passed",
+    "official_upstream_audit": "passed",
+    "production_mutation_check": "passed"
+  },
+  "blockers": [
+    "The native apply endpoint has no prepare token, stale-state fingerprint, idempotency key, typed confirmation, or durable outcome_unknown receipt.",
+    "Hermes has no complete native code, dependency, state migration, companion, and service rollback transaction.",
+    "The approved Skills companion diverges from an older base and is untested against the pinned current upstream target.",
+    "The ACP companion is untested against the pinned current upstream target.",
+    "The installed source checkout contains untracked local content that requires an explicit preserve, port, or abandon decision.",
+    "The current upstream target is unreleased main-branch code even though it reports the same 0.19.0 version as the installed checkout."
+  ],
+  "recommendation": "Keep Cabinet preview-only and require upstream versioned discover, prepare, commit, status, and rollback contracts plus companion side-by-side qualification before enabling Apply.",
+  "production_touched": false
+}
