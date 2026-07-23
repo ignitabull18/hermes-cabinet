@@ -236,7 +236,9 @@ cabinet/
 - In default Cabinet mode, at least one supported CLI provider:
   - **Claude Code CLI** (`npm install -g @anthropic-ai/claude-code`)
   - **Codex CLI** (`npm install -g @openai/codex` or `brew install --cask codex`)
-- In Hermes mode, reachable loopback Hermes Agent API, Management API, and Gateway endpoints with server-only credentials
+- In Hermes mode, a reachable loopback Hermes Agent API for read-only runtime
+  projection, the approved Hermes CLI for governed Skills management, and the
+  dedicated native ACP companion for conversations
 - **Source mode:** macOS, Linux, or Windows
 - **Electron desktop packaging:** macOS and Windows
 
@@ -256,10 +258,13 @@ cp .env.example .env.local
 | `CABINET_RUNTIME_MODE` | `cabinet` | Select `cabinet` or `hermes`. Invalid values fail configuration parsing. |
 | `CABINET_HERMES_API_URL` / `CABINET_HERMES_API_KEY` | _(required in Hermes mode)_ | Loopback Hermes Agent API and server-only API key. |
 | `CABINET_HERMES_MANAGEMENT_URL` / `CABINET_HERMES_MANAGEMENT_TOKEN` | _(required for management-backed Hermes features)_ | Loopback Management API and server-only token. `HERMES_DASHBOARD_SESSION_TOKEN` is accepted as a token fallback. |
-| `CABINET_HERMES_GATEWAY_URL` / `CABINET_HERMES_GATEWAY_TOKEN` | _(required for live Hermes execution)_ | Loopback Gateway and server-only WebSocket token. |
+| `CABINET_HERMES_GATEWAY_URL` / `CABINET_HERMES_GATEWAY_TOKEN` | _(optional legacy/read-only source)_ | Loopback Gateway source used only where a feature still reads Gateway state; native conversations do not use it. |
 | `CABINET_HERMES_PROFILE` | _(required in Hermes mode)_ | Hermes profile name; the product baseline uses `operator-os`. |
 | `CABINET_HERMES_TIMEOUT_MS` | `3000` | Upstream timeout, constrained to 250–30000 ms. |
 | `CABINET_HERMES_CLI_PATH` | _(unset)_ | Explicit absolute server-only side-by-side Hermes 0.19.0 executable required for Skills catalog, canonical state, inspect, audit, install, removal, verification, and reconciliation. There is no `PATH` fallback; Update remains audit-only. Browser input cannot change it. |
+| `CABINET_HERMES_EXECUTION_CLI_PATH` | _(required for native conversations)_ | Absolute path to the dedicated ACP companion executable. Cabinet invokes it directly through the official ACP SDK; there is no `PATH` fallback. |
+| `CABINET_HERMES_EXECUTION_NO_TOOLS` | _(required; exact `true`)_ | Process-owned fail-closed conversation policy. Any other value prevents execution. |
+| `OLLAMA_API_KEY` | _(required by the approved ACP profile)_ | Provider credential passed only to the dedicated ACP child; it is never exposed to browser code or acceptance artifacts. |
 | `CABINET_HERMES_INTERVENTIONS_ENABLED` | `false` | Enables only the implemented governed intervention path; it does not bypass confirmation or authority checks. |
 
 ### Authentication

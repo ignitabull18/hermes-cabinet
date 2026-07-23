@@ -117,7 +117,7 @@ export async function writeAcceptanceArtifacts(
 
 Verdict: **${result.verdict}**
 
-The runner exercised an isolated exact-main application build on port 4207. It sent zero live model messages and did not touch production or canonical data.
+The runner exercised an isolated application build on port 4207. It sent ${result.environment.liveModelMessagesSent} bounded live model message(s) and did not touch production or canonical data.
 
 ## Checks
 
@@ -142,7 +142,9 @@ ${blockers}
 
 ## Recommendation
 
-Integrate this harness after the transport, supervision, drawer/mobile, and polling streams land. Keep the live transport disabled until one candidate passes the mandatory live gate, then rerun with that explicitly registered transport.
+${result.verdict === "ACCEPTED"
+  ? "The integration branch is ready for final owner review; keep the draft PR unmerged and do not deploy."
+  : "Resolve only the exact blockers above, then rerun the same bounded acceptance."}
 `;
   await fs.writeFile(path.join(outputDir, "report.md"), report);
   const streamResult = {
@@ -153,8 +155,9 @@ Integrate this harness after the transport, supervision, drawer/mobile, and poll
     merge_candidate: true,
     tests: Object.fromEntries(result.checks.map((check) => [check.id, check.status])),
     blockers: result.blockers.map((blocker) => blocker.summary),
-    recommendation:
-      "Integrate the harness after stabilization, register only a transport that passes the mandatory live gate, and rerun.",
+    recommendation: result.verdict === "ACCEPTED"
+      ? "Keep the integration PR draft and unmerged until final owner approval."
+      : "Resolve only the exact acceptance blockers and rerun.",
     production_touched: false,
   };
   await fs.writeFile(path.join(outputDir, "result.json"), JSON.stringify(streamResult, null, 2) + "\n");

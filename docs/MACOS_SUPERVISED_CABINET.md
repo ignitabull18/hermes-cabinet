@@ -11,7 +11,7 @@ Required substitutions:
 - `__RUNTIME_ROOT__`: the absolute clean runtime worktree
 - `__CABINET_DATA_DIR__`: the absolute external Cabinet data directory
 - `__CABINET_ENV_FILE__`: the absolute existing owner-only Cabinet environment file
-- `__HERMES_EXECUTION_CLI_PATH__`: the approved absolute ACP-capable Hermes CLI
+- `__HERMES_EXECUTION_CLI_PATH__`: the approved dedicated absolute ACP companion executable
 - `__HERMES_PROFILE__`: the exact Hermes profile
 - `__CABINET_PORT__`: an unused private port
 

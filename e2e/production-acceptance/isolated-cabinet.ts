@@ -40,12 +40,22 @@ async function waitForOk(url: string, timeoutMs = 90_000): Promise<void> {
 
 async function stop(child: ChildProcess | null): Promise<void> {
   if (!child || child.exitCode !== null) return;
-  child.kill("SIGTERM");
+  if (process.platform !== "win32" && child.pid) {
+    process.kill(-child.pid, "SIGTERM");
+  } else {
+    child.kill("SIGTERM");
+  }
   await Promise.race([
     new Promise<void>((resolve) => child.once("exit", () => resolve())),
     new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
   ]);
-  if (child.exitCode === null) child.kill("SIGKILL");
+  if (child.exitCode === null) {
+    if (process.platform !== "win32" && child.pid) {
+      process.kill(-child.pid, "SIGKILL");
+    } else {
+      child.kill("SIGKILL");
+    }
+  }
 }
 
 export async function bootIsolatedCabinet(repoRoot: string): Promise<IsolatedCabinet> {
@@ -53,10 +63,18 @@ export async function bootIsolatedCabinet(repoRoot: string): Promise<IsolatedCab
   const stateRoot = await fs.mkdtemp(path.join(os.tmpdir(), "cabinet-production-acceptance-"));
   const dataDir = path.join(stateRoot, "data");
   const homeDir = path.join(stateRoot, "home");
+  const cabinetEnvFile = path.join(stateRoot, "cabinet.env");
   await fs.mkdir(path.join(homeDir, ".local/bin"), { recursive: true });
+  await fs.mkdir(path.join(homeDir, ".hermes-cabinet-acp"), { recursive: true });
   await fs.mkdir(path.join(dataDir, "acceptance-cabinet/.agents/editor"), { recursive: true });
   await fs.mkdir(path.join(dataDir, ".agents/.config"), { recursive: true });
   await fs.mkdir(path.join(dataDir, ".home"), { recursive: true });
+  await fs.writeFile(cabinetEnvFile, "", { mode: 0o600 });
+  await fs.writeFile(
+    path.join(homeDir, ".hermes-cabinet-acp/config.yaml"),
+    "model:\n  default: glm-5.2\n  provider: ollama-cloud\n",
+    { mode: 0o600 },
+  );
   await fs.writeFile(
     path.join(dataDir, ".cabinet"),
     "schemaVersion: 1\nid: home\nname: Acceptance Home\nkind: home\nentry: index.md\n"
@@ -131,8 +149,13 @@ Isolated acceptance fixture. No model execution is authorized.
     ...process.env,
     HOME: homeDir,
     CABINET_DATA_DIR: dataDir,
+    CABINET_ENV_FILE: cabinetEnvFile,
     CABINET_RUNTIME_MODE: "hermes",
+    CABINET_HERMES_EXECUTION_CLI_PATH:
+      process.env.CABINET_HERMES_EXECUTION_CLI_PATH,
+    CABINET_HERMES_EXECUTION_NO_TOOLS: "true",
     CABINET_HERMES_PROFILE: "operator-os",
+    CABINET_HERMES_INTERVENTIONS_ENABLED: "false",
     CABINET_DAEMON_PORT: "4217",
     KB_PASSWORD: "",
     NODE_ENV: "production",
@@ -143,6 +166,7 @@ Isolated acceptance fixture. No model execution is authorized.
     app = spawn("npx", ["next", "start", "-p", String(APP_PORT)], {
       cwd: repoRoot,
       env,
+      detached: process.platform !== "win32",
       stdio: "pipe",
     });
     app.stdout?.on("data", (chunk) => logs.push(String(chunk)));

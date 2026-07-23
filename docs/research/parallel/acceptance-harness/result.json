@@ -1,16 +1,17 @@
 {
   "stream": "acceptance-harness",
   "status": "blocked",
-  "branch": "test/fix-production-acceptance-org-chart",
+  "branch": "integration/production-stabilization-v2",
   "commit": null,
   "merge_candidate": true,
   "tests": {
     "route-manifest": "passed",
-    "desktop-navigation": "passed",
+    "desktop-navigation": "failed",
     "drawers-data-team": "passed",
     "new-composer": "passed",
     "search-terminal-unavailable": "passed",
     "tasks-route": "passed",
+    "primary-application-routes": "failed",
     "org-chart": "passed",
     "org-chart-trigger-present": "passed",
     "org-chart-trigger-enabled": "passed",
@@ -19,21 +20,24 @@
     "org-chart-bounds-and-close": "passed",
     "operator-mode": "passed",
     "governed-skills": "passed",
+    "hermes-operator-sections": "passed",
     "developer-diagnostics-48": "passed",
-    "fixture-two-turn-contract": "passed",
-    "live-two-turn-contract": "blocked",
+    "live-two-turn-contract": "failed",
     "restart-route-persistence": "passed",
-    "launchd-child-restart": "blocked",
+    "launchd-child-restart": "passed",
     "history-navigation": "passed",
     "mobile-reduced-motion-overflow": "passed",
     "legacy-daemon-output-accounting": "passed",
-    "console-health": "passed",
+    "complete-route-inventory": "failed",
+    "console-health": "failed",
     "mutation-accounting": "passed"
   },
   "blockers": [
-    "The exact live two-turn conversation, same-session resume, and live persistence are blocked.",
-    "The supervised wrapper is not proven to recover after the Next child exits."
+    "Desktop navigation discovery failed: Error: expect(locator).toBeVisible() failed Locator: getByRole('heading', { name: 'Acceptance Cabinet' }) Expected: visible Timeout: 15000ms Error: element(s) not found Call log: - Expect \"toBeVisible\" with timeout 15000ms - waiting for getByRole('heading', { name: 'Acceptance Cabinet' })",
+    "A primary application route failed: Error: expect(locator).toContainText(expected) failed Locator: getByRole('alert') Expected pattern: /Cockpit exception|Daily Business Intake is unavailable/ Error: strict mode violation: getByRole('alert') resolved to 2 elements: 1) <div role=\"alert\" data-slot=\"alert\" class=\"group/alert relative grid w-full gap-0.5 rounded-lg border px-2.5 py-2 text-left text-sm has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pr-18 has-[>svg]:grid-cols-[auto_1fr] has-[>svg]:gap-x-2 *:[svg]:row-span-2 *:[svg]:translate-y-0.5 *:[svg:not([class*='size-'])]:size-4 bg-card text-destructive *:data-[slot=alert-description]:text-destructive/90 *:[svg]:text-curre",
+    "Two-turn transport contract failed: Error: conversation failed (exitCode=124, errorKind=timeout)",
+    "8 discovered or required route(s) were not accepted."
   ],
-  "recommendation": "Integrate the harness after stabilization, register only a transport that passes the mandatory live gate, and rerun.",
+  "recommendation": "Resolve only the exact acceptance blockers and rerun.",
   "production_touched": false
 }

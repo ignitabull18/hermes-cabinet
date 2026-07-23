@@ -55,6 +55,7 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
       CABINET_HERMES_EXECUTION_CLI_PATH: cliPath,
       CABINET_HERMES_EXECUTION_NO_TOOLS: "true",
       CABINET_HERMES_PROFILE: "operator-os",
+      OLLAMA_API_KEY: "fixture",
     },
   });
 });

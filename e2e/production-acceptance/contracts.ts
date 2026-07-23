@@ -60,7 +60,7 @@ export interface AcceptanceResult {
     runtimeMode: "hermes";
     data: "isolated";
     productionTouched: false;
-    liveModelMessagesSent: 0;
+    liveModelMessagesSent: number;
     transport: string;
     browserPath: string;
   };

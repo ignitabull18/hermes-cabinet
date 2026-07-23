@@ -2,8 +2,15 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import test from "node:test";
-import { HermesAcpError, runHermesAcpTurn } from "./acp-client";
+import test, { afterEach } from "node:test";
+import {
+  HermesAcpError,
+  runHermesAcpTurn,
+  shutdownHermesAcpClients,
+} from "./acp-client";
+
+process.env.OLLAMA_API_KEY = "fixture";
+afterEach(shutdownHermesAcpClients);
 
 async function fixtureExecutable(source: string): Promise<{ cliPath: string; cwd: string }> {
   const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "cabinet-acp-test-"));
@@ -52,7 +59,7 @@ test("ACP starts one durable session and suppresses duplicate stream frames", as
   try {
     const deltas: string[] = [];
     const result = await runHermesAcpTurn({
-      config: { cliPath: fixture.cliPath, profile: "operator-os", timeoutMs: 3_000, noTools: true },
+      config: { cliPath: fixture.cliPath, profile: "operator-os", providerCredentialEnvName: "OLLAMA_API_KEY", timeoutMs: 3_000, noTools: true },
       cwd: fixture.cwd,
       prompt: "safe acceptance prompt",
       timeoutMs: 3_000,
@@ -71,7 +78,7 @@ test("ACP loads the stored session before a follow-up", async () => {
   const fixture = await fixtureExecutable(protocolFixture);
   try {
     const result = await runHermesAcpTurn({
-      config: { cliPath: fixture.cliPath, profile: "operator-os", timeoutMs: 3_000, noTools: true },
+      config: { cliPath: fixture.cliPath, profile: "operator-os", providerCredentialEnvName: "OLLAMA_API_KEY", timeoutMs: 3_000, noTools: true },
       cwd: fixture.cwd,
       prompt: "follow-up",
       sessionId: "fixture-session",
@@ -84,12 +91,80 @@ test("ACP loads the stored session before a follow-up", async () => {
   }
 });
 
+test("ACP keeps one official-SDK process across two turns in the same session", async () => {
+  const fixture = await fixtureExecutable(protocolFixture);
+  const pids: number[] = [];
+  const config = {
+    cliPath: fixture.cliPath,
+    profile: "operator-os",
+    providerCredentialEnvName: "OLLAMA_API_KEY" as const,
+    timeoutMs: 3_000,
+    noTools: true as const,
+  };
+  try {
+    const first = await runHermesAcpTurn({
+      config,
+      cwd: fixture.cwd,
+      prompt: "first",
+      timeoutMs: 3_000,
+      onSpawn: (child) => { pids.push(child.pid ?? 0); },
+    });
+    const second = await runHermesAcpTurn({
+      config,
+      cwd: fixture.cwd,
+      prompt: "second",
+      sessionId: first.sessionId,
+      timeoutMs: 3_000,
+      onSpawn: (child) => { pids.push(child.pid ?? 0); },
+    });
+    assert.equal(second.sessionId, first.sessionId);
+    assert.equal(pids.length, 2);
+    assert.equal(pids[1], pids[0]);
+  } finally {
+    await fs.rm(fixture.cwd, { recursive: true, force: true });
+  }
+});
+
+test("ACP reloads the same session after the Cabinet-side process pool restarts", async () => {
+  const fixture = await fixtureExecutable(protocolFixture);
+  const pids: number[] = [];
+  const config = {
+    cliPath: fixture.cliPath,
+    profile: "operator-os",
+    providerCredentialEnvName: "OLLAMA_API_KEY" as const,
+    timeoutMs: 3_000,
+    noTools: true as const,
+  };
+  try {
+    const first = await runHermesAcpTurn({
+      config,
+      cwd: fixture.cwd,
+      prompt: "first",
+      timeoutMs: 3_000,
+      onSpawn: (child) => { pids.push(child.pid ?? 0); },
+    });
+    await shutdownHermesAcpClients();
+    const second = await runHermesAcpTurn({
+      config,
+      cwd: fixture.cwd,
+      prompt: "second",
+      sessionId: first.sessionId,
+      timeoutMs: 3_000,
+      onSpawn: (child) => { pids.push(child.pid ?? 0); },
+    });
+    assert.equal(second.sessionId, first.sessionId);
+    assert.notEqual(pids[1], pids[0]);
+  } finally {
+    await fs.rm(fixture.cwd, { recursive: true, force: true });
+  }
+});
+
 test("ACP fails closed on malformed output without exposing it", async () => {
   const fixture = await fixtureExecutable(`process.stdout.write("not-json" + String.fromCharCode(10)); setTimeout(() => {}, 5000);`);
   try {
     await assert.rejects(
       runHermesAcpTurn({
-        config: { cliPath: fixture.cliPath, profile: "operator-os", timeoutMs: 3_000, noTools: true },
+        config: { cliPath: fixture.cliPath, profile: "operator-os", providerCredentialEnvName: "OLLAMA_API_KEY", timeoutMs: 3_000, noTools: true },
         cwd: fixture.cwd,
         prompt: "safe acceptance prompt",
         timeoutMs: 3_000,
@@ -112,7 +187,7 @@ test("ACP rejects any tool event in no-tools mode", async () => {
   try {
     await assert.rejects(
       runHermesAcpTurn({
-        config: { cliPath: fixture.cliPath, profile: "operator-os", timeoutMs: 1_000, noTools: true },
+        config: { cliPath: fixture.cliPath, profile: "operator-os", providerCredentialEnvName: "OLLAMA_API_KEY", timeoutMs: 1_000, noTools: true },
         cwd: fixture.cwd,
         prompt: "safe acceptance prompt",
         timeoutMs: 1_000,
@@ -132,6 +207,7 @@ test("ACP refuses to spawn when the no-tools invariant is false at runtime", asy
         config: {
           cliPath: fixture.cliPath,
           profile: "operator-os",
+          providerCredentialEnvName: "OLLAMA_API_KEY",
           timeoutMs: 1_000,
           noTools: false,
         } as never,
@@ -160,7 +236,7 @@ test("a partial assistant chunk followed by a tool event cannot complete success
   try {
     await assert.rejects(
       runHermesAcpTurn({
-        config: { cliPath: fixture.cliPath, profile: "operator-os", timeoutMs: 1_000, noTools: true },
+        config: { cliPath: fixture.cliPath, profile: "operator-os", providerCredentialEnvName: "OLLAMA_API_KEY", timeoutMs: 1_000, noTools: true },
         cwd: fixture.cwd,
         prompt: "safe acceptance prompt",
         timeoutMs: 1_000,
