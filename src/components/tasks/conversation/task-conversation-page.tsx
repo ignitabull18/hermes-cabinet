@@ -59,6 +59,7 @@ import { Input } from "@/components/ui/input";
 import { FolderTabs } from "@/components/layout/folder-tabs";
 import { TurnBlock, type TurnBlockAgent } from "./turn-block";
 import { useUserProfile } from "@/hooks/use-user-profile";
+import { useHermesMode } from "@/hooks/use-cabinet-runtime-mode";
 import { ConversationApprovalPanel } from "@/components/agents/conversation-approval-panel";
 import { HermesActivityPanel } from "@/components/agents/hermes-activity-panel";
 import { ArtifactsList } from "./artifacts-list";
@@ -460,6 +461,7 @@ export function TaskConversationPage({
   chromeActions,
 }: TaskConversationPageProps) {
   const { t } = useLocale();
+  const hermesMode = useHermesMode();
   const isDemo = taskId === "demo";
   const isCompact = variant === "compact";
   const [task, setTask] = useState<Task | null>(isDemo ? MOCK_TASK : null);
@@ -835,16 +837,16 @@ export function TaskConversationPage({
     const tick = () => {
       void (async () => {
         try {
-          const [fresh, daemonRes] = await Promise.all([
-            fetchTask(taskId, cabinetPath || undefined),
-            fetch(`/api/daemon/session/${encodeURIComponent(taskId)}/output`).then(
-              (r) => r.ok ? r.json() : null
-            ) as Promise<{
-              status?: string;
-              adapterErrorHint?: string | null;
-              adapterErrorKind?: string | null;
-            } | null>,
-          ]);
+          const fresh = await fetchTask(taskId, cabinetPath || undefined);
+          const daemonRes = hermesMode
+            ? null
+            : await fetch(
+                `/api/daemon/session/${encodeURIComponent(taskId)}/output`
+              ).then((r) => (r.ok ? r.json() : null)) as {
+                status?: string;
+                adapterErrorHint?: string | null;
+                adapterErrorKind?: string | null;
+              } | null;
           let next = fresh;
           // When meta.json is stale but the daemon already knows the session
           // ended, reflect the terminal status immediately in the drawer.
@@ -896,7 +898,7 @@ export function TaskConversationPage({
       if (slowInterval) window.clearInterval(slowInterval);
       window.clearTimeout(slowSwitch);
     };
-  }, [isDemo, taskId, cabinetPath, task?.meta.status]);
+  }, [isDemo, taskId, cabinetPath, task?.meta.status, hermesMode]);
 
   // Cleanup demo settle timer
   useEffect(() => {
