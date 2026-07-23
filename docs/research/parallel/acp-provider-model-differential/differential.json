@@ -1,0 +1,187 @@
+{
+  "schemaVersion": 1,
+  "stream": "acp-provider-model-differential",
+  "testedCabinetRevision": "3cf7f7ccf122df61a9a08370c9cc1a9ce65c60b3",
+  "passingCompanionRevision": "8a0564d9bc5560879ff432dc753ee560f969b370",
+  "failingSourceRevision": "55759cb2737cd3870f9de4693f66fa38eaf0dd2b",
+  "fields": [
+    {
+      "field": "cabinet.request.model",
+      "passingStandalone": "omitted",
+      "failingIntegrated": "omitted",
+      "same": true
+    },
+    {
+      "field": "cabinet.request.provider",
+      "passingStandalone": "omitted",
+      "failingIntegrated": "omitted",
+      "same": true
+    },
+    {
+      "field": "browser.override.influence",
+      "passingStandalone": "not_applicable",
+      "failingIntegrated": "discarded_in_hermes_mode",
+      "same": true
+    },
+    {
+      "field": "acp.session_new.model",
+      "passingStandalone": "omitted",
+      "failingIntegrated": "omitted",
+      "same": true
+    },
+    {
+      "field": "acp.session_new.provider",
+      "passingStandalone": "omitted",
+      "failingIntegrated": "omitted",
+      "same": true
+    },
+    {
+      "field": "acp.session_new.profile",
+      "passingStandalone": "operator-os_process_environment",
+      "failingIntegrated": "operator-os_process_environment",
+      "same": true
+    },
+    {
+      "field": "acp.client_capabilities",
+      "passingStandalone": "filesystem_false_terminal_false",
+      "failingIntegrated": "filesystem_false_terminal_false",
+      "same": true
+    },
+    {
+      "field": "acp.mcp_servers",
+      "passingStandalone": "empty",
+      "failingIntegrated": "empty",
+      "same": true
+    },
+    {
+      "field": "process.executable",
+      "passingStandalone": "pinned_no_tools_companion_wrapper",
+      "failingIntegrated": "direct_hermes_acp_entrypoint",
+      "same": false
+    },
+    {
+      "field": "process.profile",
+      "passingStandalone": "operator-os",
+      "failingIntegrated": "operator-os",
+      "same": true
+    },
+    {
+      "field": "process.no_tools",
+      "passingStandalone": true,
+      "failingIntegrated": true,
+      "same": true
+    },
+    {
+      "field": "process.environment_key_names",
+      "passingStandalone": [
+        "HOME",
+        "HERMES_HOME",
+        "HERMES_PROFILE",
+        "HERMES_ACP_NO_TOOLS",
+        "OLLAMA_API_KEY"
+      ],
+      "failingIntegrated": [
+        "HOME",
+        "HERMES_PROFILE",
+        "HERMES_ACP_NO_TOOLS",
+        "OLLAMA_API_KEY"
+      ],
+      "same": false
+    },
+    {
+      "field": "process.config_root",
+      "passingStandalone": "explicit_companion_configuration_root",
+      "failingIntegrated": "default_hermes_home_while_fixture_config_was_elsewhere",
+      "same": false
+    },
+    {
+      "field": "hermes.configured_model",
+      "passingStandalone": "glm-5.2",
+      "failingIntegrated": "",
+      "same": false
+    },
+    {
+      "field": "hermes.configured_provider",
+      "passingStandalone": "ollama-cloud",
+      "failingIntegrated": "ollama-cloud_from_credential_resolution",
+      "same": true
+    },
+    {
+      "field": "hermes.fallback_models",
+      "passingStandalone": [],
+      "failingIntegrated": [],
+      "same": true
+    },
+    {
+      "field": "provider.endpoint_class",
+      "passingStandalone": "provider",
+      "failingIntegrated": "provider",
+      "same": true
+    },
+    {
+      "field": "provider.http_status",
+      "passingStandalone": "successful_response_status_not_recorded",
+      "failingIntegrated": 404,
+      "same": false
+    },
+    {
+      "field": "provider.attempt_owner",
+      "passingStandalone": "hermes_conversation_loop",
+      "failingIntegrated": "hermes_conversation_loop",
+      "same": true
+    },
+    {
+      "field": "provider.attempt_count",
+      "passingStandalone": 1,
+      "failingIntegrated": 3,
+      "same": false
+    },
+    {
+      "field": "provider.fallback_attempts",
+      "passingStandalone": 0,
+      "failingIntegrated": 0,
+      "same": true
+    }
+  ],
+  "firstDivergence": {
+    "field": "process.config_root",
+    "owner": "cabinet_acp_launch_configuration",
+    "passing": "explicit companion configuration root",
+    "failing": "HERMES_HOME omitted while configuration was written to the companion-specific root",
+    "consequence": "Hermes ACP session construction received no configured model"
+  },
+  "ownership": {
+    "emptyModel": "Hermes ACP SessionManager passed unresolved default_model as an explicit empty string to AIAgent",
+    "http404": "the selected provider endpoint rejected the empty model identity",
+    "internalRetries": "Hermes agent conversation loop performed three application-level attempts; provider SDK retries were disabled",
+    "classifierGap": "the quoted empty model message did not match the unquoted model-not-found substring and was treated as retryable unknown"
+  },
+  "minimumCorrectiveAction": {
+    "summary": "Use one pinned executable and one explicit Hermes configuration root for standalone and Cabinet launches, then require bounded readiness before session creation or prompt dispatch.",
+    "must": [
+      "share the strict environment builder",
+      "bind exact executable identity",
+      "pass or otherwise pin the same HERMES_HOME classification",
+      "require nonempty profile provider and model",
+      "omit unknown model overrides",
+      "block empty model before ACP session creation",
+      "classify provider 404 distinctly",
+      "expose provider attempt counters"
+    ],
+    "mustNot": [
+      "serialize an empty model override",
+      "infer model from browser state",
+      "probe the provider to discover an empty model",
+      "retry an empty model",
+      "change the configured provider or model"
+    ]
+  },
+  "safety": {
+    "modelRequests": 0,
+    "providerCompletions": 0,
+    "promptDispatches": 0,
+    "providerConfigurationChanges": 0,
+    "productionTouched": false,
+    "hermesModified": false
+  }
+}
