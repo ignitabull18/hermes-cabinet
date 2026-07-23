@@ -58,9 +58,16 @@ if (allowIntegrationDiff) {
     cwd: repoRoot,
     encoding: "utf8",
   });
-  if (branch.status !== 0 || branch.stdout.trim() !== "fix/acp-production-parity") {
+  const allowedIntegrationBranches = new Set([
+    "fix/acp-production-parity",
+    "fix/acp-restart-persistence-final",
+  ]);
+  if (
+    branch.status !== 0 ||
+    !allowedIntegrationBranches.has(branch.stdout.trim())
+  ) {
     process.stderr.write(
-      "Refusing integration acceptance outside fix/acp-production-parity.\n",
+      "Refusing integration acceptance outside an approved integration branch.\n",
     );
     process.exit(2);
   }
