@@ -99,7 +99,12 @@ Primary protocol references:
   official TypeScript SDK with protocol v1, `loadSession: true`, and zero parse
   errors. A configured-profile initialization did not complete within the
   bounded 10-second source-only check. The unconditional startup work is the
-  material difference; no model call was made.
+  material difference; no model call was made. That configured-profile check
+  reached Hermes' existing startup path before it was terminated, so it loaded
+  the already-configured external secret source into the disposable child and
+  may have attempted configured MCP connectivity. No credential value was
+  printed, retained by the probe, changed, or committed, and no session or
+  model request was made.
 
 ## Current invalid-protocol response
 
