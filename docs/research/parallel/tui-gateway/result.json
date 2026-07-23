@@ -2,7 +2,7 @@
   "stream": "tui-gateway",
   "status": "failed",
   "branch": "research/tui-gateway-jsonrpc-transport",
-  "commit": null,
+  "commit": "ec25cf965a5c15d9a6f09c430091c279fd8f1ba4",
   "merge_candidate": false,
   "tests": {
     "unit_and_socket_fixture": {
