@@ -1,0 +1,8 @@
+{
+  "name": "hermes-models-providers-governance-preview",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test governance.test.js"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "stream": "models-providers",
+  "status": "passed",
+  "branch": "research/hermes-models-providers-management",
+  "commit": null,
+  "merge_candidate": false,
+  "tests": {
+    "prototype_node_test": {
+      "passed": 8,
+      "failed": 0
+    },
+    "git_diff_check": "passed"
+  },
+  "blockers": [
+    "No versioned redacted six-plane snapshot contract exists.",
+    "No session-scoped effective provider/model read contract with override provenance exists.",
+    "Existing mutation routes lack stale-state compare-and-swap, idempotency receipts, and outcome_unknown semantics.",
+    "Desktop Management requires an ephemeral credential and is not approved as Cabinet's durable authority.",
+    "Provider account status is not guaranteed to be pure or sufficiently redacted for Cabinet."
+  ],
+  "recommendation": "Upstream a durable redacted snapshot and governed prepare/commit/readback contract before implementing a live Cabinet adapter.",
+  "production_touched": false
+}
