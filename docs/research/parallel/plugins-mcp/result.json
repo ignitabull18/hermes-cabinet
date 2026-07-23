@@ -1,0 +1,27 @@
+{
+  "stream": "plugins-mcp",
+  "status": "passed",
+  "branch": "research/hermes-plugins-mcp-management",
+  "commit": null,
+  "merge_candidate": false,
+  "tests": {
+    "node --test experiments/management/plugins-mcp/governed-actions.test.mjs": {
+      "status": "passed",
+      "passed": 11,
+      "failed": 0
+    },
+    "git diff --check": {
+      "status": "passed"
+    }
+  },
+  "blockers": [
+    "Plugin management lacks canonical keys, immutable revisions, complete provenance, compare-and-swap, idempotency, and rollback receipts.",
+    "Plugin inventory omits opted-in project plugins even though the runtime can load them.",
+    "MCP list is a redacted partial projection and cannot safely seed whole-map replacement or rollback.",
+    "MCP canonical configuration, credential presence, and live per-process connection status are split across different surfaces.",
+    "Native mutations do not accept expected state fingerprints or idempotency keys.",
+    "OAuth revoke and unified MCP removal/credential cleanup are unsupported."
+  ],
+  "recommendation": "Keep Cabinet plugin and MCP mutations disabled. Upstream canonical versioned readbacks and expected-version/idempotent mutation receipts in Hermes, then bind the preview-only governed envelopes to those native contracts.",
+  "production_touched": false
+}
