@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { bootIsolatedCabinet, type IsolatedCabinet } from "./isolated-cabinet";
+import { scanIndicators } from "./recorder";
 
 test.describe.configure({ mode: "serial" });
 test.setTimeout(90_000);
@@ -40,4 +41,16 @@ test("isolated fixture bypasses onboarding and tour before drawer interaction", 
   await expect(team).toBeVisible();
   await team.click({ timeout: 10_000 });
   await expect(team).toHaveAttribute("aria-selected", "true");
+});
+
+test("private-content indicator scan rejects local paths and secret-shaped values", async () => {
+  const safe = scanIndicators("Acceptance Cabinet fixture skills-management");
+  expect(safe.secretIndicators).toEqual([]);
+  expect(safe.localPathIndicators).toEqual([]);
+
+  const unsafe = scanIndicators(
+    "/Users/example/private Authorization: Bearer fixture-secret-value"
+  );
+  expect(unsafe.secretIndicators).toHaveLength(1);
+  expect(unsafe.localPathIndicators).toHaveLength(1);
 });

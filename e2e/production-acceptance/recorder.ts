@@ -64,9 +64,9 @@ function redactReportText(value: string): string {
     .replace(/[A-Za-z]:\\Users\\[^\\\s]+/g, "<user-home>");
 }
 
-function scanIndicators(text: string): AcceptanceResult["scans"] {
+export function scanIndicators(text: string): AcceptanceResult["scans"] {
   const secretPatterns = [
-    /\b(?:sk|ghp|github_pat|xox[baprs])[-_A-Za-z0-9]{12,}\b/gi,
+    /\b(?:sk-[A-Za-z0-9_-]{12,}|ghp_[A-Za-z0-9]{12,}|github_pat_[A-Za-z0-9_]{12,}|xox[baprs]-[A-Za-z0-9-]{12,})\b/gi,
     /\bAuthorization:\s*Bearer\s+\S+/gi,
     /\b(?:password|secret|token)\s*[:=]\s*["']?[^"'\s]{8,}/gi,
   ];

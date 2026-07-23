@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -7,14 +7,26 @@ import { buildHermesAcceptanceFixtureProjection } from "../../src/lib/hermes/con
 import { buildHermesSkillsAcceptanceSnapshot } from "../../src/lib/hermes/skills-management-fixture";
 import type { AcceptanceStatus, RouteChecklistEntry } from "./contracts";
 import { bootIsolatedCabinet, type IsolatedCabinet } from "./isolated-cabinet";
-import { AcceptanceRecorder, markRoute, writeAcceptanceArtifacts } from "./recorder";
+import {
+  AcceptanceRecorder,
+  markRoute,
+  scanIndicators,
+  writeAcceptanceArtifacts,
+} from "./recorder";
 import { discoverRouteManifest } from "./route-discovery";
 import { FOLLOW_UP_PROMPT, INITIAL_PROMPT, TRANSPORT_TOKEN, selectTransport } from "./transport";
 
 test.describe.configure({ mode: "serial" });
 test.setTimeout(600_000);
 
+const CHECK_TIMEOUT_MS = 20_000;
+const INTERACTION_TIMEOUT_MS = 8_000;
 const repoRoot = process.cwd();
+const acceptanceBaseRef = process.env.CABINET_ACCEPTANCE_BASE_REVISION ?? "origin/main";
+const acceptanceBaseRevision = execFileSync("git", ["rev-parse", acceptanceBaseRef], {
+  cwd: repoRoot,
+  encoding: "utf8",
+}).trim();
 const outputDir = path.resolve(
   process.env.CABINET_ACCEPTANCE_OUTPUT_DIR ??
     "docs/research/parallel/acceptance-harness"
@@ -23,14 +35,12 @@ const screenshotDir = path.join(outputDir, "screenshots");
 const recorder = new AcceptanceRecorder();
 const transport = selectTransport();
 const projection = buildHermesAcceptanceFixtureProjection({
-  implementationRevision: execFileSync("git", ["rev-parse", "origin/main"], {
-    cwd: repoRoot,
-    encoding: "utf8",
-  }).trim(),
+  implementationRevision: acceptanceBaseRevision,
   artifactGeneratedAt: "2026-07-23T00:00:00.000Z",
 });
 let cabinet: IsolatedCabinet;
 let routes: RouteChecklistEntry[] = [];
+let controlledRestartInProgress = false;
 
 function addCheck(
   id: string,
@@ -56,10 +66,20 @@ async function observed<T>(
   operation: () => Promise<T>,
   passSummary: (value: T) => string,
   failSummary: (error: unknown) => string,
-  blocker?: { id: string; reproduction: string[]; ownerHint?: string }
+  blocker?: { id: string; reproduction: string[]; ownerHint?: string },
+  timeoutMs = CHECK_TIMEOUT_MS
 ): Promise<T | null> {
+  let timeout: NodeJS.Timeout | undefined;
   try {
-    const value = await operation();
+    const value = await Promise.race([
+      operation(),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error(`Check ${id} exceeded its ${timeoutMs}ms budget.`)),
+          timeoutMs
+        );
+      }),
+    ]);
     addCheck(id, area, "passed", passSummary(value), typeof value === "object" && value ? value as Record<string, unknown> : undefined);
     return value;
   } catch (error) {
@@ -75,7 +95,13 @@ async function observed<T>(
       });
     }
     return null;
+  } finally {
+    if (timeout) clearTimeout(timeout);
   }
+}
+
+function notRun(id: string, area: string, summary: string): void {
+  addCheck(id, area, "not_run", summary);
 }
 
 async function installPageObservation(page: Page) {
@@ -102,10 +128,16 @@ async function installPageObservation(page: Page) {
   });
   page.on("console", (message) => {
     if (["error", "warning"].includes(message.type())) {
-      recorder.scanText.push(`${message.type()}: ${message.text()}`);
+      const prefix = controlledRestartInProgress
+        ? `expected-restart-${message.type()}`
+        : message.type();
+      recorder.scanText.push(`${prefix}: ${message.text()}`);
     }
   });
-  page.on("pageerror", (error) => recorder.scanText.push(`pageerror: ${error.message}`));
+  page.on("pageerror", (error) => {
+    const prefix = controlledRestartInProgress ? "expected-restart-pageerror" : "pageerror";
+    recorder.scanText.push(`${prefix}: ${error.message}`);
+  });
 
   await page.route("**/api/hermes/health", (route) =>
     route.fulfill({
@@ -148,6 +180,16 @@ async function screenshot(
   purpose: string,
   reducedMotion = false
 ) {
+  const currentUrl = new URL(page.url());
+  const isolatedOrigin = new URL(cabinet.appUrl).origin;
+  if (currentUrl.origin !== isolatedOrigin) {
+    throw new Error(`Refusing screenshot outside isolated Cabinet origin: ${currentUrl.origin}`);
+  }
+  const visibleText = await page.locator("body").innerText({ timeout: INTERACTION_TIMEOUT_MS });
+  const indicators = scanIndicators(`${page.url()}\n${visibleText}`);
+  if (indicators.secretIndicators.length || indicators.localPathIndicators.length) {
+    throw new Error("Refusing screenshot because private-content indicators were detected.");
+  }
   const viewport = page.viewportSize() ?? { width: 0, height: 0 };
   const file = `screenshots/${id}.png`;
   await page.screenshot({ path: path.join(outputDir, file), fullPage: false });
@@ -166,11 +208,7 @@ test.afterAll(async () => {
     cwd: repoRoot,
     encoding: "utf8",
   }).trim();
-  const base = execFileSync("git", ["rev-parse", "origin/main"], {
-    cwd: repoRoot,
-    encoding: "utf8",
-  }).trim();
-  const changed = execFileSync("git", ["diff", "--name-only", "origin/main"], {
+  const changed = execFileSync("git", ["diff", "--name-only", acceptanceBaseRevision], {
     cwd: repoRoot,
     encoding: "utf8",
   })
@@ -187,15 +225,18 @@ test.afterAll(async () => {
     recorder.blocker({
       id: "application-diff-outside-owned-lane",
       area: "safety",
-      summary: "Application or shared files differ from origin/main.",
-      reproduction: ["Run git diff --name-only origin/main.", "Inspect paths outside the acceptance lane."],
+      summary: `Application or shared files differ from acceptance base ${acceptanceBaseRevision}.`,
+      reproduction: [
+        `Run git diff --name-only ${acceptanceBaseRevision}.`,
+        "Inspect paths outside the acceptance lane.",
+      ],
       ownerHint: "integration coordinator",
     });
   }
   await writeAcceptanceArtifacts(outputDir, {
     stream: "acceptance-harness",
     branch,
-    testedBaseRevision: base,
+    testedBaseRevision: acceptanceBaseRevision,
     applicationDiffFromBase: applicationDiff,
     environment: {
       url: "http://127.0.0.1:4207",
@@ -222,7 +263,7 @@ test("authoritative isolated production acceptance", async ({ page }) => {
   await installPageObservation(page);
   await page.setViewportSize({ width: 1440, height: 900 });
 
-  await observed(
+  const orgChartRoute = await observed(
     "route-manifest",
     "routes",
     async () => {
@@ -240,6 +281,9 @@ test("authoritative isolated production acceptance", async ({ page }) => {
     "navigation",
     async () => {
       await pageIdentity(page, "/room/acceptance-cabinet", /acceptance-cabinet/i);
+      await expect(
+        page.getByRole("heading", { name: "Acceptance Cabinet" })
+      ).toBeVisible({ timeout: INTERACTION_TIMEOUT_MS });
       const labels = await page.getByRole("button").allTextContents();
       const normalized = [...new Set(labels.map((label) => label.trim()).filter(Boolean))];
       recorder.navigation.desktop = normalized.slice(0, 80);
@@ -343,22 +387,185 @@ test("authoritative isolated production acceptance", async ({ page }) => {
     "org-chart",
     "organization",
     async () => {
-      await page.goto(`${cabinet.appUrl}/room/acceptance-cabinet/-/agents`);
-      const trigger = page.getByRole("button", { name: "Org chart" });
-      await trigger.click({ timeout: 10_000 });
-      const dialog = page.getByRole("dialog", { name: /Acceptance Cabinet.*org chart/i });
-      await expect(dialog).toBeVisible();
-      const bounds = await dialog.boundingBox();
-      expect(bounds).not.toBeNull();
-      expect(bounds!.x).toBeGreaterThanOrEqual(0);
-      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(1440);
-      await page.keyboard.press("Escape");
-      markRoute(routes, "/room/acceptance-cabinet/-/agents", "passed");
-      return { bounded: true };
+      await page.goto(`${cabinet.appUrl}/room/acceptance-cabinet`, {
+        waitUntil: "domcontentloaded",
+        timeout: INTERACTION_TIMEOUT_MS,
+      });
+      await expect(page.getByRole("heading", { name: "Acceptance Cabinet" })).toBeVisible({
+        timeout: INTERACTION_TIMEOUT_MS,
+      });
+      return { route: "/room/acceptance-cabinet" };
     },
-    () => "Org chart opened, stayed viewport-bounded, and closed by keyboard.",
-    (error) => `Org chart failed: ${String(error)}`
+    () => "Loaded the room overview that owns the Org-chart action.",
+    (error) => `Org-chart route setup failed: ${String(error)}`,
+    {
+      id: "org-chart-route-unavailable",
+      reproduction: ["Open /room/acceptance-cabinet.", "Verify the room overview renders."],
+      ownerHint: "acceptance harness",
+    }
   );
+
+  const orgChartTrigger: Locator = page.getByRole("button", {
+    name: "Org chart",
+    exact: true,
+  });
+  const orgChartTriggerFound =
+    orgChartRoute
+      ? await observed(
+          "org-chart-trigger-present",
+          "organization",
+          async () => {
+            await expect(orgChartTrigger).toHaveCount(1, { timeout: INTERACTION_TIMEOUT_MS });
+            await expect(orgChartTrigger).toBeVisible({ timeout: INTERACTION_TIMEOUT_MS });
+            return { count: 1 };
+          },
+          () => "Found one visible Org-chart button by its accessible role and name.",
+          (error) => `Org-chart trigger is missing: ${String(error)}`,
+          {
+            id: "org-chart-trigger-missing",
+            reproduction: [
+              "Open /room/acceptance-cabinet.",
+              "Query role=button and accessible name=Org chart.",
+            ],
+            ownerHint: "acceptance harness",
+          }
+        )
+      : null;
+
+  const resolvedOrgChartTrigger = orgChartTriggerFound ? orgChartTrigger : null;
+  const orgChartEnabled = resolvedOrgChartTrigger
+    ? await observed(
+        "org-chart-trigger-enabled",
+        "organization",
+        async () => {
+          await expect(resolvedOrgChartTrigger).toBeEnabled({
+            timeout: INTERACTION_TIMEOUT_MS,
+          });
+          return { enabled: true };
+        },
+        () => "The Org-chart trigger was enabled for the isolated agent fixture.",
+        (error) => `Org-chart trigger is disabled: ${String(error)}`,
+        {
+          id: "org-chart-trigger-disabled",
+          reproduction: [
+            "Open the isolated room containing the Operator fixture.",
+            "Inspect the Org chart button enabled state.",
+          ],
+          ownerHint: "acceptance harness or room overview",
+        }
+      )
+    : null;
+  if (!orgChartTriggerFound || !orgChartTrigger) {
+    notRun(
+      "org-chart-trigger-enabled",
+      "organization",
+      "Not run because the accessible Org-chart trigger was not found."
+    );
+  }
+
+  const orgChartClicked = resolvedOrgChartTrigger && orgChartEnabled
+    ? await observed(
+        "org-chart-trigger-click",
+        "organization",
+        async () => {
+          await resolvedOrgChartTrigger.click({ timeout: INTERACTION_TIMEOUT_MS });
+          return { clicked: true };
+        },
+        () => "The enabled Org-chart trigger accepted a bounded click.",
+        (error) => `Org-chart trigger click failed: ${String(error)}`,
+        {
+          id: "org-chart-trigger-click-failed",
+          reproduction: ["Open the room overview.", "Click the enabled Org chart button."],
+          ownerHint: "acceptance harness or room overview",
+        }
+      )
+    : null;
+  if (!resolvedOrgChartTrigger || !orgChartEnabled) {
+    notRun(
+      "org-chart-trigger-click",
+      "organization",
+      "Not run because the Org-chart trigger was missing or disabled."
+    );
+  }
+
+  const orgChartDialog: Locator = page.getByRole("dialog", {
+    name: "Acceptance Cabinet: org chart",
+    exact: true,
+  });
+  const orgChartDialogFound = orgChartClicked
+    ? await observed(
+        "org-chart-dialog",
+        "organization",
+        async () => {
+          await expect(orgChartDialog).toBeVisible({ timeout: INTERACTION_TIMEOUT_MS });
+          return { visible: true };
+        },
+        () => "The named Org-chart dialog opened after the trigger click.",
+        (error) => `Org-chart dialog did not open: ${String(error)}`,
+        {
+          id: "org-chart-dialog-missing",
+          reproduction: [
+            "Click the enabled Org chart button.",
+            "Query role=dialog and accessible name=Acceptance Cabinet: org chart.",
+          ],
+          ownerHint: "room overview",
+        }
+      )
+    : null;
+  if (!orgChartClicked) {
+    notRun(
+      "org-chart-dialog",
+      "organization",
+      "Not run because the Org-chart trigger click did not complete."
+    );
+  }
+
+  const resolvedOrgChartDialog = orgChartDialogFound ? orgChartDialog : null;
+  if (resolvedOrgChartDialog) {
+    await observed(
+      "org-chart-bounds-and-close",
+      "organization",
+      async () => {
+        const bounds = await resolvedOrgChartDialog.boundingBox();
+        expect(bounds).not.toBeNull();
+        expect(bounds!.x).toBeGreaterThanOrEqual(0);
+        expect(bounds!.y).toBeGreaterThanOrEqual(0);
+        expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(1440);
+        expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(900);
+        await screenshot(
+          page,
+          "org-chart-desktop",
+          "/room/acceptance-cabinet",
+          "Viewport-bounded isolated Org-chart dialog"
+        );
+        await page.keyboard.press("Escape");
+        await expect(resolvedOrgChartDialog).toBeHidden({
+          timeout: INTERACTION_TIMEOUT_MS,
+        });
+        await expect(resolvedOrgChartTrigger!).toBeFocused({
+          timeout: INTERACTION_TIMEOUT_MS,
+        });
+        markRoute(routes, "/room/acceptance-cabinet", "passed");
+        return { bounded: true, keyboardClosed: true, focusRestored: true };
+      },
+      () => "Org chart stayed viewport-bounded, closed by keyboard, and restored trigger focus.",
+      (error) => `Org-chart bounds or keyboard-close contract failed: ${String(error)}`,
+      {
+        id: "org-chart-bounds-or-close-failed",
+        reproduction: [
+          "Open the named Org-chart dialog at 1440x900.",
+          "Measure dialog bounds, press Escape, and verify focus restoration.",
+        ],
+        ownerHint: "room overview",
+      }
+    );
+  } else {
+    notRun(
+      "org-chart-bounds-and-close",
+      "organization",
+      "Not run because the named Org-chart dialog did not open."
+    );
+  }
 
   await observed(
     "operator-mode",
@@ -366,7 +573,10 @@ test("authoritative isolated production acceptance", async ({ page }) => {
     async () => {
       await page.goto(`${cabinet.appUrl}/hermes?skillsFixture=acceptance`);
       await expect(page.getByTestId("hermes-control-center")).toBeVisible();
-      await expect(page.getByRole("tab", { name: "Operator" })).toHaveAttribute("data-state", "active");
+      await expect(page.getByRole("tab", { name: "Operator" })).toHaveAttribute(
+        "aria-selected",
+        "true"
+      );
       markRoute(routes, "/hermes", "passed");
       return { mode: "operator" };
     },
@@ -419,7 +629,7 @@ test("authoritative isolated production acceptance", async ({ page }) => {
       ? "passed"
       : "failed",
     `Fixture transport exercised exact prompts without a model: "${INITIAL_PROMPT}" then "${FOLLOW_UP_PROMPT}".`,
-    { sameSession: conversation.sameSession, token: TRANSPORT_TOKEN }
+    { sameSession: conversation.sameSession, expectedResponse: TRANSPORT_TOKEN }
   );
   addCheck(
     "live-two-turn-contract",
@@ -445,7 +655,12 @@ test("authoritative isolated production acceptance", async ({ page }) => {
     async () => {
       await page.goto(`${cabinet.appUrl}/room/acceptance-cabinet`);
       await expect(page.getByText("Acceptance Cabinet", { exact: true }).first()).toBeVisible();
-      await cabinet.restart();
+      controlledRestartInProgress = true;
+      try {
+        await cabinet.restart();
+      } finally {
+        controlledRestartInProgress = false;
+      }
       await page.reload();
       await expect(page.getByText("Acceptance Cabinet", { exact: true }).first()).toBeVisible();
       return { cabinetRestart: true, routePersisted: true };
@@ -456,7 +671,8 @@ test("authoritative isolated production acceptance", async ({ page }) => {
       id: "cabinet-restart-persistence",
       reproduction: ["Open the room.", "Restart isolated Cabinet.", "Reload the same URL."],
       ownerHint: "supervision stabilization stream",
-    }
+    },
+    120_000
   );
   addCheck(
     "launchd-child-restart",
@@ -499,6 +715,9 @@ test("authoritative isolated production acceptance", async ({ page }) => {
     "responsive",
     async () => {
       await page.goto(`${cabinet.appUrl}/room/acceptance-cabinet`);
+      await expect(
+        page.getByText("Acceptance Cabinet", { exact: true }).first()
+      ).toBeVisible({ timeout: INTERACTION_TIMEOUT_MS });
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth
       );

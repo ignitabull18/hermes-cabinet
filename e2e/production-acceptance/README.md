@@ -8,7 +8,8 @@ node scripts/production-acceptance/run.mjs
 
 The runner:
 
-- refuses to run when application/shared runtime files differ from `origin/main`;
+- refuses to run when application/shared runtime files differ from the tested
+  base (current `origin/main` by default);
 - builds the production app when `.next/BUILD_ID` is absent;
 - uses isolated temporary `HOME` and `CABINET_DATA_DIR` roots;
 - binds only to `127.0.0.1:4207`;
@@ -21,6 +22,17 @@ The runner:
 The fixture transport only proves runner orchestration. It cannot make the
 verdict `ACCEPTED`. A live transport must be explicitly implemented and
 registered only after it passes the separate mandatory live gate.
+
+When `origin/main` advances during a parallel run, pin the authorized immutable
+stream-start revision explicitly:
+
+```bash
+CABINET_ACCEPTANCE_BASE_REVISION=<full-commit-oid> \
+  node scripts/production-acceptance/run.mjs
+```
+
+Post-merge validation must omit that override so the runner resolves the latest
+`origin/main`.
 
 If a bounded browser run is interrupted, preserve the partial artifacts and
 mark the unexecuted areas honestly:

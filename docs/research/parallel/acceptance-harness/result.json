@@ -1,7 +1,7 @@
 {
   "stream": "acceptance-harness",
   "status": "blocked",
-  "branch": "test/production-acceptance-harness",
+  "branch": "test/fix-production-acceptance-org-chart",
   "commit": null,
   "merge_candidate": true,
   "tests": {
@@ -11,24 +11,29 @@
     "new-composer": "passed",
     "search-terminal-unavailable": "passed",
     "tasks-route": "passed",
-    "org-chart": "blocked",
-    "operator-mode": "not_run",
-    "governed-skills": "not_run",
-    "developer-diagnostics-48": "not_run",
-    "fixture-two-turn-contract": "not_run",
-    "live-two-turn-contract": "not_run",
-    "restart-route-persistence": "not_run",
-    "launchd-child-restart": "not_run",
-    "history-navigation": "not_run",
-    "mobile-reduced-motion-overflow": "not_run",
-    "legacy-daemon-output-accounting": "not_run",
-    "console-health": "not_run"
+    "org-chart": "passed",
+    "org-chart-trigger-present": "passed",
+    "org-chart-trigger-enabled": "passed",
+    "org-chart-trigger-click": "passed",
+    "org-chart-dialog": "passed",
+    "org-chart-bounds-and-close": "passed",
+    "operator-mode": "passed",
+    "governed-skills": "passed",
+    "developer-diagnostics-48": "passed",
+    "fixture-two-turn-contract": "passed",
+    "live-two-turn-contract": "blocked",
+    "restart-route-persistence": "passed",
+    "launchd-child-restart": "blocked",
+    "history-navigation": "passed",
+    "mobile-reduced-motion-overflow": "passed",
+    "legacy-daemon-output-accounting": "passed",
+    "console-health": "passed",
+    "mutation-accounting": "passed"
   },
   "blockers": [
-    "The bounded exact-main run stopped at the Org chart locator, leaving later acceptance areas not run.",
     "The exact live two-turn conversation, same-session resume, and live persistence are blocked.",
-    "The production supervised wrapper is not proven to recover after the Next child exits."
+    "The supervised wrapper is not proven to recover after the Next child exits."
   ],
-  "recommendation": "Resolve the harness Org chart locator, integrate only a mandatory-gate transport, and rerun after stabilization.",
+  "recommendation": "Integrate the harness after stabilization, register only a transport that passes the mandatory live gate, and rerun.",
   "production_touched": false
 }

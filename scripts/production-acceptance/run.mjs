@@ -8,6 +8,8 @@ const outputDir = path.resolve(
   process.env.CABINET_ACCEPTANCE_OUTPUT_DIR ??
     "docs/research/parallel/acceptance-harness"
 );
+const acceptanceBaseRef =
+  process.env.CABINET_ACCEPTANCE_BASE_REVISION ?? "origin/main";
 
 function run(command, args, extraEnv = {}, allowFailure = false) {
   const result = spawnSync(command, args, {
@@ -20,17 +22,18 @@ function run(command, args, extraEnv = {}, allowFailure = false) {
   return result.status ?? 1;
 }
 
-const base = spawnSync("git", ["rev-parse", "origin/main"], {
+const base = spawnSync("git", ["rev-parse", acceptanceBaseRef], {
   cwd: repoRoot,
   encoding: "utf8",
 });
 if (base.status !== 0) process.exit(base.status ?? 1);
+const acceptanceBaseRevision = base.stdout.trim();
 const changedApplication = spawnSync(
   "git",
   [
     "diff",
     "--name-only",
-    "origin/main",
+    acceptanceBaseRevision,
     "--",
     "src",
     "server",
@@ -44,7 +47,7 @@ const changedApplication = spawnSync(
 );
 if (changedApplication.stdout.trim()) {
   process.stderr.write(
-    "Refusing acceptance: application/shared runtime differs from exact origin/main.\n"
+    `Refusing acceptance: application/shared runtime differs from exact base ${acceptanceBaseRevision}.\n`
   );
   process.exit(2);
 }
@@ -64,6 +67,7 @@ const playwrightStatus = run(
   ],
   {
     CABINET_ACCEPTANCE_OUTPUT_DIR: outputDir,
+    CABINET_ACCEPTANCE_BASE_REVISION: acceptanceBaseRevision,
     CABINET_ACCEPTANCE_TRANSPORT: "fixture",
     CABINET_ACCEPTANCE_BROWSER_PATH:
       process.env.CABINET_ACCEPTANCE_BROWSER_PATH ?? "in-app Browser preflight plus Playwright authoritative runner",
