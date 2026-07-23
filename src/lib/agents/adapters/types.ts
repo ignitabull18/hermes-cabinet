@@ -41,6 +41,8 @@ export interface AdapterExecutionContext {
   timeoutMs?: number;
   sessionId?: string | null;
   sessionParams?: Record<string, unknown> | null;
+  /** Bounded, content-free result returned by this adapter's pre-dispatch check. */
+  executionPreflight?: Record<string, unknown> | null;
   onLog: (stream: "stdout" | "stderr", chunk: string) => Promise<void>;
   /** Deliver provider-native structured events without flattening them into logs. */
   onEvent?: (event: AdapterRuntimeEvent) => Promise<void>;
@@ -97,6 +99,12 @@ export interface AdapterEnvironmentTestResult {
   status: AdapterEnvironmentStatus;
   checks: AdapterEnvironmentCheck[];
   testedAt: string;
+}
+
+export interface AdapterExecutionPreflightContext {
+  adapterType: string;
+  config: Record<string, unknown>;
+  cwd: string;
 }
 
 export interface AgentAdapterModel {
@@ -156,6 +164,13 @@ export interface AgentExecutionAdapter {
   testEnvironment(
     ctx?: AdapterEnvironmentTestContext
   ): Promise<AdapterEnvironmentTestResult>;
+  /**
+   * Resolve execution-critical configuration before the runner publishes a
+   * pending agent turn. This must not dispatch a model request.
+   */
+  preflight?(
+    ctx: AdapterExecutionPreflightContext
+  ): Promise<Record<string, unknown>>;
   execute?(ctx: AdapterExecutionContext): Promise<AdapterExecutionResult>;
   /**
    * Map a failed run's stderr + exit code into the canonical

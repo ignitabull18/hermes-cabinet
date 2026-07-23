@@ -1,9 +1,18 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import fs from "node:fs/promises";
 import { Readable, Writable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
 import type { HermesExecutionServerConfig } from "./server-config";
+import {
+  HermesModelReadinessError,
+  parseHermesProviderAttempts,
+  type HermesProviderAttemptAccounting,
+} from "./model-readiness";
+import {
+  assertHermesAcpExecutable,
+  buildHermesAcpLaunchEnvironment,
+} from "./acp-launch";
+export { buildHermesAcpLaunchEnvironment } from "./acp-launch";
 
 const MAX_FRAME_BYTES = 1_048_576;
 const SHUTDOWN_GRACE_MS = 2_000;
@@ -36,6 +45,7 @@ export type HermesAcpTurnResult = {
   sessionId: string;
   stopReason: string;
   toolEventCount: number;
+  providerAttempts: HermesProviderAttemptAccounting;
 };
 
 function boundedError(kind: HermesAcpError["kind"]): string {
@@ -47,31 +57,13 @@ function boundedError(kind: HermesAcpError["kind"]): string {
   return "The Hermes execution process disconnected.";
 }
 
-function safeEnvironment(config: HermesExecutionServerConfig): NodeJS.ProcessEnv {
-  const allowed = ["HOME", "LOGNAME", "PATH", "SHELL", "TMPDIR", "USER", "LANG", "LC_ALL"];
-  const env: NodeJS.ProcessEnv = {
-    NODE_ENV: process.env.NODE_ENV || "production",
-    HERMES_ACP_NO_TOOLS: "1",
-    HERMES_PROFILE: config.profile,
-  };
-  for (const name of allowed) {
-    if (process.env[name]) env[name] = process.env[name];
-  }
-  const credential = process.env[config.providerCredentialEnvName];
-  if (!credential) {
-    throw new HermesAcpError("configuration", boundedError("configuration"));
-  }
-  env[config.providerCredentialEnvName] = credential;
-  return env;
-}
-
 function identity(config: HermesExecutionServerConfig, cwd: string): string {
-  return `${config.cliPath}\0${config.profile}\0${config.providerCredentialEnvName}\0${cwd}`;
+  return `${config.cliPath}\0${config.hermesHome}\0${config.profile}\0${config.providerCredentialEnvName}\0${cwd}`;
 }
 
 export async function validateHermesAcpExecutable(config: HermesExecutionServerConfig): Promise<void> {
   try {
-    await fs.access(config.cliPath, fs.constants.X_OK);
+    await assertHermesAcpExecutable(config);
   } catch {
     throw new HermesAcpError("configuration", boundedError("configuration"));
   }
@@ -124,7 +116,7 @@ class PersistentHermesAcpClient {
     await validateHermesAcpExecutable(this.config);
     const child = spawn(this.config.cliPath, [], {
       cwd: this.cwd,
-      env: safeEnvironment(this.config),
+      env: buildHermesAcpLaunchEnvironment(this.config),
       shell: false,
       stdio: ["pipe", "pipe", "pipe"],
     });
@@ -322,6 +314,13 @@ class PersistentHermesAcpClient {
         sessionId,
         stopReason: response.stopReason,
         toolEventCount: state.toolEventCount,
+        providerAttempts: parseHermesProviderAttempts(
+          response._meta?.hermes &&
+            typeof response._meta.hermes === "object" &&
+            !Array.isArray(response._meta.hermes)
+            ? (response._meta.hermes as Record<string, unknown>).providerAttempts
+            : null,
+        ),
       };
     } catch (error) {
       throw this.normalizeError(error);
@@ -406,6 +405,9 @@ class PersistentHermesAcpClient {
 
   private normalizeError(error: unknown): HermesAcpError {
     if (error instanceof HermesAcpError) return error;
+    if (error instanceof HermesModelReadinessError) {
+      return new HermesAcpError("protocol", boundedError("protocol"), error);
+    }
     if (this.protocolParseErrors > 0) {
       return new HermesAcpError("protocol", boundedError("protocol"), error);
     }

@@ -48,6 +48,26 @@ test("concurrent Hermes continue requests claim one durable prompt and never exp
         testedAt: new Date().toISOString(),
       };
     },
+    async preflight() {
+      return {
+        contract: "hermes.conversation.readiness",
+        schema_version: 1,
+        profile: "operator-os",
+        provider: "fixture",
+        model: "fixture-model",
+        model_source: "profile",
+        credential_state: "present",
+        endpoint_class: "local",
+        ready: true,
+        blocked_reason: null,
+        accounting: {
+          model_requests_attempted: 0,
+          provider_retries: 0,
+          fallback_attempts: 0,
+          last_provider_http_status: null,
+        },
+      };
+    },
     async execute() {
       executions += 1;
       await executionGate;
@@ -178,4 +198,64 @@ test("concurrent Hermes continue requests claim one durable prompt and never exp
     1,
     "accepted user and assistant must share one prompt request identity"
   );
+});
+
+test("blocked Hermes readiness persists no running follow-up and dispatches no prompt", async () => {
+  let executions = 0;
+  agentAdapterRegistry.registerExternal({
+    type: "hermes_runtime",
+    name: "Hermes blocked readiness fixture",
+    executionEngine: "structured_cli",
+    providerId: "hermes",
+    supportsSessionResume: true,
+    async testEnvironment() {
+      return {
+        adapterType: "hermes_runtime",
+        status: "fail",
+        checks: [],
+        testedAt: new Date().toISOString(),
+      };
+    },
+    async preflight() {
+      throw new Error("No effective Hermes model is configured for operator-os.");
+    },
+    async execute() {
+      executions += 1;
+      throw new Error("must not execute");
+    },
+  });
+  const meta = await store.createConversation({
+    agentSlug: "general",
+    title: "Blocked readiness",
+    trigger: "manual",
+    prompt: "User request:\ninitial",
+    providerId: "hermes",
+    adapterType: "hermes_runtime",
+  });
+  await store.appendConversationTranscript(meta.id, "Initial response.");
+  await store.finalizeConversation(meta.id, {
+    status: "completed",
+    exitCode: 0,
+    output: "Initial response.",
+  });
+
+  const response = await route.POST(
+    new NextRequest(
+      `http://127.0.0.1:4315/api/agents/conversations/${encodeURIComponent(meta.id)}/continue`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ userMessage: "must remain unaccepted" }),
+      },
+    ),
+    { params: Promise.resolve({ id: meta.id }) },
+  );
+  assert.equal(response.status, 503);
+  assert.equal(executions, 0);
+  const detail = await store.readConversationDetail(meta.id, undefined, {
+    withTurns: true,
+  });
+  assert.equal(detail?.meta.status, "completed");
+  assert.equal(detail?.turns?.filter((turn) => turn.role === "user").length, 1);
+  assert.equal(detail?.turns?.filter((turn) => turn.role === "agent").length, 1);
 });

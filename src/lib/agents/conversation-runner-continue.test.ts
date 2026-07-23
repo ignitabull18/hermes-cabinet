@@ -60,6 +60,9 @@ function buildMockAdapter({
         testedAt: new Date().toISOString(),
       };
     },
+    async preflight() {
+      return { ready: true };
+    },
     async execute(ctx) {
       captures.push({
         sessionIdSeen: ctx.sessionId,
@@ -446,6 +449,9 @@ test("Hermes session expiration fails once without an automatic replay model req
         checks: [],
         testedAt: new Date().toISOString(),
       };
+    },
+    async preflight() {
+      return { ready: true };
     },
     async execute() {
       executions += 1;
