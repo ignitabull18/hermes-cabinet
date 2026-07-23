@@ -514,6 +514,24 @@ export function HermesControlCenter() {
     if (requestedCapability) setSelectedId(requestedCapability);
   }, []);
 
+  const selectMode = useCallback((next: Mode) => {
+    const nextSection: Section = next === "developer" ? "developer" : "overview";
+    setMode(next);
+    setSection(nextSection);
+    setSelectedId(null);
+    setSelectedRunId(null);
+    const url = new URL(window.location.href);
+    if (next === "developer") {
+      url.searchParams.set("mode", "developer");
+      url.searchParams.set("section", "developer");
+    } else {
+      url.searchParams.delete("mode");
+      url.searchParams.delete("capability");
+      url.searchParams.set("section", "overview");
+    }
+    window.history.replaceState(window.history.state, "", url);
+  }, []);
+
   const capabilities = useMemo(() => {
     if (!snapshot) return [];
     const needle = query.trim().toLowerCase();
@@ -548,12 +566,18 @@ export function HermesControlCenter() {
             <Search className="pointer-events-none absolute start-2.5 top-2 size-4 text-muted-foreground" aria-hidden="true" />
             <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search capabilities, tools, models..." aria-label="Search Hermes capabilities" className="ps-9" />
           </div>
-          <Tabs value={mode} onValueChange={(value) => { const next = value as Mode; setMode(next); setSection(next === "developer" ? "developer" : "overview"); setSelectedId(null); setSelectedRunId(null); }}>
+          <Tabs value={mode} onValueChange={(value) => selectMode(value as Mode)}>
             <TabsList>
               <TabsTrigger value="operator"><Users data-icon="inline-start" />Operator</TabsTrigger>
               <TabsTrigger value="developer"><Code2 data-icon="inline-start" />Developer</TabsTrigger>
             </TabsList>
           </Tabs>
+          <a
+            href="?mode=developer&section=developer"
+            className="sr-only focus:not-sr-only focus:rounded-md focus:px-2 focus:py-1 focus:text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            Open Developer diagnostics
+          </a>
           <Button variant="outline" size="icon-sm" onClick={() => void refresh()} disabled={refreshing} aria-label="Refresh Hermes status">
             <RefreshCw className={cn(refreshing ? "animate-spin" : null)} />
           </Button>

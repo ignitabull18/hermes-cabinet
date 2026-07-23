@@ -31,13 +31,13 @@ export function OrgChartModal({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-[92vh] max-h-none w-[96vw] max-w-none overflow-hidden p-0 sm:max-w-none">
-        <DialogHeader className="border-b border-border/70 px-6 py-4">
+      <DialogContent className="grid h-[min(92dvh,900px)] max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-[96rem] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-[96rem]">
+        <DialogHeader className="sticky top-0 z-10 border-b border-border/70 bg-background px-4 py-4 pe-14 sm:px-6">
           <DialogTitle className="text-[14px] font-semibold tracking-tight">
             {cabinetName}: org chart
           </DialogTitle>
         </DialogHeader>
-        <div className="h-[calc(92vh-64px)] overflow-auto px-6 py-8">
+        <div className="min-h-0 overflow-auto overscroll-contain px-3 py-5 sm:px-6 sm:py-8">
           <CompactOrgChart
             cabinetName={cabinetName}
             agents={agents}

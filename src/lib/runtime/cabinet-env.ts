@@ -22,8 +22,32 @@ import { PROJECT_ROOT } from "./runtime-config";
  */
 
 const CABINET_ENV_FILENAME = ".cabinet.env";
+const PROCESS_OWNED_ENV_KEYS = new Set([
+  "CABINET_HERMES_EXECUTION_NO_TOOLS",
+]);
+
+export function isProcessOwnedCabinetEnvKey(key: string): boolean {
+  return PROCESS_OWNED_ENV_KEYS.has(key);
+}
 
 export function cabinetEnvPath(): string {
+  const explicit = process.env.CABINET_ENV_FILE?.trim();
+  if (explicit) {
+    if (!path.isAbsolute(explicit)) {
+      throw new Error("CABINET_ENV_FILE must be an absolute path");
+    }
+    const info = fs.lstatSync(explicit);
+    if (!info.isFile() || info.isSymbolicLink()) {
+      throw new Error("CABINET_ENV_FILE must name a regular file, not a symlink");
+    }
+    if (typeof process.getuid === "function" && info.uid !== process.getuid()) {
+      throw new Error("CABINET_ENV_FILE must be owned by the Cabinet user");
+    }
+    if ((info.mode & 0o077) !== 0) {
+      throw new Error("CABINET_ENV_FILE must not grant group or other access");
+    }
+    return explicit;
+  }
   return path.join(PROJECT_ROOT, CABINET_ENV_FILENAME);
 }
 
@@ -172,6 +196,9 @@ export function upsertCabinetEnv(key: string, value: string): void {
   if (typeof value !== "string") {
     throw new Error("Value must be a string.");
   }
+  if (isProcessOwnedCabinetEnvKey(key)) {
+    throw new Error(`${key} is process-owned and cannot be changed at runtime`);
+  }
   const { values } = readCabinetEnvFile();
   const next = { ...values, [key]: value };
   persist(next);
@@ -182,6 +209,9 @@ export function upsertCabinetEnv(key: string, value: string): void {
 
 export function removeCabinetEnv(key: string): void {
   if (!isValidKey(key)) return;
+  if (isProcessOwnedCabinetEnvKey(key)) {
+    throw new Error(`${key} is process-owned and cannot be changed at runtime`);
+  }
   const { values } = readCabinetEnvFile();
   if (!(key in values)) return;
   const next = { ...values };

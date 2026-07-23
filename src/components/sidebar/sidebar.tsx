@@ -353,7 +353,20 @@ export function Sidebar() {
                   and cabinet are both created *inside* the current cabinet (a
                   child), not at the data-dir (home) root. New top-level rooms
                   come from the home switcher's "Add room". */}
-              <DropdownMenu>
+              {hermesMode ? (
+                <button
+                  type="button"
+                  aria-haspopup="dialog"
+                  title="Start a new operator conversation"
+                  onClick={() => {
+                    window.dispatchEvent(new CustomEvent("cabinet:global-run-task"));
+                  }}
+                  className="flex w-full min-w-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  <Plus className="h-4 w-4 shrink-0" />
+                  <span className="min-w-0 truncate">New conversation</span>
+                </button>
+              ) : <DropdownMenu>
                 <DropdownMenuTrigger
                   title={t("sidebar:new")}
                   className="flex w-full min-w-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground cursor-pointer"
@@ -372,18 +385,18 @@ export function Sidebar() {
                     {t("dialogs:newCabinet.trigger")}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
-              </DropdownMenu>
-              <NewPageDialog
+              </DropdownMenu>}
+              {!hermesMode ? <NewPageDialog
                 parentPath={currentCabinetParent}
                 open={newPageOpen}
                 onOpenChange={setNewPageOpen}
                 hideTrigger
-              />
-              <NewCabinetDialog
+              /> : null}
+              {!hermesMode ? <NewCabinetDialog
                 parentPath={currentCabinetParent}
                 open={newCabinetOpen}
                 onOpenChange={setNewCabinetOpen}
-              />
+              /> : null}
             </div>
           )}
           {sidebarDrawer === "agents" && (

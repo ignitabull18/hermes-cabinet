@@ -49,6 +49,13 @@ import { openArtifactPath } from "@/lib/navigation/open-artifact-path";
 import { buildTaskPath } from "@/lib/navigation/task-route";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { FolderTabs } from "@/components/layout/folder-tabs";
 import { TurnBlock, type TurnBlockAgent } from "./turn-block";
 import { useUserProfile } from "@/hooks/use-user-profile";
@@ -468,6 +475,8 @@ export function TaskConversationPage({
   const [retryNonce, setRetryNonce] = useState(0);
   const [editingSummary, setEditingSummary] = useState(false);
   const [summaryDraft, setSummaryDraft] = useState("");
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
   // Summary is collapsed by default; clicking the title reveals the full
   // title + summary below it (another click hides). Not scroll-driven.
   const [summaryOpen, setSummaryOpen] = useState(false);
@@ -1092,6 +1101,31 @@ export function TaskConversationPage({
     }
   }, [task, isDemo, summaryDraft, taskId]);
 
+  const handleTitleSave = useCallback(async () => {
+    if (!task) return;
+    const next = titleDraft.trim();
+    if (!next) return;
+    if (isDemo) {
+      setTask((current) => current ? { ...current, meta: { ...current.meta, title: next } } : current);
+      setRenameOpen(false);
+      return;
+    }
+    setBusy(true);
+    try {
+      const { meta } = await patchTask(
+        taskId,
+        { title: next, titlePinned: true },
+        task.meta.cabinetPath,
+      );
+      setTask((current) => current ? { ...current, meta } : current);
+      setRenameOpen(false);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "Failed to rename conversation");
+    } finally {
+      setBusy(false);
+    }
+  }, [isDemo, task, taskId, titleDraft]);
+
   const startEditingSummary = () => {
     setSummaryDraft(task?.meta.summary ?? "");
     setEditingSummary(true);
@@ -1715,6 +1749,16 @@ export function TaskConversationPage({
           <Link2 className="mr-2 size-3.5" />
           Copy link
         </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={busy}
+          onClick={() => {
+            setTitleDraft(task.meta.title);
+            setRenameOpen(true);
+          }}
+        >
+          <Pencil className="mr-2 size-3.5" />
+          Rename conversation
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={handleOpenTranscriptExternal}>
           <ExternalLink className="mr-2 size-3.5" />
           Open transcript
@@ -2231,6 +2275,30 @@ export function TaskConversationPage({
           setHandoffOpen(false);
         }}
       />
+      <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Rename conversation</DialogTitle>
+          </DialogHeader>
+          <form
+            className="flex gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleTitleSave();
+            }}
+          >
+            <Input
+              aria-label="Conversation title"
+              autoFocus
+              value={titleDraft}
+              onChange={(event) => setTitleDraft(event.target.value)}
+            />
+            <Button type="submit" disabled={busy || !titleDraft.trim()}>
+              Rename
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

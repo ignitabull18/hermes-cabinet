@@ -123,6 +123,7 @@ test("partial Agent-only review keeps configured and observed identity, grouped 
   await expect(page.getByTestId("hermes-runtime-empty-state")).toHaveText("Runtime execution sources are unavailable. Active-run state is unknown.");
   await page.getByRole("button", { name: "Needs Jeremy", exact: true }).click();
   await expect(page.getByTestId("hermes-operational-exceptions")).toContainText("dependent capability observations were not collected");
+  await page.getByRole("tab", { name: "Developer" }).click();
   await page.getByTestId("hermes-capability-about-updates").click();
   const inspector = page.locator('[data-testid="hermes-capability-inspector"]:visible');
   await expect(inspector).toContainText("Degraded");

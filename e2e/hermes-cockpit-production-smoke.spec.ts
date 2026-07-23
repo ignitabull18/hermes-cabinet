@@ -141,6 +141,7 @@ test("real production route keeps Today usable without Hermes Management", async
   await page.getByRole("button", { name: "Needs Jeremy", exact: true }).click();
   await expect(page.getByTestId("hermes-operational-exceptions")).toContainText("Management unavailable");
   await expect(page.getByTestId("hermes-operational-exceptions").locator("[role=alert]").first()).not.toHaveClass(/border-destructive/);
+  await page.getByRole("tab", { name: "Developer" }).click();
   await page.getByPlaceholder(/Search capabilities/i).fill("Memory and context");
   await page.getByRole("button", { name: /Memory and context/i }).first().click();
   await expect(page.getByTestId("hermes-memory-truth-boundary")).toContainText("Not inspected — credentials remain owned by Hermes");

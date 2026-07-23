@@ -78,6 +78,8 @@ test('desktop runtime overview and run inspectors stay read-only and bounded', a
   await page.screenshot({ path: path.join(evidenceDir, 'failed-run-inspector.png'), fullPage: true });
 
   await page.getByTestId('hermes-runtime-sources').getByRole('button').filter({ hasText: 'Agents' }).click();
+  await page.getByRole('tab', { name: 'Developer' }).click();
+  await page.getByTestId('hermes-capability-agents-subagents').click();
   const capability = page.getByTestId('hermes-capability-inspector');
   await expect(capability).toContainText('Hermes worker detail');
   await expect(capability).toContainText('Stale');

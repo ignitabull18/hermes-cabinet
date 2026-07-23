@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>__SERVICE_LABEL__</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__NODE_PATH__</string>
+    <string>__RUNTIME_ROOT__/scripts/start-cabinet-supervised.mjs</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>__RUNTIME_ROOT__</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>CABINET_DATA_DIR</key>
+    <string>__CABINET_DATA_DIR__</string>
+    <key>CABINET_ENV_FILE</key>
+    <string>__CABINET_ENV_FILE__</string>
+    <key>CABINET_RUNTIME_MODE</key>
+    <string>hermes</string>
+    <key>CABINET_HERMES_EXECUTION_CLI_PATH</key>
+    <string>__HERMES_EXECUTION_CLI_PATH__</string>
+    <key>CABINET_HERMES_EXECUTION_NO_TOOLS</key>
+    <string>true</string>
+    <key>CABINET_HERMES_PROFILE</key>
+    <string>__HERMES_PROFILE__</string>
+    <key>CABINET_HERMES_INTERVENTIONS_ENABLED</key>
+    <string>false</string>
+    <key>HOSTNAME</key>
+    <string>127.0.0.1</string>
+    <key>PORT</key>
+    <string>__CABINET_PORT__</string>
+    <key>NODE_ENV</key>
+    <string>production</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>ProcessType</key>
+  <string>Interactive</string>
+  <key>StandardOutPath</key>
+  <string>__LOG_DIR__/cabinet.stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>__LOG_DIR__/cabinet.stderr.log</string>
+</dict>
+</plist>
