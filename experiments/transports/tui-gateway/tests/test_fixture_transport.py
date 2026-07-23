@@ -20,7 +20,7 @@ class FixtureTransportTest(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         if os.environ.get("TUI_GATEWAY_FIXTURE_E2E") != "1":
             self.skipTest("set TUI_GATEWAY_FIXTURE_E2E=1 for socket fixture")
-        hermes = Path("/Users/ignitabull/.hermes/hermes-agent")
+        hermes = Path("<user-home>/.hermes/hermes-agent")
         python = hermes / "venv/bin/python"
         self.proc = subprocess.Popen(
             [

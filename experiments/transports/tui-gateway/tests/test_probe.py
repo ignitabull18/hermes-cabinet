@@ -96,7 +96,7 @@ class ProbeUnitTests(unittest.IsolatedAsyncioTestCase):
 class SidecarGuards(unittest.TestCase):
     def setUp(self):
         self.sidecar = EXPERIMENT / "sidecar.py"
-        self.hermes = Path("/Users/ignitabull/.hermes/hermes-agent")
+        self.hermes = Path("<user-home>/.hermes/hermes-agent")
 
     def _run(self, *extra):
         return subprocess.run(

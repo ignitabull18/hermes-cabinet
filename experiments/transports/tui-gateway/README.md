@@ -9,7 +9,7 @@ Static and isolated socket-fixture tests:
 ```bash
 python3 -m unittest discover -s experiments/transports/tui-gateway/tests -v
 TUI_GATEWAY_FIXTURE_E2E=1 \
-  /Users/ignitabull/.hermes/hermes-agent/venv/bin/python \
+  <user-home>/.hermes/hermes-agent/venv/bin/python \
   -m unittest discover -s experiments/transports/tui-gateway/tests -v
 ```
 
