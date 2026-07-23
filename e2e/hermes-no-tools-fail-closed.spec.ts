@@ -31,7 +31,10 @@ const send = (value) => process.stdout.write(JSON.stringify(value) + "\\n");
 readline.createInterface({ input: process.stdin }).on("line", (line) => {
   const message = JSON.parse(line);
   if (message.method === "initialize") {
-    send({ jsonrpc: "2.0", id: message.id, result: { protocolVersion: 1 } });
+    send({ jsonrpc: "2.0", id: message.id, result: {
+      protocolVersion: 1,
+      agentCapabilities: { loadSession: true }
+    } });
   } else if (message.method === "session/new") {
     send({ jsonrpc: "2.0", id: message.id, result: { sessionId: "sentinel-session" } });
   } else if (message.method === "session/prompt") {
@@ -55,6 +58,7 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
       CABINET_HERMES_EXECUTION_CLI_PATH: cliPath,
       CABINET_HERMES_EXECUTION_NO_TOOLS: "true",
       CABINET_HERMES_PROFILE: "operator-os",
+      OLLAMA_API_KEY: "fixture",
     },
   });
 });

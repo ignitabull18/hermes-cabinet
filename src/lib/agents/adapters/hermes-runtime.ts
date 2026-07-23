@@ -10,7 +10,15 @@ import type {
 function classifyAcpFailure(error: unknown): ConversationErrorClassification {
   if (error instanceof HermesAcpError) {
     if (error.kind === "timeout") {
-      return { kind: "timeout", hint: "Hermes did not respond in time. Retry the turn." };
+      return error.promptDispatched
+        ? {
+            kind: "timeout",
+            hint: "The Hermes turn timed out after dispatch. Its outcome is unknown; review the failed turn before starting a new request.",
+          }
+        : {
+            kind: "timeout",
+            hint: `Hermes timed out during ${error.stage?.replaceAll("_", " ") ?? "startup"}.`,
+          };
     }
     if (error.kind === "session_expired") {
       return { kind: "session_expired", hint: "The Hermes session must be reopened." };
@@ -26,18 +34,16 @@ async function executeHermes(ctx: AdapterExecutionContext): Promise<AdapterExecu
   let sessionId = ctx.sessionId || "";
   try {
     const config = readHermesExecutionServerConfig();
-    let child: import("node:child_process").ChildProcessWithoutNullStreams | null = null;
-    ctx.registerInterrupt?.(async () => {
-      child?.kill("SIGTERM");
-    });
     const result = await runHermesAcpTurn({
       config,
       cwd: ctx.cwd,
       prompt: ctx.prompt,
       sessionId,
       timeoutMs: ctx.timeoutMs ?? 15 * 60 * 1000,
+      registerInterrupt(interrupt) {
+        ctx.registerInterrupt?.(interrupt);
+      },
       onSpawn(spawned) {
-        child = spawned;
         void ctx.onSpawn?.({
           pid: spawned.pid ?? 0,
           processGroupId: null,
@@ -66,6 +72,9 @@ async function executeHermes(ctx: AdapterExecutionContext): Promise<AdapterExecu
       billingType: "unknown",
     };
   } catch (error) {
+    if (error instanceof HermesAcpError && error.sessionId) {
+      sessionId = error.sessionId;
+    }
     const classification = classifyAcpFailure(error);
     return {
       exitCode: classification.kind === "timeout" ? 124 : 1,

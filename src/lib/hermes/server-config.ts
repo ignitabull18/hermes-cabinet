@@ -1,5 +1,6 @@
 import { assessHermesLiveReadiness, type HermesReadinessSourceState } from "./live-readonly-readiness";
 import { validateHermesUpstreamUrl } from "./upstream-url";
+import type { HermesAcpTransportConfig } from "./acp-transport-core";
 import path from "node:path";
 
 export type HermesServerConfig = {
@@ -34,12 +35,7 @@ export type HermesSkillsServerConfig = {
   profile: string | null;
 };
 
-export type HermesExecutionServerConfig = {
-  cliPath: string;
-  profile: string;
-  timeoutMs: number;
-  noTools: true;
-};
+export type HermesExecutionServerConfig = HermesAcpTransportConfig;
 
 /** Consequential Hermes runtime interventions are opt-in and server-only. */
 export function hermesInterventionsEnabled(
@@ -199,10 +195,16 @@ export function readHermesExecutionServerConfig(
       "Invalid server configuration: CABINET_HERMES_PROFILE is not a valid profile name",
     );
   }
+  const providerCredentialEnvName = "OLLAMA_API_KEY" as const;
+  if (!env[providerCredentialEnvName]) {
+    throw new HermesConfigurationError(
+      "Missing server configuration: OLLAMA_API_KEY",
+    );
+  }
   return {
     cliPath,
     profile,
-    timeoutMs: timeout(env.CABINET_HERMES_TIMEOUT_MS),
+    providerCredentialEnvName,
     noTools: requiredLiteralTrue(
       "CABINET_HERMES_EXECUTION_NO_TOOLS",
       env.CABINET_HERMES_EXECUTION_NO_TOOLS,

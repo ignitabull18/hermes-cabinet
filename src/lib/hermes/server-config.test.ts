@@ -149,10 +149,11 @@ test("Hermes execution configuration is an absolute CLI and bounded profile cont
     CABINET_HERMES_EXECUTION_CLI_PATH: "/opt/hermes/bin/hermes",
     CABINET_HERMES_PROFILE: "operator-os",
     CABINET_HERMES_EXECUTION_NO_TOOLS: "true",
+    OLLAMA_API_KEY: "fixture",
   }), {
     cliPath: "/opt/hermes/bin/hermes",
     profile: "operator-os",
-    timeoutMs: 3_000,
+    providerCredentialEnvName: "OLLAMA_API_KEY",
     noTools: true,
   });
   for (const value of [undefined, "false", "1", " true ", "TRUE", "unexpected"]) {
@@ -160,6 +161,7 @@ test("Hermes execution configuration is an absolute CLI and bounded profile cont
       CABINET_HERMES_EXECUTION_CLI_PATH: "/opt/hermes/bin/hermes",
       CABINET_HERMES_PROFILE: "operator-os",
       CABINET_HERMES_EXECUTION_NO_TOOLS: value,
+      OLLAMA_API_KEY: "fixture",
     }), /must be exactly true/);
   }
   assert.throws(
@@ -167,6 +169,7 @@ test("Hermes execution configuration is an absolute CLI and bounded profile cont
       CABINET_HERMES_EXECUTION_CLI_PATH: "hermes",
       CABINET_HERMES_PROFILE: "operator-os",
       CABINET_HERMES_EXECUTION_NO_TOOLS: "true",
+      OLLAMA_API_KEY: "fixture",
     }),
     /must be absolute/,
   );
@@ -175,6 +178,7 @@ test("Hermes execution configuration is an absolute CLI and bounded profile cont
       CABINET_HERMES_EXECUTION_CLI_PATH: "/opt/hermes/bin/hermes",
       CABINET_HERMES_PROFILE: "operator os; unsafe",
       CABINET_HERMES_EXECUTION_NO_TOOLS: "true",
+      OLLAMA_API_KEY: "fixture",
     }),
     /valid profile name/,
   );
