@@ -1,0 +1,62 @@
+{
+  "status": "passed",
+  "branch": "research/hermes-profile-safe-gateway",
+  "commit": null,
+  "merge_candidate": false,
+  "tests": {
+    "python_unittest": {
+      "command": "python3 -m unittest -v test_gateway_lifecycle.py",
+      "tests": 12,
+      "passed": 12,
+      "failed": 0
+    },
+    "production_mutation_check": "passed"
+  },
+  "blockers": [
+    "Managed default gateway service argv is not explicitly profile-bound and can follow sticky active_profile.",
+    "Routine supervised starts use broad --replace authority that can take over credential locks across Hermes homes.",
+    "Independent profile listeners have no topology preflight or durable host-level port ownership contract.",
+    "Shared Kanban dispatcher ownership is a startup race rather than an explicit per-board profile assignment.",
+    "Hermes does not expose the exact identity, stale-state precondition, receipt, and readback contracts Cabinet needs for governed live lifecycle actions."
+  ],
+  "recommendation": "Upstream explicit service profile identity and same-profile-only replacement first, then add listener leases and explicit per-board dispatcher ownership before Cabinet implements live lifecycle controls.",
+  "installed_hermes_commit": "55759cb2737cd3870f9de4693f66fa38eaf0dd2b",
+  "root_cause": "Default is encoded by an omitted profile flag even though omission also enables sticky active-profile resolution; supervisor recovery then combines the resulting ambiguous identity with broad replacement authority.",
+  "prototype": {
+    "path": "experiments/management/gateway-lifecycle",
+    "dispatching": false,
+    "behaviors": [
+      "explicit default and named service identity",
+      "same-profile-only replacement",
+      "identity-drift migration refusal",
+      "port collision preflight and lease keys",
+      "multiplex listener restriction",
+      "per-board dispatcher owner",
+      "restart generation and readiness verification"
+    ]
+  },
+  "source_changes_required": [
+    "Always emit --profile default in generated managed service argv.",
+    "Replace broad routine --replace with exact same-profile replacement.",
+    "Persist and verify profile, canonical home, service, PID start time, and generation.",
+    "Add named-profile explicit-port validation, topology preflight, and machine-global listener leases.",
+    "Make Agent API ownership visible as a profile/platform listener resource.",
+    "Assign shared dispatcher ownership explicitly per board."
+  ],
+  "migration": [
+    "Inventory and warn without mutation.",
+    "Regenerate only identity-matching services.",
+    "Require explicit named-profile ports while preserving default compatibility.",
+    "Assign legacy boards to default dispatcher owner with governed drain for a live non-default owner.",
+    "Restart and verify one exact profile generation at a time."
+  ],
+  "risks": [
+    "Supervisor process matching must be updated for explicit default.",
+    "Strict port validation can break implicit legacy configurations.",
+    "IPv4 and IPv6 wildcard overlap needs platform-specific tests.",
+    "Credential ownership locks must remain machine-global.",
+    "Dispatcher migration may move active work."
+  ],
+  "upstream_pr_recommended": true,
+  "production_touched": false
+}
