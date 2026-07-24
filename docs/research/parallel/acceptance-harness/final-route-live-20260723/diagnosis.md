@@ -9,12 +9,14 @@ zero MCP servers, one stable native session, exact 2-user/2-assistant durable
 cardinality, and zero pending required writes after completion.
 
 The strict conversation gate failed at checkpoint B because the initial ACP
-turn reported `duplicateChunkCount: 1`. Cabinet's ACP client detected two
-byte-identical `agent_message_chunk` notifications and suppressed the second
-notification before aggregation and persistence. This did not create a
-duplicate durable turn or repeat the acceptance nonce, but the production
-acceptance contract deliberately requires zero duplicate transport chunks.
-The follow-up turn reported zero duplicate chunks.
+turn reported `duplicateChunkCount: 1`. A subsequent source audit proved that
+this counter did not establish a duplicate transport notification. Cabinet was
+classifying any repeated message-ID-less text chunk as a duplicate by comparing
+the complete update payload. ACP defines chunks as ordered append operations,
+so two equal text chunks can be legitimate content. The client then suppressed
+the second chunk before aggregation and persistence. This did not create a
+duplicate durable turn or repeat the acceptance nonce. The follow-up turn
+reported zero duplicate chunks.
 
 The initial persisted/rendered byte-equality classification was also false.
 That classification is explicitly nonblocking because rendered text may
@@ -27,7 +29,9 @@ checks remained `NOT_RUN`. No push, PR, merge, deployment, production process,
 canonical data, live Hermes configuration, Skill state, credential, or launchd
 state was changed.
 
-The minimum next correction is to diagnose why the first live Hermes ACP prompt
-emitted an identical assistant chunk twice, then add a regression that proves
-one notification per content chunk. A new live run requires separate explicit
-authorization.
+The minimum correction is in Cabinet's ACP client: preserve all ordered chunks
+from the active prompt and classify only a chunk carrying a message identity
+that was already completed by an earlier prompt as stale/duplicate. The
+regression must prove that equal text chunks append twice while a late prior
+message identity is still ignored and counted. A new live run requires separate
+explicit authorization.

@@ -43,12 +43,12 @@ rl.on("line", (line) => {
     }
     send({ jsonrpc: "2.0", id: message.id, result: {} });
   } else if (message.method === "session/prompt") {
-    const update = { jsonrpc: "2.0", method: "session/update", params: {
+    const update = (text) => ({ jsonrpc: "2.0", method: "session/update", params: {
       sessionId: message.params.sessionId,
-      update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "CABINET_ACCEPTANCE_OK" } }
-    }};
-    send(update);
-    send(update);
+      update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text } }
+    }});
+    send(update("CABINET_"));
+    send(update("ACCEPTANCE_OK"));
     send({ jsonrpc: "2.0", id: message.id, result: {
       stopReason: "end_turn",
       _meta: { hermes: { providerAttempts: {
@@ -73,6 +73,8 @@ type ReplayFixtureOptions = {
   loadIdentity?: string;
   duplicateFinal?: boolean;
   latePreviousOnSecondPrompt?: boolean;
+  omitMessageId?: boolean;
+  repeatedIdenticalChunks?: boolean;
   exitAfterPrompt?: boolean;
   epochLogPath?: string;
 };
@@ -144,10 +146,16 @@ rl.on("line", (line) => {
     if (options.latePreviousOnSecondPrompt && promptCount === 2) {
       send(update(message.params.sessionId, "STALE", "prompt-old"));
     }
-    const messageId = promptCount === 1 && options.latePreviousOnSecondPrompt
-      ? "prompt-old"
-      : "prompt-" + process.pid + "-" + promptCount;
-    send(update(message.params.sessionId, "TURN_" + promptCount, messageId));
+    const messageId = options.omitMessageId
+      ? undefined
+      : promptCount === 1 && options.latePreviousOnSecondPrompt
+        ? "prompt-old"
+        : "prompt-" + process.pid + "-" + promptCount;
+    const text = options.repeatedIdenticalChunks ? "ECHO" : "TURN_" + promptCount;
+    send(update(message.params.sessionId, text, messageId));
+    if (options.repeatedIdenticalChunks) {
+      send(update(message.params.sessionId, text, messageId));
+    }
     const final = {
       jsonrpc: "2.0",
       id: message.id,
@@ -171,7 +179,7 @@ rl.on("line", (line) => {
 `;
 }
 
-test("ACP starts one durable session and suppresses duplicate stream frames", async () => {
+test("ACP starts one durable session and preserves ordered stream chunks", async () => {
   const fixture = await fixtureExecutable(protocolFixture);
   try {
     const deltas: string[] = [];
@@ -184,10 +192,10 @@ test("ACP starts one durable session and suppresses duplicate stream frames", as
     });
     assert.equal(result.sessionId, "fixture-session");
     assert.equal(result.output, "CABINET_ACCEPTANCE_OK");
-    assert.deepEqual(deltas, ["CABINET_ACCEPTANCE_OK"]);
+    assert.deepEqual(deltas, ["CABINET_", "ACCEPTANCE_OK"]);
     assert.equal(result.toolEventCount, 0);
     assert.equal(result.decisionEventCount, 0);
-    assert.equal(result.duplicateChunkCount, 1);
+    assert.equal(result.duplicateChunkCount, 0);
     assert.equal(result.mcpServerCount, 0);
     assert.deepEqual(result.providerAttempts, {
       contract: "hermes.provider.attempts",
@@ -201,6 +209,30 @@ test("ACP starts one durable session and suppresses duplicate stream frames", as
     await fs.rm(fixture.cwd, { recursive: true, force: true });
   }
 });
+
+for (const scenario of [
+  { name: "message-ID-less", omitMessageId: true },
+  { name: "same-message", omitMessageId: false },
+]) {
+  test(`ACP preserves repeated ${scenario.name} text as ordered stream content`, async () => {
+    const fixture = await fixtureExecutable(replayProtocolFixture({
+      omitMessageId: scenario.omitMessageId,
+      repeatedIdenticalChunks: true,
+    }));
+    try {
+      const result = await runHermesAcpTurn({
+        config: { cliPath: fixture.cliPath, hermesHome: fixture.cwd, profile: "operator-os", providerCredentialEnvName: "OLLAMA_API_KEY", timeoutMs: 3_000, noTools: true },
+        cwd: fixture.cwd,
+        prompt: "repeat content",
+        timeoutMs: 3_000,
+      });
+      assert.equal(result.output, "ECHOECHO");
+      assert.equal(result.duplicateChunkCount, 0);
+    } finally {
+      await fs.rm(fixture.cwd, { recursive: true, force: true });
+    }
+  });
+}
 
 test("ACP fails closed when provider-attempt accounting is missing", async () => {
   const fixture = await fixtureExecutable(protocolFixture.replace(
@@ -513,6 +545,7 @@ test("ACP ignores a late notification carrying the previous prompt message ident
     });
     assert.equal(second.output, "TURN_2");
     assert.deepEqual(deltas, ["TURN_2"]);
+    assert.equal(second.duplicateChunkCount, 1);
   } finally {
     await fs.rm(fixture.cwd, { recursive: true, force: true });
   }
@@ -537,11 +570,11 @@ test("ACP fails closed on malformed output without exposing it", async () => {
 
 test("ACP rejects any tool event in no-tools mode", async () => {
   const fixture = await fixtureExecutable(protocolFixture.replace(
-    'const update = { jsonrpc: "2.0", method: "session/update", params: {',
-    'const update = { jsonrpc: "2.0", method: "session/update", params: {',
-  ).replace(
-    'update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "CABINET_ACCEPTANCE_OK" } }',
-    'update: { sessionUpdate: "tool_call", toolCallId: "forbidden", title: "forbidden" }',
+    'send(update("CABINET_"));',
+    `send({ jsonrpc: "2.0", method: "session/update", params: {
+      sessionId: message.params.sessionId,
+      update: { sessionUpdate: "tool_call", toolCallId: "forbidden", title: "forbidden" }
+    }});`,
   ));
   try {
     await assert.rejects(
@@ -585,8 +618,8 @@ test("ACP refuses to spawn when the no-tools invariant is false at runtime", asy
 
 test("a partial assistant chunk followed by a tool event cannot complete successfully", async () => {
   const fixture = await fixtureExecutable(protocolFixture.replace(
-    'send(update);\n    send(update);',
-    `send(update);
+    'send(update("CABINET_"));\n    send(update("ACCEPTANCE_OK"));',
+    `send(update("CABINET_ACCEPTANCE_OK"));
     send({ jsonrpc: "2.0", method: "session/update", params: {
       sessionId: message.params.sessionId,
       update: { sessionUpdate: "tool_call", toolCallId: "sentinel", title: "sentinel" }

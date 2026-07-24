@@ -22,7 +22,6 @@ type TurnState = {
   epochId: string;
   sessionId: string;
   output: string;
-  seen: Set<string>;
   messageIds: Set<string>;
   toolEventCount: number;
   decisionEventCount: number;
@@ -186,12 +185,9 @@ class PersistentHermesAcpClient {
             turn.duplicateChunkCount += 1;
             return;
           }
-          const signature = JSON.stringify(update);
-          if (turn.seen.has(signature)) {
-            turn.duplicateChunkCount += 1;
-            return;
-          }
-          turn.seen.add(signature);
+          // ACP content chunks are ordered append operations. Equal text is
+          // valid, both without a message ID and within one message, so content
+          // equality cannot establish a duplicate transport notification.
           if (update.messageId) turn.messageIds.add(update.messageId);
           turn.output += update.content.text;
           await turn.onDelta?.(update.content.text);
@@ -293,7 +289,6 @@ class PersistentHermesAcpClient {
       epochId: randomUUID(),
       sessionId,
       output: "",
-      seen: new Set(),
       messageIds: new Set(),
       toolEventCount: 0,
       decisionEventCount: 0,
