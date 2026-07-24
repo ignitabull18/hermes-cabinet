@@ -1,0 +1,16 @@
+{
+  "stream": "acceptance-harness",
+  "status": "blocked",
+  "branch": "fix/final-route-acceptance",
+  "commit": null,
+  "merge_candidate": true,
+  "tests": {
+    "live-two-turn-contract": "failed",
+    "full-route-harness": "not_run"
+  },
+  "blockers": [
+    "Two-turn provider gate failed: Error: checkpoint B provider or no-tools accounting is invalid"
+  ],
+  "recommendation": "Resolve only the exact acceptance blockers and rerun.",
+  "production_touched": false
+}
