@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { readConversationDetail } from "@/lib/agents/conversation-store";
+import { conversationTurnToTaskTurn } from "@/lib/agents/conversation-to-task-view";
 import { buildTaskHref } from "@/lib/navigation/task-route";
 import { markdownToHtml } from "@/lib/markdown/to-html";
+import { TurnBlock } from "@/components/tasks/conversation/turn-block";
 import { CopyButton } from "./copy-button";
 import { parseTranscript } from "./transcript-parser";
 import { ContentViewer, TranscriptViewer } from "./transcript-viewer";
@@ -44,7 +46,9 @@ export default async function ConversationTranscriptPage({
 }) {
   const { id } = await params;
   const { cabinetPath } = await searchParams;
-  const detail = await readConversationDetail(id, cabinetPath);
+  const detail = await readConversationDetail(id, cabinetPath, {
+    withTurns: true,
+  });
 
   if (!detail) {
     notFound();
@@ -53,6 +57,7 @@ export default async function ConversationTranscriptPage({
   const promptText = detail.request || detail.meta.title;
   const transcriptText = detail.transcript || "No transcript captured.";
   const rawTranscriptText = detail.rawTranscript || transcriptText;
+  const turns = (detail.turns ?? []).map(conversationTurnToTaskTurn);
 
   // Pre-render markdown for text blocks (client hydration doesn't work on this page)
   async function buildHtmlMap(text: string): Promise<Record<number, string>> {
@@ -181,6 +186,33 @@ export default async function ConversationTranscriptPage({
             </div>
           </section>
         </div>
+
+        <section
+          aria-label="Conversation messages"
+          className="overflow-hidden rounded-3xl border border-border bg-card/80 shadow-sm"
+        >
+          <div className="border-b border-border px-6 py-4">
+            <h2 className="text-lg font-semibold tracking-tight">Messages</h2>
+            <p className="text-sm text-muted-foreground">
+              Persisted user and assistant turns for this conversation.
+            </p>
+          </div>
+          {turns.length > 0 ? (
+            <div className="mx-auto w-full max-w-3xl min-w-0">
+              {turns.map((turn) => (
+                <TurnBlock
+                  key={turn.id}
+                  turn={turn}
+                  cabinetPath={detail.meta.cabinetPath}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="px-6 py-5 text-sm text-muted-foreground">
+              No persisted messages were recorded.
+            </div>
+          )}
+        </section>
 
         <TranscriptViewer text={transcriptText} htmlMap={transcriptHtmlMap} />
 
