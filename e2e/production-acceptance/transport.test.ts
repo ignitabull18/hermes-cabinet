@@ -53,7 +53,12 @@ test("content-free checkpoint records exact cardinality and duplicate identities
     total: 4,
     duplicateTurnIdentities: 0,
   });
-  assert.equal(checkpoint.pendingRequiredWrites, 0);
+  assert.deepEqual(checkpoint.pendingRequiredWrites, {
+    state: "unknown",
+    value: null,
+    source: "acceptance_observability",
+    reason: "authoritative_absent",
+  });
   assert.doesNotMatch(JSON.stringify(checkpoint), /private/);
 });
 
@@ -116,7 +121,12 @@ test("checkpoint persistence measurements fall back to authoritative observabili
     null,
   );
 
-  assert.equal(checkpoint.pendingRequiredWrites, 0);
+  assert.deepEqual(checkpoint.pendingRequiredWrites, {
+    state: "known",
+    value: 0,
+    source: "acceptance_observability",
+    legacyState: "absent",
+  });
   assert.deepEqual(checkpoint.inMemoryCounts, {
     user: 2,
     assistant: 2,

@@ -116,6 +116,28 @@ export interface AcceptanceConversationObservation {
     | "unknown";
 }
 
+export type NormalizedPendingRequiredWrites =
+  | {
+      state: "known";
+      value: number;
+      source: "acceptance_observability";
+      legacyState: "absent" | "null" | "matching";
+    }
+  | {
+      state: "unknown";
+      value: null;
+      source: "acceptance_observability";
+      reason:
+        | "authoritative_absent"
+        | "authoritative_null"
+        | "authoritative_malformed"
+        | "authoritative_negative"
+        | "legacy_malformed"
+        | "legacy_disagreement";
+      legacyValue?: number;
+      authoritativeValue?: number;
+    };
+
 export interface ConversationCheckpointEvidence {
   checkpoint: "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H";
   recordedAt: string;
@@ -137,7 +159,7 @@ export interface ConversationCheckpointEvidence {
     completedAssistant: number;
     total: number;
   } | null;
-  pendingRequiredWrites: number | null;
+  pendingRequiredWrites: NormalizedPendingRequiredWrites;
   observability: AcceptanceConversationObservation | null;
 }
 

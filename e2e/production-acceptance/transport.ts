@@ -6,6 +6,7 @@ import type {
   ConversationPersistenceEvidence,
   ConversationTurnDiagnostic,
 } from "./contracts";
+import { normalizePendingRequiredWrites } from "./pending-required-writes";
 
 export const ACCEPTANCE_NAME = "CABINET ACP PRODUCT ACCEPTANCE — 2026-07-23";
 export const TRANSPORT_NONCE =
@@ -57,7 +58,8 @@ type ConversationDetail = {
   }>;
   session?: { resumeId?: string; alive?: boolean } | null;
   persistence?: {
-    pendingRequiredWrites?: number;
+    /** @deprecated Acceptance gates must use acceptanceObservability. */
+    pendingRequiredWrites?: unknown;
     inMemoryCounts?: {
       user: number;
       assistant: number;
@@ -210,10 +212,10 @@ export function buildConversationCheckpoint(
       detailValue?.persistence?.inMemoryCounts ??
       detailValue?.acceptanceObservability?.inMemoryCounts ??
       null,
-    pendingRequiredWrites:
-      detailValue?.persistence?.pendingRequiredWrites ??
-      detailValue?.acceptanceObservability?.pendingRequiredWrites ??
-      null,
+    pendingRequiredWrites: normalizePendingRequiredWrites({
+      legacy: detailValue?.persistence?.pendingRequiredWrites,
+      observability: detailValue?.acceptanceObservability,
+    }),
     observability: detailValue?.acceptanceObservability ?? null,
   };
 }
@@ -385,7 +387,8 @@ export class LiveCabinetAcpTransport implements AcceptanceTransport {
         secondRestartCompleted,
         unavailableMeasurements: checkpoints.some(
           (checkpoint) =>
-            checkpoint.inMemoryCounts === null || checkpoint.pendingRequiredWrites === null,
+            checkpoint.inMemoryCounts === null ||
+            checkpoint.pendingRequiredWrites.state === "unknown",
         )
           ? ["inMemoryCounts", "pendingRequiredWrites"]
           : [],

@@ -7,7 +7,6 @@ import { buildHermesAcceptanceFixtureProjection } from "../../src/lib/hermes/con
 import { buildHermesSkillsAcceptanceSnapshot } from "../../src/lib/hermes/skills-management-fixture";
 import type {
   AcceptanceStatus,
-  ConversationPersistenceEvidence,
   RouteChecklistEntry,
 } from "./contracts";
 import { bootIsolatedCabinet, type IsolatedCabinet } from "./isolated-cabinet";
@@ -29,6 +28,7 @@ import {
   assertMessageFidelityEvidence,
   captureMessageFidelityEvidence,
 } from "./message-exactness";
+import { assertLiveConversationEvidence } from "./conversation-gate";
 
 test.describe.configure({ mode: "serial" });
 test.setTimeout(600_000);
@@ -127,48 +127,6 @@ async function observed<T>(
 
 function notRun(id: string, area: string, summary: string): void {
   addCheck(id, area, "not_run", summary);
-}
-
-function assertLiveConversationEvidence(
-  evidence: ConversationPersistenceEvidence | null,
-): void {
-  expect(evidence).not.toBeNull();
-  expect(evidence?.nativeSessionIdentityStable).toBe(true);
-  expect(evidence?.exactFinalCardinality).toBe(true);
-  expect(evidence?.secondRestartCompleted).toBe(true);
-  const byCheckpoint = new Map(
-    evidence?.checkpoints.map((checkpoint) => [checkpoint.checkpoint, checkpoint]),
-  );
-  for (const checkpoint of ["B", "C", "D"] as const) {
-    expect(byCheckpoint.get(checkpoint)?.durableStoreCounts).toMatchObject({
-      user: 1,
-      completedAssistant: 1,
-      total: 2,
-      duplicateTurnIdentities: 0,
-    });
-  }
-  for (const checkpoint of ["G", "H"] as const) {
-    expect(byCheckpoint.get(checkpoint)?.durableStoreCounts).toMatchObject({
-      user: 2,
-      completedAssistant: 2,
-      total: 4,
-      duplicateTurnIdentities: 0,
-    });
-  }
-  for (const checkpoint of ["C", "G", "H"] as const) {
-    expect(byCheckpoint.get(checkpoint)?.pendingRequiredWrites).toBe(0);
-  }
-  for (const checkpoint of ["B", "F"] as const) {
-    expect(byCheckpoint.get(checkpoint)?.observability).toMatchObject({
-      modelRequestsAttempted: 1,
-      providerRetries: 0,
-      fallbackAttempts: 0,
-      toolEventCount: 0,
-      decisionEventCount: 0,
-      duplicateChunkCount: 0,
-      mcpServerCount: 0,
-    });
-  }
 }
 
 async function installPageObservation(page: Page) {

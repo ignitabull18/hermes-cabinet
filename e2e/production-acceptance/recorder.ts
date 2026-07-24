@@ -12,6 +12,7 @@ import type {
   RouteChecklistEntry,
   ScreenshotEntry,
 } from "./contracts";
+import { pendingWriteLedger } from "./pending-required-writes";
 
 export function selectRelevantBrowserIssues(issues: BrowserIssue[]): BrowserIssue[] {
   const expectedByStage = new Map<string, number>();
@@ -281,6 +282,7 @@ ${blockers}
 - Decision events: ${completedPromptSnapshots.reduce((total, snapshot) => total + snapshot.decisionEventCount, 0)}
 - Duplicate chunks: ${completedPromptSnapshots.reduce((total, snapshot) => total + snapshot.duplicateChunkCount, 0)}
 - MCP servers: ${completedPromptSnapshots.reduce((total, snapshot) => total + snapshot.mcpServerCount, 0)}
+- Pending required writes ledger: ${JSON.stringify(pendingWriteLedger(result.conversationPersistence))}
 - Consequential Hermes mutations: ${result.network.consequentialHermesMutations}
 - Relevant browser issues: ${selectRelevantBrowserIssues(result.browserIssues).length}
 - Developer diagnostics observed: ${result.checks.find((check) => check.id === "developer-diagnostics-48")?.evidence?.count ?? "not observed"}
