@@ -137,7 +137,7 @@ async function waitForCompletion(
 function settledTurns(detailValue: ConversationDetail, role: string): string[] {
   return (detailValue.turns ?? [])
     .filter((turn) => turn.role === role && turn.status !== "failed")
-    .map((turn) => turn.content.trim());
+    .map((turn) => turn.content);
 }
 
 function fingerprint(value: string | undefined): string | null {
