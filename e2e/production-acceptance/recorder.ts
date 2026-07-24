@@ -22,14 +22,10 @@ export function selectRelevantBrowserIssues(issues: BrowserIssue[]): BrowserIssu
     }
   }
   return issues.filter((issue) => {
-    if (issue.severity !== "error" || issue.expectedUnavailableProjection) return false;
     if (
-      issue.source === "console" &&
-      issue.stage === "restart-route-persistence" &&
-      (
-        issue.summary.includes("ERR_CONNECTION_REFUSED") ||
-        issue.summary.includes("ERR_INCOMPLETE_CHUNKED_ENCODING")
-      )
+      issue.severity !== "error" ||
+      issue.expectedUnavailableProjection ||
+      issue.expectedControlledRestartTransport
     ) {
       return false;
     }

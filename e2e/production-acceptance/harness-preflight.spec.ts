@@ -114,13 +114,14 @@ test("typed unavailable projections are attached but excluded from relevant erro
   expect(recorder.relevantBrowserIssues()).toEqual([]);
 });
 
-test("controlled restart transport errors stay attributed without failing console health", async () => {
+test("controlled restart transport errors require explicit phase correlation", async () => {
   const recorder = new AcceptanceRecorder();
   recorder.stage("restart-route-persistence");
   recorder.browserIssue({
-    source: "console",
-    severity: "error",
-    summary: "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+    source: "request",
+    severity: "warning",
+    summary: "expected_read_only_listener_loss",
+    expectedControlledRestartTransport: true,
   });
   expect(recorder.browserIssues).toHaveLength(1);
   expect(recorder.relevantBrowserIssues()).toEqual([]);
