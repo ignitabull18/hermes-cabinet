@@ -1,0 +1,200 @@
+From 3eab6b8f46f26fa712688614ed76a466a1cf9c5b Mon Sep 17 00:00:00 2001
+From: Jeremy Hamilton <jeremy@ignitabull.com>
+Date: Thu, 23 Jul 2026 17:14:47 -0700
+Subject: [PATCH] fix(agent): honor explicit output constraints
+
+
+diff --git a/agent/prompt_builder.py b/agent/prompt_builder.py
+index 4ae71cbb3..b4f098722 100644
+--- a/agent/prompt_builder.py
++++ b/agent/prompt_builder.py
+@@ -195,6 +195,19 @@ SKILLS_GUIDANCE = (
+     "Skills that aren't maintained become liabilities."
+ )
+ 
++EXPLICIT_OUTPUT_CONSTRAINT_GUIDANCE = (
++    "# Explicit output constraints\n"
++    "Default response styles, profile reporting templates, and skill-provided "
++    "formatting are subordinate to an explicit output-format constraint in the "
++    "user's current request. When the user requires exact text, only valid data "
++    "in a stated schema, a fixed number of words, or another unambiguous response "
++    "shape, satisfy that shape exactly unless doing so would conflict with safety, "
++    "security, or another higher-priority instruction. Do not add headings, status "
++    "reports, evidence summaries, explanations, or wrappers that violate the "
++    "requested shape. This precedence changes only the response format; it does "
++    "not authorize an otherwise disallowed action."
++)
++
+ KANBAN_GUIDANCE = (
+     "# Kanban task execution protocol\n"
+     "You have been assigned ONE task from "
+diff --git a/agent/system_prompt.py b/agent/system_prompt.py
+index aab34cb79..dc7863a50 100644
+--- a/agent/system_prompt.py
++++ b/agent/system_prompt.py
+@@ -29,6 +29,7 @@ from typing import Any, Dict, List, Optional
+ 
+ from agent.prompt_builder import (
+     DEFAULT_AGENT_IDENTITY,
++    EXPLICIT_OUTPUT_CONSTRAINT_GUIDANCE,
+     GOOGLE_MODEL_OPERATIONAL_GUIDANCE,
+     HERMES_AGENT_HELP_GUIDANCE,
+     KANBAN_GUIDANCE,
+@@ -451,6 +452,12 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None)
+     if _effective_hint:
+         stable_parts.append(_effective_hint)
+ 
++    # Keep this after persona, skill-index, operational, and platform guidance:
++    # those defaults remain useful, but none may silently override a user's
++    # explicit response-shape contract. This is general precedence guidance,
++    # not token/example matching or output post-processing.
++    stable_parts.append(EXPLICIT_OUTPUT_CONSTRAINT_GUIDANCE)
++
+     # ── Context tier (cwd-dependent, may change between sessions) ─
+     context_parts: List[str] = []
+ 
+diff --git a/tests/agent/test_explicit_output_precedence.py b/tests/agent/test_explicit_output_precedence.py
+new file mode 100644
+index 000000000..ea3d42f4f
+--- /dev/null
++++ b/tests/agent/test_explicit_output_precedence.py
+@@ -0,0 +1,90 @@
++from types import SimpleNamespace
++from unittest.mock import patch
++
++from agent.prompt_builder import clear_skills_system_prompt_cache
++from agent.system_prompt import build_system_prompt_parts
++
++
++PROFILE_DEFAULT = (
++    "You are the primary operator.\n"
++    "Every run reports what it did, what changed, evidence, success or failure, "
++    "what requires the operator, and the next action."
++)
++SKILL = """---
++name: one-three-one-rule
++description: Structured decision-making for technical proposals and trade-offs.
++category: communication
++---
++
++# 1-3-1 Communication Rule
++
++Use for an actual choice among multiple approaches. Do not use for simple
++questions or when the user has already specified the answer format.
++"""
++
++
++def _agent(valid_tool_names):
++    return SimpleNamespace(
++        load_soul_identity=True,
++        skip_context_files=True,
++        valid_tool_names=valid_tool_names,
++        _task_completion_guidance=False,
++        _parallel_tool_call_guidance=False,
++        _tool_use_enforcement=False,
++        _environment_probe=False,
++        _kanban_worker_guidance="",
++        _memory_store=None,
++        _memory_manager=None,
++        model="fixture-model",
++        provider="fixture-provider",
++        platform="acp",
++        pass_session_id=False,
++        session_id="fixture-session",
++    )
++
++
++def _prompt(tmp_path, monkeypatch, *, with_skill_tools):
++    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
++    (tmp_path / "SOUL.md").write_text(PROFILE_DEFAULT, encoding="utf-8")
++    skill_dir = tmp_path / "skills" / "communication" / "one-three-one-rule"
++    skill_dir.mkdir(parents=True)
++    (skill_dir / "SKILL.md").write_text(SKILL, encoding="utf-8")
++    clear_skills_system_prompt_cache(clear_snapshot=True)
++
++    names = ["skill_view"] if with_skill_tools else []
++    with (
++        patch("run_agent.build_nous_subscription_prompt", return_value=""),
++        patch("run_agent.build_environment_hints", return_value=""),
++        patch("run_agent.build_context_files_prompt", return_value=""),
++        patch("run_agent.get_toolset_for_tool", return_value="skills"),
++    ):
++        return build_system_prompt_parts(_agent(names))["stable"]
++
++
++def test_no_tools_omits_skill_index_but_keeps_output_precedence(tmp_path, monkeypatch):
++    prompt = _prompt(tmp_path, monkeypatch, with_skill_tools=False)
++    assert "Every run reports" in prompt
++    assert "<available_skills>" not in prompt
++    assert "# Explicit output constraints" in prompt
++    assert prompt.index("Every run reports") < prompt.index("# Explicit output constraints")
++
++
++def test_enabled_skill_is_indexed_not_globally_loaded(tmp_path, monkeypatch):
++    prompt = _prompt(tmp_path, monkeypatch, with_skill_tools=True)
++    assert "one-three-one-rule" in prompt
++    assert "Structured decision-making for technical proposals" in prompt
++    assert "# 1-3-1 Communication Rule" not in prompt
++    assert prompt.index("one-three-one-rule") < prompt.index("# Explicit output constraints")
++
++
++def test_general_fidelity_examples_are_covered_without_example_matching():
++    from agent.prompt_builder import EXPLICIT_OUTPUT_CONSTRAINT_GUIDANCE
++
++    # The runtime guidance names semantic constraint classes, not acceptance
++    # tokens or example strings.
++    for forbidden in ("CABINET_ACCEPTANCE_OK", "ALPHA", '{"ok":true}', "Ready"):
++        assert forbidden not in EXPLICIT_OUTPUT_CONSTRAINT_GUIDANCE
++    assert "exact text" in EXPLICIT_OUTPUT_CONSTRAINT_GUIDANCE
++    assert "only valid data" in EXPLICIT_OUTPUT_CONSTRAINT_GUIDANCE
++    assert "fixed number of words" in EXPLICIT_OUTPUT_CONSTRAINT_GUIDANCE
++    assert "Default response styles" in EXPLICIT_OUTPUT_CONSTRAINT_GUIDANCE
+diff --git a/tests/agent/test_system_prompt.py b/tests/agent/test_system_prompt.py
+index 78ea4cda8..c1596f659 100644
+--- a/tests/agent/test_system_prompt.py
++++ b/tests/agent/test_system_prompt.py
+@@ -104,6 +104,44 @@ class TestCodingContextBlock:
+         assert "coding agent" not in _stable_prompt(agent)
+ 
+ 
++class TestExplicitOutputConstraintPrecedence:
++    def test_guidance_follows_profile_and_skill_defaults(self):
++        agent = _make_agent(
++            valid_tool_names=["skill_view"],
++            platform="acp",
++        )
++        with (
++            patch(
++                "run_agent.load_soul_md",
++                return_value="Every run uses the operator report envelope.",
++            ),
++            patch("run_agent.build_nous_subscription_prompt", return_value=""),
++            patch("run_agent.build_environment_hints", return_value=""),
++            patch("run_agent.build_context_files_prompt", return_value=""),
++            patch(
++                "run_agent.build_skills_system_prompt",
++                return_value="Use the 1-3-1 format for technical decisions.",
++            ),
++            patch("run_agent.get_toolset_for_tool", return_value="skills"),
++        ):
++            stable = build_system_prompt_parts(agent)["stable"]
++
++        profile_at = stable.index("operator report envelope")
++        skill_at = stable.index("1-3-1 format")
++        precedence_at = stable.index("# Explicit output constraints")
++        assert profile_at < precedence_at
++        assert skill_at < precedence_at
++        assert "exact text" in stable
++        assert "only valid data" in stable
++        assert "fixed number of words" in stable
++        assert "unless doing so would conflict with safety" in stable
++
++    def test_guidance_is_present_without_tools_or_skills(self):
++        stable = _stable_prompt(_make_agent(platform="acp"))
++        assert "# Explicit output constraints" in stable
++        assert "Do not add headings" in stable
++
++
+ class TestTelegramRichMessagesHint:
+     """Verify that TELEGRAM_RICH_MESSAGES_HINT is conditionally included."""
+ 

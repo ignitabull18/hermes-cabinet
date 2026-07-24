@@ -1,0 +1,114 @@
+{
+  "schema": "operator-prompt-precedence/v1",
+  "source_authority": {
+    "cabinet_base": "6178270d7276418e04c78b6eff14285d2b622fc2",
+    "companion_parent": "ad7fff50a72c4534cdcc7a34b99c19344b2459a5",
+    "operator_profile_sha256": "6c077d30dd527fbbde7e06a682fa7dfd6cdc56e55ce39c2e0dbaab1871b8e3ed",
+    "one_three_one_sha256": "e2da7f526aa812a34a1766fb05fe1c1720e253eddf1290312092735f60ecf5bb"
+  },
+  "finding": {
+    "envelope_owner": "model output under conflicting operator profile defaults",
+    "first_divergence_layer": "raw ACP assistant content",
+    "profile_formatting_active": true,
+    "profile_formatting_contributed": true,
+    "one_three_one_installed_enabled": true,
+    "one_three_one_indexed_when_skill_tools_exist": true,
+    "one_three_one_full_body_globally_injected": false,
+    "one_three_one_selected_or_loaded_in_failed_turn": false,
+    "one_three_one_contributed": false,
+    "cabinet_system_additions": false,
+    "acceptance_system_additions": false,
+    "minimum_general_correction": "Make default profile, platform, and Skill formatting subordinate to explicit current-user output constraints unless safety, security, or a higher-priority instruction conflicts.",
+    "hermes_companion_patch_required": true
+  },
+  "prompt_hierarchy": [
+    "profile SOUL identity",
+    "Hermes stable operational guidance",
+    "available Skill index when Skill tools exist",
+    "environment, active-profile, and platform guidance",
+    "explicit-output constraint precedence",
+    "caller system message and workspace context files",
+    "memory, user profile, and session metadata",
+    "ephemeral system additions when configured",
+    "conversation history",
+    "current user message"
+  ],
+  "offline_capture": {
+    "provider": "loopback-fixture",
+    "port": 4332,
+    "external_model_requests": 0,
+    "loopback_requests": 10,
+    "all_passed": true,
+    "cases": {
+      "operator_no_skills": {
+        "skills_index_present": false,
+        "skill_body_injected": false,
+        "precedence_after_profile": true
+      },
+      "operator_skill_available": {
+        "skills_index_present": true,
+        "skill_body_injected": false,
+        "precedence_after_skill_index": true,
+        "tool_calls_returned": false
+      },
+      "exact_output": {
+        "response_exact": true,
+        "tool_calls_returned": false
+      },
+      "ordinary_decision": {
+        "ordinary_operator_format_preserved": true,
+        "tool_calls_returned": false
+      },
+      "same_session_followup": {
+        "response_exact": true,
+        "user_is_last_message": true
+      },
+      "no_tools": {
+        "tools_present": false,
+        "skills_index_present": false,
+        "response_exact": true
+      },
+      "tools_no_invocation": {
+        "tools_present": true,
+        "tool_calls_returned": false,
+        "response_exact": true
+      },
+      "alpha": {
+        "response_exact": true
+      },
+      "json_only": {
+        "response_exact": true
+      },
+      "one_word": {
+        "response_exact": true
+      }
+    }
+  },
+  "companion_patch": {
+    "commit": "3eab6b8f46f26fa712688614ed76a466a1cf9c5b",
+    "parent": "ad7fff50a72c4534cdcc7a34b99c19344b2459a5",
+    "patch": "0001-fix-agent-honor-explicit-output-constraints.patch",
+    "sha256": "2332868c2aa58b03845f069e13ade5aee5dbe3f06f1e9ac4d296c64206a40c5e",
+    "installed": false
+  },
+  "verification": {
+    "companion_tests": {
+      "passed": 178,
+      "skipped": 1,
+      "failed": 0
+    },
+    "ruff": "passed",
+    "diff_check": "passed",
+    "live_profile_mutations": 0,
+    "live_skill_mutations": 0,
+    "tool_invocations": 0
+  },
+  "rejected_preliminary_run": {
+    "accepted_as_evidence": false,
+    "reason": "Hermes was imported before a disposable HERMES_HOME was set.",
+    "bounded_effect": "The configured external secret source initialized and emitted only a count; no secret values were printed or inspected.",
+    "model_requests": 0,
+    "mutations": 0,
+    "corrective_action": "Set disposable HERMES_HOME before every Hermes import and reran all cases."
+  }
+}
