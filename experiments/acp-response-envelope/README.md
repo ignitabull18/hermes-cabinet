@@ -14,4 +14,3 @@ node --test experiments/acp-response-envelope/trace.test.mjs
 The synthetic fixture is not a reconstruction of the discarded live response
 bytes. It contains only the fixed acceptance token and generic report labels
 needed to exercise prefix, suffix, and structured-envelope detection.
-

@@ -8,4 +8,3 @@
   "envelope_owner": "operator-os response-generation instruction precedence before ACP emission",
   "minimum_fix": "Make default operator report formatting subordinate to explicit user output constraints before Hermes produces final_response; do not rewrite completed output downstream."
 }
-

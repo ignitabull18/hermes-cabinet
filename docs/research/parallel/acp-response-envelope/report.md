@@ -81,4 +81,3 @@ valid fixes.
 - Provider/model calls: 0
 - Tools or consequential mutations: 0
 - Fixed-token fixture only; no unrelated conversation content retained
-

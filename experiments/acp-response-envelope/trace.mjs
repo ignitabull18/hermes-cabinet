@@ -49,4 +49,3 @@ export function traceFromAcpBlocks(blocks) {
     ["acceptance_harness_extracted_text", harnessExtraction],
   ].map(([layer, value]) => ({ layer, value, ...classify(value) }));
 }
-
