@@ -57,6 +57,77 @@ test("content-free checkpoint records exact cardinality and duplicate identities
   assert.doesNotMatch(JSON.stringify(checkpoint), /private/);
 });
 
+test("checkpoint persistence measurements fall back to authoritative observability", () => {
+  const checkpoint = buildConversationCheckpoint(
+    "H",
+    "second_restart_reloaded",
+    {
+      meta: { id: "conversation", status: "completed" },
+      session: { resumeId: "session", alive: false },
+      turns: [
+        { id: "u1", turn: 1, role: "user", content: "hidden" },
+        { id: "a1", turn: 1, role: "agent", content: "hidden" },
+        { id: "u2", turn: 2, role: "user", content: "hidden" },
+        { id: "a2", turn: 2, role: "agent", content: "hidden" },
+      ],
+      acceptanceObservability: {
+        contract: "cabinet.acceptance.conversation-observability",
+        schemaVersion: 1,
+        conversationIdentity: "conversation-hash",
+        nativeSessionIdentity: "session-hash",
+        conversationStatus: "completed",
+        turnIdentities: [],
+        requestIdentities: [],
+        durableStoreCounts: {
+          user: 2,
+          assistant: 2,
+          running: 0,
+          failed: 0,
+          completed: 4,
+          completedAssistant: 2,
+          total: 4,
+        },
+        inMemoryCounts: {
+          user: 2,
+          assistant: 2,
+          running: 0,
+          failed: 0,
+          completed: 4,
+          completedAssistant: 2,
+          total: 4,
+        },
+        inMemoryCountSource: "post_flush_projection",
+        pendingRequiredWrites: 0,
+        acpChildState: "running",
+        readinessState: "ready",
+        provider: "provider",
+        model: "model",
+        modelRequestsAttempted: 1,
+        providerRetries: 0,
+        fallbackAttempts: 0,
+        toolEventCount: 0,
+        decisionEventCount: 0,
+        duplicateChunkCount: 0,
+        mcpServerCount: 0,
+        lastProviderHttpStatus: "2xx",
+        lastFailureClass: "none",
+      },
+    },
+    null,
+  );
+
+  assert.equal(checkpoint.pendingRequiredWrites, 0);
+  assert.deepEqual(checkpoint.inMemoryCounts, {
+    user: 2,
+    assistant: 2,
+    running: 0,
+    failed: 0,
+    completed: 4,
+    completedAssistant: 2,
+    total: 4,
+  });
+});
+
 test("pending and failed assistant lifecycle states are preserved without content", () => {
   const checkpoint = buildConversationCheckpoint(
     "E",

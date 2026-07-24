@@ -206,8 +206,14 @@ export function buildConversationCheckpoint(
           duplicateTurnIdentities: identities.length - new Set(identities).size,
         }
       : null,
-    inMemoryCounts: detailValue?.persistence?.inMemoryCounts ?? null,
-    pendingRequiredWrites: detailValue?.persistence?.pendingRequiredWrites ?? null,
+    inMemoryCounts:
+      detailValue?.persistence?.inMemoryCounts ??
+      detailValue?.acceptanceObservability?.inMemoryCounts ??
+      null,
+    pendingRequiredWrites:
+      detailValue?.persistence?.pendingRequiredWrites ??
+      detailValue?.acceptanceObservability?.pendingRequiredWrites ??
+      null,
     observability: detailValue?.acceptanceObservability ?? null,
   };
 }
