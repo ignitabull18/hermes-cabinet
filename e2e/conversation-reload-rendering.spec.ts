@@ -16,6 +16,7 @@ import {
 
 const CONVERSATION_ID = "conversation-reload-fixture";
 const CONVERSATION_ROUTE = `/agents/conversations/${CONVERSATION_ID}`;
+const CABINET_ROUTE = "/room/acceptance-cabinet";
 const FIRST_USER = "Fixture user turn one.";
 const FIRST_ASSISTANT = "Fixture assistant turn one.";
 const SECOND_USER = "Fixture user turn two.";
@@ -30,6 +31,14 @@ const ASSISTANT_CONTENT_SELECTOR =
 test.describe.configure({ mode: "serial" });
 
 let cabinet: IsolatedCabinet;
+
+async function primeReturningUser(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("cabinet.dataDirConfirmed", "1");
+    window.localStorage.setItem("cabinet.wizard-done", "1");
+    window.localStorage.setItem("cabinet.tour-done", "1");
+  });
+}
 
 async function installPersistedConversationFixture(dataDir: string): Promise<void> {
   const conversationDir = path.join(
@@ -199,6 +208,7 @@ test.afterAll(async () => {
 test("direct load, reload, history, and Cabinet restart preserve exact 2/2 rendering", async ({
   page,
 }) => {
+  await primeReturningUser(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.emulateMedia({ reducedMotion: "reduce" });
   const observed = observeNoModelRequests(page);
@@ -241,18 +251,19 @@ test("direct load, reload, history, and Cabinet restart preserve exact 2/2 rende
   await page.reload();
   const reloadCounts = await assertExactTranscript(page);
 
-  await page.goto(`${cabinet.appUrl}/`);
+  await page.getByRole("link", { name: "Back to Cabinet" }).click();
+  await expect(page).toHaveURL(`${cabinet.appUrl}${CABINET_ROUTE}`);
   await page.goBack();
   const backCounts = await assertExactTranscript(page);
   await page.goForward();
-  await expect(page).toHaveURL(`${cabinet.appUrl}/`);
+  await expect(page).toHaveURL(`${cabinet.appUrl}${CABINET_ROUTE}`);
   await page.goBack();
   const forwardReturnCounts = await assertExactTranscript(page);
 
   observed.setRestarting(true);
   await cabinet.restart();
   observed.setRestarting(false);
-  await page.reload();
+  await page.goto(`${cabinet.appUrl}${CONVERSATION_ROUTE}`);
   const restartCounts = await assertExactTranscript(page);
 
   expect(observed.modelRequests).toEqual([]);
@@ -278,6 +289,7 @@ test("direct load, reload, history, and Cabinet restart preserve exact 2/2 rende
 test("mobile reduced-motion direct load keeps exact transcript on-screen", async ({
   page,
 }) => {
+  await primeReturningUser(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ reducedMotion: "reduce" });
   const observed = observeNoModelRequests(page);
