@@ -89,9 +89,12 @@ export function conversationTurnToTaskTurn(turn: ConversationTurn): Turn {
     role: turn.role,
     ts: turn.ts,
     content: turn.content,
+    sessionId: turn.sessionId,
     tokens: turn.tokens,
     awaitingInput: turn.awaitingInput,
     pending: turn.pending,
+    exitCode: turn.exitCode,
+    error: turn.error,
     attachmentPaths: turn.attachmentPaths,
     artifacts: turn.artifacts?.map(kbArtifact),
   };
