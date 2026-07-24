@@ -26,6 +26,27 @@ test.beforeAll(async () => {
 const fs = require("node:fs");
 const readline = require("node:readline");
 if (process.env.HERMES_ACP_NO_TOOLS !== "1") process.exit(91);
+if (process.argv.includes("--model-readiness-json")) {
+  process.stdout.write(JSON.stringify({
+    contract: "hermes.conversation.readiness",
+    schema_version: 1,
+    profile: "operator-os",
+    provider: "fixture",
+    model: "fixture",
+    model_source: "profile",
+    credential_state: "present",
+    endpoint_class: "local",
+    ready: true,
+    blocked_reason: null,
+    attempts: {
+      model_requests_attempted: 0,
+      provider_retries: 0,
+      fallback_attempts: 0,
+      last_provider_http_status: null
+    }
+  }) + "\\n");
+  process.exit(0);
+}
 fs.appendFileSync(${JSON.stringify(instrumentationPath)}, "1\\n");
 const send = (value) => process.stdout.write(JSON.stringify(value) + "\\n");
 readline.createInterface({ input: process.stdin }).on("line", (line) => {
@@ -55,6 +76,7 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
       CABINET_HERMES_EXECUTION_CLI_PATH: cliPath,
       CABINET_HERMES_EXECUTION_NO_TOOLS: "true",
       CABINET_HERMES_PROFILE: "operator-os",
+      HERMES_HOME: fixtureRoot,
       OLLAMA_API_KEY: "fixture",
     },
   });

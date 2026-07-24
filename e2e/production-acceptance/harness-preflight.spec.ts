@@ -12,10 +12,10 @@ let cabinet: IsolatedCabinet;
 
 test.beforeAll(async () => {
   expect(
-    execFileSync("git", ["merge-base", "HEAD", "origin/main"], {
+    execFileSync("git", ["merge-base", "HEAD", "b02c9d7c4430ae89026182d1cbf5567553b189ad"], {
       encoding: "utf8",
     }).trim(),
-  ).toBe("6178270d7276418e04c78b6eff14285d2b622fc2");
+  ).toBe("b02c9d7c4430ae89026182d1cbf5567553b189ad");
   cabinet = await bootIsolatedCabinet(process.cwd());
 });
 

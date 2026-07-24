@@ -85,8 +85,10 @@ test.afterAll(async () => {
 });
 
 async function installSafeDetailFixture(page: Page, delayMs = 250): Promise<void> {
-  await page.route(/^https?:\/\/(?!127\.0\.0\.1:4342\/)/, (route) =>
-    route.fulfill({ status: 204, body: "" }),
+  const isolatedOrigin = new URL(cabinet.appUrl).origin;
+  await page.route(
+    (url) => url.origin !== isolatedOrigin,
+    (route) => route.fulfill({ status: 204, body: "" }),
   );
   await page.route(
     `**/api/agents/conversations/events`,
