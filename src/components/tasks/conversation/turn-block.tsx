@@ -318,14 +318,18 @@ export function TurnBlock({
             className="text-[14.5px] leading-[1.65] tracking-[-0.005em] text-foreground/95"
           />
         </div>
-      ) : turn.content.trim() ? (
+      ) : (
         <div
           data-testid={TURN_TEST_IDS.assistantContent}
+          data-message-author="assistant"
+          data-message-part="content"
+          data-message-lifecycle={lifecycle.replace(" ", "-")}
+          role="group"
           aria-label="Assistant message content"
         >
           <ConversationContentViewer text={turn.content} />
         </div>
-      ) : null}
+      )}
 
       {isUser && turn.attachmentPaths && turn.attachmentPaths.length > 0 ? (
         <TurnAttachments paths={turn.attachmentPaths} />
