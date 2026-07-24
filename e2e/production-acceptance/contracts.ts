@@ -50,11 +50,12 @@ export interface NetworkSummary {
 
 export interface BrowserIssue {
   stage: string;
-  source: "console" | "pageerror" | "http";
+  source: "console" | "pageerror" | "http" | "request";
   severity: "warning" | "error";
   summary: string;
   path?: string;
   expectedUnavailableProjection?: boolean;
+  expectedControlledRestartTransport?: boolean;
 }
 
 export interface ConversationTurnDiagnostic {

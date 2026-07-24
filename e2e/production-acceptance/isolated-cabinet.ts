@@ -3,13 +3,14 @@ import fs from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import type { RestartPhase } from "./restart-handling";
 
 const DEFAULT_APP_PORT = 4344;
 
 export interface IsolatedCabinet {
   appUrl: string;
   dataDir: string;
-  restart(): Promise<void>;
+  restart(onPhase?: (phase: RestartPhase) => void): Promise<void>;
   logs(): string;
   close(): Promise<void>;
 }
@@ -191,10 +192,15 @@ Isolated acceptance fixture. No model execution is authorized.
   return {
     appUrl: `http://127.0.0.1:${appPort}`,
     dataDir,
-    restart: async () => {
+    restart: async (onPhase) => {
+      onPhase?.("restart_requested");
+      onPhase?.("child_stopping");
       await stop(app);
       await assertPortAvailable(appPort);
+      onPhase?.("listener_unavailable");
+      onPhase?.("child_starting");
       await start();
+      onPhase?.("health_ready");
     },
     logs: () => logs.join(""),
     close: async () => {

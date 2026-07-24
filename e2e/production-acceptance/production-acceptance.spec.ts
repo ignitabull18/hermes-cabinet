@@ -29,6 +29,10 @@ import {
   captureMessageFidelityEvidence,
 } from "./message-exactness";
 import { assertLiveConversationEvidence } from "./conversation-gate";
+import {
+  ControlledRestartTracker,
+  type RestartRequest,
+} from "./restart-handling";
 
 test.describe.configure({ mode: "serial" });
 test.setTimeout(600_000);
@@ -63,7 +67,8 @@ const projection = buildHermesAcceptanceFixtureProjection({
 });
 let cabinet: IsolatedCabinet;
 let routes: RouteChecklistEntry[] = [];
-let controlledRestartInProgress = false;
+let controlledRestart: ControlledRestartTracker | null = null;
+const restartRequests = new WeakMap<import("@playwright/test").Request, RestartRequest>();
 let providerGateConversation: AcceptanceConversation | null = null;
 
 function addCheck(
@@ -139,16 +144,36 @@ async function installPageObservation(page: Page) {
     const url = new URL(request.url());
     if (url.origin === new URL(cabinet.appUrl).origin) {
       recorder.request(request.method(), url.pathname);
+      restartRequests.set(request, {
+        method: request.method(),
+        path: url.pathname,
+        startedPhase: controlledRestart?.phase ?? null,
+      });
     }
   });
   page.on("requestfailed", (request) => {
     const url = new URL(request.url());
     if (url.origin === new URL(cabinet.appUrl).origin) {
+      const errorText = request.failure()?.errorText ?? "request failed";
       recorder.requestFailed(
         request.method(),
         url.pathname,
-        request.failure()?.errorText ?? "request failed"
+        errorText,
       );
+      const restartRequest = restartRequests.get(request);
+      if (controlledRestart && restartRequest) {
+        const classification = controlledRestart.requestFailed(
+          restartRequest,
+          errorText,
+        );
+        recorder.browserIssue({
+          source: "request",
+          severity: classification.expected ? "warning" : "error",
+          path: url.pathname,
+          summary: classification.reason,
+          expectedControlledRestartTransport: classification.expected,
+        });
+      }
     }
   });
   page.on("response", async (response) => {
@@ -209,20 +234,28 @@ async function installPageObservation(page: Page) {
   });
   page.on("console", (message) => {
     if (["error", "warning"].includes(message.type())) {
-      const prefix = controlledRestartInProgress
+      const expectedRestartTransport =
+        message.type() === "error" &&
+        controlledRestart?.consoleTransportFailure(message.text()) === true;
+      const prefix = expectedRestartTransport
         ? `expected-restart-${message.type()}`
         : message.type();
       recorder.scanText.push(`${prefix}: ${message.text()}`);
       recorder.browserIssue({
         source: "console",
-        severity: message.type() === "error" ? "error" : "warning",
+        severity: expectedRestartTransport
+          ? "warning"
+          : message.type() === "error"
+            ? "error"
+            : "warning",
         summary: conciseError(message.text()),
+        expectedControlledRestartTransport: expectedRestartTransport,
       });
     }
   });
   page.on("pageerror", (error) => {
-    const prefix = controlledRestartInProgress ? "expected-restart-pageerror" : "pageerror";
-    recorder.scanText.push(`${prefix}: ${error.message}`);
+    controlledRestart?.unhandledError();
+    recorder.scanText.push(`pageerror: ${error.message}`);
     recorder.browserIssue({
       source: "pageerror",
       severity: "error",
@@ -915,15 +948,22 @@ test("authoritative isolated production acceptance", async ({ page }) => {
     async () => {
       await page.goto(`${cabinet.appUrl}/room/acceptance-cabinet`);
       await expect(page.getByText("Acceptance Cabinet", { exact: true }).first()).toBeVisible();
-      controlledRestartInProgress = true;
+      const tracker = new ControlledRestartTracker();
+      controlledRestart = tracker;
       try {
-        await cabinet.restart();
+        await cabinet.restart((phase) => tracker.transition(phase));
+        await page.reload();
+        await expect(page.getByText("Acceptance Cabinet", { exact: true }).first()).toBeVisible();
+        tracker.transition("browser_reconnected");
+        tracker.transition("acceptance_resumed");
+        return {
+          cabinetRestart: true,
+          routePersisted: true,
+          ...tracker.complete(),
+        };
       } finally {
-        controlledRestartInProgress = false;
+        controlledRestart = null;
       }
-      await page.reload();
-      await expect(page.getByText("Acceptance Cabinet", { exact: true }).first()).toBeVisible();
-      return { cabinetRestart: true, routePersisted: true };
     },
     () => `Isolated Cabinet restarted on port ${appPort} and the room route persisted.`,
     (error) => `Cabinet restart persistence failed: ${String(error)}`,
