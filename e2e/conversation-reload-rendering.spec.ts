@@ -7,7 +7,10 @@ import {
   ASSISTANT_TURN_SELECTOR,
   TURN_TEST_IDS,
 } from "../src/lib/agents/assistant-message-contract";
-import { serializeTurn } from "../src/lib/agents/conversation-turns";
+import {
+  parseTurnFilename,
+  serializeTurn,
+} from "../src/lib/agents/conversation-turns";
 import type { ConversationTurn } from "../src/types/conversations";
 import {
   bootIsolatedCabinet,
@@ -100,6 +103,27 @@ async function installPersistedConversationFixture(dataDir: string): Promise<voi
       ),
     ),
   ]);
+}
+
+async function readDurableStoreCounts(dataDir: string): Promise<{
+  user: number;
+  assistant: number;
+}> {
+  const conversationDir = path.join(
+    dataDir,
+    ".agents",
+    ".conversations",
+    CONVERSATION_ID,
+  );
+  const names = await fs.readdir(path.join(conversationDir, "turns"));
+  const persistedRoles = names
+    .map(parseTurnFilename)
+    .filter((turn): turn is NonNullable<typeof turn> => turn !== null);
+  return {
+    // Turn one is canonically stored in prompt.md and transcript.txt.
+    user: 1 + persistedRoles.filter((turn) => turn.role === "user").length,
+    assistant: 1 + persistedRoles.filter((turn) => turn.role === "agent").length,
+  };
 }
 
 async function assertExactTranscript(page: Page): Promise<{
@@ -210,12 +234,15 @@ test("direct load, reload, history, and Cabinet restart preserve exact 2/2 rende
   const detail = (await detailResponse.json()) as {
     turns?: Array<{ role?: string; pending?: boolean; error?: string; exitCode?: number }>;
   };
-  const storedUserTurns = detail.turns?.filter((turn) => turn.role === "user").length ?? 0;
-  const storedAssistantTurns =
+  const durableStoreCounts = await readDurableStoreCounts(cabinet.dataDir);
+  expect(durableStoreCounts).toEqual({ user: 2, assistant: 2 });
+  const detailApiUserTurns =
+    detail.turns?.filter((turn) => turn.role === "user").length ?? 0;
+  const detailApiAssistantTurns =
     detail.turns?.filter((turn) => turn.role === "agent").length ?? 0;
-  expect({ storedUserTurns, storedAssistantTurns }).toEqual({
-    storedUserTurns: 2,
-    storedAssistantTurns: 2,
+  expect({ detailApiUserTurns, detailApiAssistantTurns }).toEqual({
+    detailApiUserTurns: 2,
+    detailApiAssistantTurns: 2,
   });
 
   const observabilityResponse = await page.request.get(
@@ -245,7 +272,9 @@ test("direct load, reload, history, and Cabinet restart preserve exact 2/2 rende
   await page.goBack();
   const backCounts = await assertExactTranscript(page);
   await page.goForward();
-  await expect(page).toHaveURL(`${cabinet.appUrl}/`);
+  await expect(page).toHaveURL(
+    `${cabinet.appUrl}/room/acceptance-cabinet`,
+  );
   await page.goBack();
   const forwardReturnCounts = await assertExactTranscript(page);
 
@@ -260,10 +289,15 @@ test("direct load, reload, history, and Cabinet restart preserve exact 2/2 rende
   console.log(
     "conversation-reload-count-ledger",
     JSON.stringify({
-      storedUserTurns,
-      storedAssistantTurns,
-      apiUserTurns: observability.durableStoreCounts.user,
-      apiAssistantTurns: observability.durableStoreCounts.assistant,
+      durableStore: durableStoreCounts,
+      detailApi: {
+        user: detailApiUserTurns,
+        assistant: detailApiAssistantTurns,
+      },
+      observabilityApi: {
+        user: observability.durableStoreCounts.user,
+        assistant: observability.durableStoreCounts.assistant,
+      },
       pendingRequiredWrites: observability.pendingRequiredWrites,
       directCounts,
       reloadCounts,
