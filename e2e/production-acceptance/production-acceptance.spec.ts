@@ -952,6 +952,10 @@ test("authoritative isolated production acceptance", async ({ page }) => {
       controlledRestart = tracker;
       try {
         await cabinet.restart((phase) => tracker.transition(phase));
+        // The controlled transport-loss window ends at health readiness. Keep
+        // the local tracker for the remaining phase ledger, but stop assigning
+        // the intentional reload's ERR_ABORTED cancellations to listener loss.
+        controlledRestart = null;
         await page.reload();
         await expect(page.getByText("Acceptance Cabinet", { exact: true }).first()).toBeVisible();
         tracker.transition("browser_reconnected");

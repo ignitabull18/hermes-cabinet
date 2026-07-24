@@ -29,6 +29,7 @@ test("controlled restart records the exact bounded phase sequence", () => {
     listenerUnavailableMs: 10,
     recoveryMs: 40,
     expectedRequestFailures: 0,
+    expectedRequestFailureDetails: [],
     expectedConsoleFailures: 0,
   });
 });
@@ -126,7 +127,15 @@ test("console resets require a correlated failed read-only request", () => {
   tracker.transition("health_ready");
   tracker.transition("browser_reconnected");
   tracker.transition("acceptance_resumed");
-  assert.doesNotThrow(() => tracker.complete());
+  assert.deepEqual(tracker.complete().expectedRequestFailureDetails, [
+    {
+      method: "GET",
+      path: "/api/health",
+      startedPhase: "child_stopping",
+      failedPhase: "child_starting",
+      errorText: "net::ERR_CONNECTION_RESET",
+    },
+  ]);
 });
 
 test("uncorrelated reset and unhandled rejection fail closed", () => {

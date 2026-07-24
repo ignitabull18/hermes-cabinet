@@ -36,6 +36,11 @@ export type RestartFailureClassification = {
     | "consequential_request";
 };
 
+export type ExpectedRestartRequestFailure = RestartRequest & {
+  failedPhase: RestartPhase;
+  errorText: string;
+};
+
 type PhaseRecord = {
   phase: RestartPhase;
   at: number;
@@ -75,6 +80,7 @@ export class ControlledRestartTracker {
   private currentPhase: RestartPhase | null = null;
   private readonly phases: PhaseRecord[] = [];
   private expectedRequestFailures = 0;
+  private readonly expectedRequestFailureDetails: ExpectedRestartRequestFailure[] = [];
   private expectedConsoleFailures = 0;
   private unhandledErrors = 0;
 
@@ -105,7 +111,14 @@ export class ControlledRestartTracker {
       this.currentPhase,
       errorText,
     );
-    if (classification.expected) this.expectedRequestFailures += 1;
+    if (classification.expected && this.currentPhase) {
+      this.expectedRequestFailures += 1;
+      this.expectedRequestFailureDetails.push({
+        ...request,
+        failedPhase: this.currentPhase,
+        errorText,
+      });
+    }
     return classification;
   }
 
@@ -126,6 +139,7 @@ export class ControlledRestartTracker {
     listenerUnavailableMs: number;
     recoveryMs: number;
     expectedRequestFailures: number;
+    expectedRequestFailureDetails: ExpectedRestartRequestFailure[];
     expectedConsoleFailures: number;
   } {
     if (this.phases.length !== RESTART_PHASES.length) {
@@ -144,6 +158,7 @@ export class ControlledRestartTracker {
       listenerUnavailableMs: at("child_starting") - at("listener_unavailable"),
       recoveryMs: at("health_ready") - at("restart_requested"),
       expectedRequestFailures: this.expectedRequestFailures,
+      expectedRequestFailureDetails: this.expectedRequestFailureDetails,
       expectedConsoleFailures: this.expectedConsoleFailures,
     };
   }
