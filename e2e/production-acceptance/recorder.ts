@@ -5,6 +5,7 @@ import type {
   AcceptanceBlocker,
   BrowserIssue,
   AcceptanceCheck,
+  AcceptanceMessageExactnessEvidence,
   AcceptanceResult,
   ConversationPersistenceEvidence,
   NetworkSummary,
@@ -49,6 +50,7 @@ export class AcceptanceRecorder {
   readonly screenshots: ScreenshotEntry[] = [];
   readonly browserIssues: BrowserIssue[] = [];
   conversationPersistence: ConversationPersistenceEvidence | null = null;
+  readonly messageExactness: AcceptanceMessageExactnessEvidence[] = [];
   readonly navigation = { desktop: [] as string[], mobile: [] as string[] };
   readonly network: NetworkSummary = {
     total: 0,
@@ -83,6 +85,10 @@ export class AcceptanceRecorder {
 
   recordConversationPersistence(evidence: ConversationPersistenceEvidence): void {
     this.conversationPersistence = evidence;
+  }
+
+  recordMessageExactness(evidence: AcceptanceMessageExactnessEvidence[]): void {
+    this.messageExactness.splice(0, this.messageExactness.length, ...evidence);
   }
 
   relevantBrowserIssues(): BrowserIssue[] {
@@ -252,6 +258,11 @@ ${blockers}
 
 ## Accounting
 
+- Persisted exact: ${result.messageExactness.map((entry) => `${entry.turn}=${entry.persistedExact}`).join(", ") || "not observed"}
+- Rendered message-body exact: ${result.messageExactness.map((entry) => `${entry.turn}=${entry.renderedMessageBodyExact}`).join(", ") || "not observed"}
+- Larger container exact: ${result.messageExactness.map((entry) => `${entry.turn}=${entry.largerContainerExact}`).join(", ") || "not observed"}
+- Message-body selector: ${result.messageExactness[0]?.selector ?? "not observed"}
+- Message-body element count: ${result.messageExactness[0]?.elementCount ?? "not observed"}
 - Requests: ${result.network.total}
 - Mutations observed: ${result.network.mutations}
 - Legacy daemon-output requests: ${result.network.legacyDaemonOutputRequests}

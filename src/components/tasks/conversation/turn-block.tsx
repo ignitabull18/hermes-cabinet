@@ -27,6 +27,7 @@ import { UserAvatar } from "@/components/layout/user-avatar";
 import { EditUserAvatarDialog } from "@/components/settings/edit-user-avatar-dialog";
 import type { UserProfile } from "@/lib/user/profile-io";
 import { useLocale } from "@/i18n/use-locale";
+import { TURN_TEST_IDS } from "@/lib/agents/assistant-message-contract";
 
 export type TurnBlockAgent = AgentAvatarInput & { name?: string };
 export type TurnBlockUser = Pick<
@@ -104,7 +105,12 @@ function PendingIndicator() {
     };
   }, []);
   return (
-    <div className="mt-2 inline-flex items-center gap-2 text-[13px] italic text-muted-foreground">
+    <div
+      data-testid={TURN_TEST_IDS.lifecycleStatus}
+      role="status"
+      aria-label="Assistant response is in progress"
+      className="mt-2 inline-flex items-center gap-2 text-[13px] italic text-muted-foreground"
+    >
       <span className="font-medium text-foreground/75">
         {THINKING_VERBS[idx]}
       </span>
@@ -223,6 +229,11 @@ export function TurnBlock({
   const userLabel =
     user?.displayName?.trim() || user?.name?.trim() || "You";
   const [avatarEditorOpen, setAvatarEditorOpen] = useState(false);
+  const lifecycle = turn.pending
+    ? "in progress"
+    : turn.error || (typeof turn.exitCode === "number" && turn.exitCode !== 0)
+      ? "failed"
+      : "completed";
 
   const avatarNode = isUser ? (
     <button
@@ -249,21 +260,42 @@ export function TurnBlock({
 
   return (
     <div
-      data-testid="turn"
+      data-testid={TURN_TEST_IDS.turn}
       data-turn-role={isUser ? "user" : "agent"}
+      aria-label={`${isUser ? "User" : "Assistant"} message`}
       className={cn(
         "group/turn min-w-0 max-w-full overflow-hidden py-5 pe-3 ps-6 max-md:px-3 max-md:py-4",
         !isUser && "bg-muted/20"
       )}
     >
-      <div className="mb-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+      <div
+        data-testid={TURN_TEST_IDS.metadata}
+        aria-label={`${isUser ? "User" : "Assistant"} message metadata`}
+        className="mb-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground"
+      >
         {avatarNode}
-        <span className="font-medium text-foreground/80">{isUser ? userLabel : agentLabel}</span>
-        <span>·</span>
-        <RelativeTime iso={turn.ts} />
+        <span
+          data-testid={TURN_TEST_IDS.roleLabel}
+          className="font-medium text-foreground/80"
+        >
+          {isUser ? userLabel : agentLabel}
+        </span>
+        <span aria-hidden="true">·</span>
+        <span data-testid={TURN_TEST_IDS.timestamp} aria-label={`Sent ${turn.ts}`}>
+          <RelativeTime iso={turn.ts} />
+        </span>
+        {!turn.pending ? (
+          <span
+            data-testid={TURN_TEST_IDS.lifecycleStatus}
+            className="sr-only"
+            role="status"
+          >
+            {lifecycle}
+          </span>
+        ) : null}
         {totalTokens ? (
           <>
-            <span>·</span>
+            <span aria-hidden="true">·</span>
             <span className="font-mono tabular-nums">
               {(totalTokens / 1000).toFixed(1)}k tok
             </span>
@@ -277,12 +309,22 @@ export function TurnBlock({
       </div>
 
       {isUser ? (
-        <Markdown
-          content={turn.content}
-          className="text-[14.5px] leading-[1.65] tracking-[-0.005em] text-foreground/95"
-        />
+        <div
+          data-testid={TURN_TEST_IDS.userContent}
+          aria-label="User message content"
+        >
+          <Markdown
+            content={turn.content}
+            className="text-[14.5px] leading-[1.65] tracking-[-0.005em] text-foreground/95"
+          />
+        </div>
       ) : turn.content.trim() ? (
-        <ConversationContentViewer text={turn.content} />
+        <div
+          data-testid={TURN_TEST_IDS.assistantContent}
+          aria-label="Assistant message content"
+        >
+          <ConversationContentViewer text={turn.content} />
+        </div>
       ) : null}
 
       {isUser && turn.attachmentPaths && turn.attachmentPaths.length > 0 ? (
@@ -291,8 +333,23 @@ export function TurnBlock({
 
       {!isUser && turn.pending ? <PendingIndicator /> : null}
 
+      {!isUser && lifecycle === "failed" && turn.error ? (
+        <div
+          data-testid={TURN_TEST_IDS.failureDetails}
+          role="alert"
+          aria-label="Assistant response failure details"
+          className="mt-2 text-[12px] text-destructive"
+        >
+          {turn.error}
+        </div>
+      ) : null}
+
       {artifactPaths.length > 0 ? (
-        <div className="mt-3.5 space-y-1.5 rounded-xl border border-border/60 bg-muted/40 p-2 dark:bg-muted/20">
+        <div
+          data-testid={TURN_TEST_IDS.metadataActions}
+          aria-label="Assistant message metadata and actions"
+          className="mt-3.5 space-y-1.5 rounded-xl border border-border/60 bg-muted/40 p-2 dark:bg-muted/20"
+        >
           {artifactPaths.map((path) => (
             <KbArtifactRow
               key={path}

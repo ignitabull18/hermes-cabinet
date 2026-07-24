@@ -21,6 +21,10 @@ import {
   selectTransport,
   type AcceptanceConversation,
 } from "./transport";
+import {
+  assertMessageExactnessEvidence,
+  captureMessageExactnessEvidence,
+} from "./message-exactness";
 
 test.describe.configure({ mode: "serial" });
 test.setTimeout(600_000);
@@ -344,13 +348,15 @@ test.afterAll(async () => {
     network: recorder.network,
     browserIssues: recorder.browserIssues,
     conversationPersistence: recorder.conversationPersistence,
+    messageExactness: recorder.messageExactness,
     screenshots: recorder.screenshots,
     productionTouched: false,
   }, recorder.scanText.join("\n"));
   await cabinet?.close();
 });
 
-test("two-turn provider gate", async () => {
+test("two-turn provider gate", async ({ page }) => {
+  await installPageObservation(page);
   providerGateConversation = await observed(
     transport.sendsLiveModelMessages
       ? "live-two-turn-contract"
@@ -362,8 +368,18 @@ test("two-turn provider gate", async () => {
         (evidence) => recorder.recordConversationPersistence(evidence),
         (method, pathname) => recorder.request(method, pathname),
       );
-      assertExactAcceptanceToken(result.firstResponse, "initial");
-      assertExactAcceptanceToken(result.secondResponse, "follow-up");
+      if (transport.sendsLiveModelMessages) {
+        const exactness = await captureMessageExactnessEvidence(
+          page,
+          cabinet.appUrl,
+          result,
+        );
+        recorder.recordMessageExactness(exactness);
+        assertMessageExactnessEvidence(exactness);
+      } else {
+        assertExactAcceptanceToken(result.firstResponse, "initial");
+        assertExactAcceptanceToken(result.secondResponse, "follow-up");
+      }
       expect(result.sameSession).toBe(true);
       expect(result.userTurns).toBe(2);
       expect(result.completedAssistantTurns).toBe(2);

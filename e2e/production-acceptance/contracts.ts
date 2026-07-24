@@ -147,6 +147,15 @@ export interface ConversationPersistenceEvidence {
   unavailableMeasurements: string[];
 }
 
+export interface AcceptanceMessageExactnessEvidence {
+  turn: "initial" | "follow-up";
+  persistedExact: boolean;
+  renderedMessageBodyExact: boolean;
+  largerContainerExact: boolean;
+  selector: string;
+  elementCount: number;
+}
+
 export interface AcceptanceResult {
   schemaVersion: 2;
   generatedAt: string;
@@ -176,6 +185,7 @@ export interface AcceptanceResult {
   network: NetworkSummary;
   browserIssues: BrowserIssue[];
   conversationPersistence: ConversationPersistenceEvidence | null;
+  messageExactness: AcceptanceMessageExactnessEvidence[];
   screenshots: ScreenshotEntry[];
   scans: {
     secretIndicators: string[];
