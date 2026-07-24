@@ -1,5 +1,12 @@
 # Hermes-First Cabinet Cutover Handoff
 
+> Historical handoff: the endpoint requirements below describe the earlier
+> Gateway execution design. Native conversations now use the server-owned
+> ACP-over-stdio path documented in
+> [`../../README.md`](../../README.md#ai-runtime-today) and
+> [`../MACOS_SUPERVISED_CABINET.md`](../MACOS_SUPERVISED_CABINET.md). Retain
+> this file as implementation history.
+
 Status: cutover approved by Jeremy Hamilton on 2026-07-18
 
 Cabinet is now Jeremy's primary Hermes UI. This approval closed M7 and authorized M8 work. At the time of this handoff it did not authorize merging GitHub PR #1; that PR was subsequently approved and merged as `e2b0ba4c`.

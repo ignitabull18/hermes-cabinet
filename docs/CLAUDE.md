@@ -16,7 +16,7 @@ Cabinet is an AI-first self-hosted knowledge base and startup OS. Durable knowle
 - **Fonts:** Inter (sans) + JetBrains Mono (code)
 - **Icons:** Lucide (no emoji in system chrome)
 - **Markdown:** gray-matter (frontmatter), unified/remark (MD→HTML), turndown (HTML→MD)
-- **AI runtimes:** Cabinet mode uses Claude Code, Codex CLI, Cursor CLI, OpenCode, Copilot CLI, Grok CLI, Pi, and a generic CLI adapter through `src/lib/agents/`. Hermes mode uses the `hermes_runtime` adapter and server-only clients in `src/lib/hermes/`.
+- **AI runtimes:** Cabinet mode uses Claude Code, Codex CLI, Cursor CLI, OpenCode, Copilot CLI, Grok CLI, Pi, and a generic CLI adapter through `src/lib/agents/`. Hermes mode uses the `hermes_runtime` adapter. Native conversations run through the server-owned ACP companion over stdio; Agent API, Management API, Gateway, and Skills CLI integrations are separate feature boundaries in `src/lib/hermes/`.
 
 ## Architecture
 
@@ -68,7 +68,7 @@ data/                        → Managed data directory (KB files plus local run
 5. **shadcn/ui uses base-ui** (not Radix) — DialogTrigger, ContextMenuTrigger etc. do NOT have `asChild`
 6. **Dark mode default** — theme toggle available, use `next-themes` with `attribute="class"`
 7. **Auto-save** — debounced 500ms after last keystroke in editor-store
-8. **Runtime mode is server-selected** — `CABINET_RUNTIME_MODE` defaults to `cabinet`. Cabinet mode uses structured adapters plus user-selectable terminal mode. Hermes mode enforces `hermes` / `hermes_runtime`, hides legacy runtime controls, and sends execution through Hermes; it must fail visibly rather than silently fall back.
+8. **Runtime mode is server-selected** — `CABINET_RUNTIME_MODE` defaults to `cabinet`. Cabinet mode uses structured adapters plus user-selectable terminal mode. Hermes mode enforces `hermes` / `hermes_runtime`, hides legacy runtime controls, and sends native conversations through the approved ACP executable over stdio; it must fail visibly rather than silently fall back. The executable path, Hermes configuration root, exact profile, provider credential, and no-tools policy are server-owned. Agent API, Management API, and Gateway credentials are required only by the separate surfaces that use them.
 9. **Terminal is first-class in Cabinet mode** — it runs through `server/pty/` and `WebTerminal`. Hermes mode does not use Cabinet terminal execution as a fallback.
 10. **Version restore** — users can restore any page to a previous git commit via the Version History panel
 11. **Embedded apps** — dirs with `index.html` + no `index.md` render as iframes. Add `.app` marker for full-screen mode (sidebar + AI panel auto-collapse)
@@ -88,7 +88,7 @@ When Cabinet starts an AI edit or task run:
 1. **The request becomes a conversation** with `providerId`, `adapterType`, and optional adapter config such as model or effort.
 2. **Detached runs** go through `/api/agents/conversations` → `conversation-runner` → `cabinet-daemon`.
 3. **Cabinet mode:** structured adapters are the default; terminal mode (PTY, named `*_legacy` historically) is selectable through the Native / Terminal composer toggle.
-4. **Hermes mode:** persona/runtime writes are forced to `hermes` / `hermes_runtime`, provider controls are hidden, and the Hermes bridge owns execution. Terminal fallback is forbidden.
+4. **Hermes mode:** persona/runtime writes are forced to `hermes` / `hermes_runtime`, provider controls are hidden, and the native ACP companion owns conversation execution. Terminal fallback is forbidden; Agent API, Management API, and Gateway bridges do not replace the ACP conversation path.
 5. **Models should edit targeted files directly when useful** and reflect durable value in KB files, not only transcript text.
 6. **If content gets corrupted** — users can restore from Version History (clock icon → select commit → Restore)
 

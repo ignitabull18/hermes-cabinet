@@ -202,7 +202,9 @@ The server selects one of two explicit modes through `CABINET_RUNTIME_MODE`:
 | Mode | Behavior |
 |---|---|
 | `cabinet` (default) | Uses Cabinet's local provider adapters. Tasks, jobs, and heartbeats run through persisted Cabinet conversations; the composer can select provider, model, effort, structured execution, or terminal execution. |
-| `hermes` | Makes Hermes the visible agent runtime. Persona reads and writes are projected to the `hermes` provider and `hermes_runtime` adapter, legacy provider/runtime controls are hidden, and conversations execute through the server-only Hermes Agent API, Management API, and Gateway bridge. |
+| `hermes` | Makes Hermes the visible agent runtime. Persona reads and writes are projected to the `hermes` provider and `hermes_runtime` adapter, legacy provider/runtime controls are hidden, and conversations execute through the server-owned native Hermes ACP companion over stdio. |
+
+Native conversation execution requires an approved absolute ACP-capable Hermes executable, an absolute `HERMES_HOME`, the exact `operator-os` profile, a server-only provider credential, and the process-owned no-tools switch. Cabinet performs a read-only model-readiness probe before the first model request and fails visibly if the contract is missing, malformed, or ambiguous. Agent API, Management API, and Gateway configuration serve their own read, run, management, and diagnostic surfaces; they are not the native conversation transport.
 
 Hermes mode also adds the Today cockpit, an action-oriented Hermes Control Center, governed official-public Skills install and exact official Hub removal, session/run inspection, Developer capability diagnostics, repository visibility, read-only Agent catalogs, and a narrowly governed run-termination intervention. Skills discovery and governance use only an approved side-by-side Hermes CLI, so they do not require Agent API, Desktop Management, or Gateway availability. Every Skills change requires a fresh canonical read, a server-issued typed confirmation, exact target binding, an idempotency receipt, and Hermes CLI readback verification. Enable and Disable are unsupported; Update is audit-only. Run termination remains disabled unless `CABINET_HERMES_INTERVENTIONS_ENABLED=true`; Skills management is not coupled to that flag.
 
@@ -236,7 +238,8 @@ cabinet/
 - In default Cabinet mode, at least one supported CLI provider:
   - **Claude Code CLI** (`npm install -g @anthropic-ai/claude-code`)
   - **Codex CLI** (`npm install -g @openai/codex` or `brew install --cask codex`)
-- In Hermes mode, reachable loopback Hermes Agent API, Management API, and Gateway endpoints with server-only credentials
+- In Hermes mode, an approved ACP-capable Hermes executable, an absolute Hermes configuration root, the exact `operator-os` profile, and the required server-only model credential
+- Loopback Hermes Agent API, Management API, and Gateway endpoints only for the read, run, management, or diagnostic surfaces that use them
 - **Source mode:** macOS, Linux, or Windows
 - **Electron desktop packaging:** macOS and Windows
 
@@ -254,10 +257,14 @@ cp .env.example .env.local
 | `CABINET_LOGIN_MAX_ATTEMPTS` / `_WINDOW_MS` / `_LOCKOUT_MS` / `CABINET_LOGIN_GLOBAL_MAX` | `10` / `900000` / `900000` / `60` | Login rate-limit tuning (per-client + global failed-attempt buckets). |
 | `DOMAIN` | `localhost` | Domain for the app. |
 | `CABINET_RUNTIME_MODE` | `cabinet` | Select `cabinet` or `hermes`. Invalid values fail configuration parsing. |
-| `CABINET_HERMES_API_URL` / `CABINET_HERMES_API_KEY` | _(required in Hermes mode)_ | Loopback Hermes Agent API and server-only API key. |
+| `CABINET_HERMES_EXECUTION_CLI_PATH` | _(required for native Hermes conversations)_ | Approved absolute ACP-capable Hermes executable. There is no browser or `PATH` override. |
+| `CABINET_HERMES_EXECUTION_NO_TOOLS` | _(must be `true` for native Hermes conversations)_ | Process-owned fail-closed no-tools contract. Tool-enabled conversations require a separate governed design. |
+| `HERMES_HOME` | _(required for native Hermes conversations)_ | Absolute server-only Hermes configuration root used by the ACP companion. |
+| `OLLAMA_API_KEY` | _(required for the current native Hermes provider)_ | Server-only model-provider credential passed only to the isolated ACP child environment. |
+| `CABINET_HERMES_API_URL` / `CABINET_HERMES_API_KEY` | _(required for Agent API-backed features)_ | Loopback Hermes Agent API and server-only API key. Native ACP conversations do not use this pair. |
 | `CABINET_HERMES_MANAGEMENT_URL` / `CABINET_HERMES_MANAGEMENT_TOKEN` | _(required for management-backed Hermes features)_ | Loopback Management API and server-only token. `HERMES_DASHBOARD_SESSION_TOKEN` is accepted as a token fallback. |
-| `CABINET_HERMES_GATEWAY_URL` / `CABINET_HERMES_GATEWAY_TOKEN` | _(required for live Hermes execution)_ | Loopback Gateway and server-only WebSocket token. |
-| `CABINET_HERMES_PROFILE` | _(required in Hermes mode)_ | Hermes profile name; the product baseline uses `operator-os`. |
+| `CABINET_HERMES_GATEWAY_URL` / `CABINET_HERMES_GATEWAY_TOKEN` | _(required for Gateway-backed features)_ | Loopback Gateway and server-only WebSocket token. Native ACP conversations do not use this pair. |
+| `CABINET_HERMES_PROFILE` | _(required in Hermes mode)_ | Hermes profile name. Native conversation execution requires exactly `operator-os`. |
 | `CABINET_HERMES_TIMEOUT_MS` | `3000` | Upstream timeout, constrained to 250–30000 ms. |
 | `CABINET_HERMES_CLI_PATH` | _(unset)_ | Explicit absolute server-only side-by-side Hermes 0.19.0 executable required for Skills catalog, canonical state, inspect, audit, install, removal, verification, and reconciliation. There is no `PATH` fallback; Update remains audit-only. Browser input cannot change it. |
 | `CABINET_HERMES_INTERVENTIONS_ENABLED` | `false` | Enables only the implemented governed intervention path; it does not bypass confirmation or authority checks. |
