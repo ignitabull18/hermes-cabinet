@@ -1,5 +1,13 @@
 # Hermes Runtime Contract Verification
 
+> Historical design note: the interactive Gateway execution design in this
+> document was superseded by the native ACP-over-stdio conversation path. Use
+> [`../../README.md`](../../README.md#ai-runtime-today) and
+> [`../MACOS_SUPERVISED_CABINET.md`](../MACOS_SUPERVISED_CABINET.md) for the
+> current execution and supervision contract. Agent API, Management API, and
+> Gateway integrations remain valid only for the separate surfaces that use
+> them.
+
 Status: verified against the installed Hermes runtime on 2026-07-18
 
 This record supports the Hermes-first Cabinet implementation plan. It is not a cutover approval. Cabinet must remain a secondary Hermes interface until M7 passes and the operator explicitly approves cutover.

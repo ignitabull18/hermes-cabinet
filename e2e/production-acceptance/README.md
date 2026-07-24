@@ -1,5 +1,15 @@
 # Production acceptance harness
 
+## Current accepted baseline
+
+The current authoritative verdict is **ACCEPTED**. See
+[`docs/research/parallel/acceptance-harness/final-route-live-r4-20260723/acceptance.md`](../../docs/research/parallel/acceptance-harness/final-route-live-r4-20260723/acceptance.md)
+for the concise outcome and the adjacent `report.md`, `acceptance-result.json`,
+and `result.json` for bounded evidence. Earlier `NOT_ACCEPTED` artifacts remain
+preserved as historical failure evidence.
+
+## Run the harness
+
 Run from the repository root:
 
 ```bash

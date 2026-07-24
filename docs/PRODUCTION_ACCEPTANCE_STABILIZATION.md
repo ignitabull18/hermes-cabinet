@@ -1,5 +1,16 @@
 # Production acceptance stabilization
 
+## Current status
+
+The isolated production acceptance contract is **ACCEPTED** at the final-route
+r4 baseline. The authoritative summary and bounded evidence are preserved in
+[`final-route-live-r4-20260723/acceptance.md`](research/parallel/acceptance-harness/final-route-live-r4-20260723/acceptance.md).
+
+The blocker table below is the pre-change trace that drove stabilization. It is
+historical evidence, not the current product verdict.
+
+## Pre-change blocker trace
+
 This document records the bounded blocker trace captured from the exact pre-change production revision. It excludes credentials, private data, local paths, and conversation content.
 
 | Surface | Route and action | Client request | Server route | Runtime dependency | Bounded observed failure | Why coverage missed it |

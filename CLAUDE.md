@@ -2,8 +2,10 @@
 
 Cabinet is a self-hosted, AI-first knowledge base and "startup OS". Durable knowledge lives as
 markdown files on disk; a local SQLite database stores structured runtime and index state. AI work
-runs through either Cabinet's local CLI adapters or the server-only Hermes bridge, selected by
-`CABINET_RUNTIME_MODE`. Humans define intent, agents do the work.
+runs through either Cabinet's local CLI adapters or server-owned Hermes integrations, selected by
+`CABINET_RUNTIME_MODE`. Native Hermes conversations use the approved ACP companion over stdio;
+Agent API, Management API, Gateway, and Skills CLI integrations remain separate feature boundaries.
+Humans define intent, agents do the work.
 
 `docs/CLAUDE.md` holds a longer, feature-by-feature ruleset (skills, knowledge sources, registry,
 editor). Read it when you touch those subsystems. This file covers the parts you need for almost any
@@ -17,7 +19,8 @@ Three processes and a managed data directory. Understanding the split is most of
 
 In Hermes mode, Hermes is the agent execution source of truth. Cabinet still owns presentation,
 human-authored knowledge, local comments/artifacts, diagnostics, and rebuildable projections. Do not
-fall back silently from Hermes to a Cabinet provider.
+fall back silently from Hermes to a Cabinet provider. Do not describe Agent API, Management API, or
+Gateway configuration as required for native ACP conversation execution.
 
 ## PROGRESS.md
 

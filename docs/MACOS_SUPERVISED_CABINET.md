@@ -15,6 +15,12 @@ Required substitutions:
 - `__HERMES_PROFILE__`: the exact Hermes profile
 - `__CABINET_PORT__`: an unused private port
 
+The owner-only environment file must supply `HERMES_HOME` as an absolute
+configuration root and `OLLAMA_API_KEY` as the current server-only provider
+credential. The rendered plist supplies the absolute execution CLI, exact
+profile, and mandatory no-tools switch. Agent API, Management API, and Gateway
+credentials are optional unless their separate Cabinet surfaces are enabled.
+
 Validate the rendered plist with `/usr/bin/plutil -lint`. Load it into the current GUI user domain with `/bin/launchctl bootstrap gui/$(/usr/bin/id -u) <plist>`, inspect with `/bin/launchctl print gui/$(/usr/bin/id -u)/<label>`, and stop it with `/bin/launchctl bootout gui/$(/usr/bin/id -u)/<label>`. `RunAtLoad` starts it after login; `KeepAlive.SuccessfulExit=false` restarts unexpected failures without relaunching after a clean stop or bootout.
 
 The wrapper is a child-lifecycle boundary, not a second restart supervisor. When Next exits, the wrapper immediately exits with the same code or terminal signal. launchd alone owns restart behavior, and `ThrottleInterval=10` limits restart pressure during a repeated failure. `launchctl bootout` remains the deterministic way to stop the service and cancel restart. `SIGTERM` and `SIGINT` are forwarded to Next; if shutdown stalls, the wrapper ends the child after a ten-second grace period so the listener cannot be orphaned.
