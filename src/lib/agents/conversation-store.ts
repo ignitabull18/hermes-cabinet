@@ -1,4 +1,4 @@
-import { createHash } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import fs from "fs/promises";
 import path from "path";
 import type {
@@ -186,6 +186,38 @@ export class ConversationStoreLifecycle {
 }
 
 const conversationStoreLifecycle = new ConversationStoreLifecycle();
+const conversationWriteChains = new Map<string, Promise<unknown>>();
+
+async function withConversationWrite<T>(
+  id: string,
+  work: () => Promise<T>
+): Promise<T> {
+  const previous = conversationWriteChains.get(id) ?? Promise.resolve();
+  const current = previous.catch(() => undefined).then(work);
+  conversationWriteChains.set(id, current);
+  try {
+    return await current;
+  } finally {
+    if (conversationWriteChains.get(id) === current) {
+      conversationWriteChains.delete(id);
+    }
+  }
+}
+
+export async function flushConversation(id: string): Promise<void> {
+  while (conversationWriteChains.has(id)) {
+    await conversationWriteChains.get(id);
+  }
+}
+
+/**
+ * Read-only acceptance diagnostic for the required per-conversation write
+ * barrier. This intentionally exposes only the queue cardinality, never the
+ * queued operation or its data.
+ */
+export function getPendingRequiredConversationWrites(id: string): number {
+  return conversationWriteChains.has(id) ? 1 : 0;
+}
 
 // In-memory running counts — bootstrapped once from disk, then delta-updated
 // from notifications so the SSE tick never opens meta.json files.
@@ -1358,6 +1390,23 @@ async function maybeResolveCompletedConversation(
   ) {
     return meta;
   }
+  if (meta.status === "running") {
+    const additionalTurns = await readAdditionalTurns(meta.id, cabinetPath);
+    const latestTurnNumber = additionalTurns.at(-1)?.turn;
+    if (latestTurnNumber !== undefined) {
+      const latestTurns = additionalTurns.filter(
+        (turn) => turn.turn === latestTurnNumber
+      );
+      const latestUser = latestTurns.find((turn) => turn.role === "user");
+      const latestAgent = latestTurns.find((turn) => turn.role === "agent");
+      // The transcript still contains the prior completed prompt while a new
+      // follow-up is accepted or streaming. It must not heal that stale text
+      // into a terminal lifecycle for the new turn.
+      if (latestUser && (!latestAgent || latestAgent.pending)) {
+        return meta;
+      }
+    }
+  }
   if (meta.status === "running" && !transcriptShowsCompletedRun(transcript, prompt)) {
     if (
       !isLegacyAdapterType(meta.adapterType) &&
@@ -1432,11 +1481,31 @@ const transcriptEventThrottle = new Map<string, number>();
  * removed. Idempotent: repeated callers await the same completed shutdown.
  */
 export async function closeConversationStore(): Promise<void> {
-  await conversationStoreLifecycle.close();
+  const writeResults = await Promise.allSettled([
+    ...conversationWriteChains.values(),
+  ]);
+  let lifecycleFailure: unknown;
+  try {
+    await conversationStoreLifecycle.close();
+  } catch (error) {
+    lifecycleFailure = error;
+  }
   transcriptEventThrottle.clear();
   notificationQueue.length = 0;
   _runningCounts.clear();
   _runningCountsBootstrapped = false;
+  const failures = writeResults
+    .filter(
+      (result): result is PromiseRejectedResult => result.status === "rejected"
+    )
+    .map((result) => result.reason);
+  if (lifecycleFailure) failures.push(lifecycleFailure);
+  if (failures.length > 0) {
+    throw new AggregateError(
+      failures,
+      "Conversation store failed to close durably"
+    );
+  }
 }
 
 export async function appendConversationTranscript(
@@ -1744,6 +1813,10 @@ export async function readConversationDetail(
   cabinetPath?: string,
   options: { withTurns?: boolean } = {}
 ): Promise<ConversationDetail | null> {
+  // Detail is the externally visible projection used by the UI and
+  // acceptance harness. Never combine meta from before a serialized prompt
+  // write with turns/session from after it.
+  await flushConversation(id);
   const rawMeta = await readConversationMeta(id, cabinetPath);
   if (!rawMeta) return null;
   const reconciled = await reconcileStaleRunningMeta(rawMeta);
@@ -2099,6 +2172,11 @@ export async function moveStagingAttachments(args: {
 
 export interface AppendUserTurnInput {
   content: string;
+  /** Stable server request identity. Replays with the same value are no-ops. */
+  requestId?: string;
+  /** Optional preallocated server turn identity. */
+  turnId?: string;
+  source?: "prompt" | "session-load";
   mentionedPaths?: string[];
   /**
    * Composer attachments for this user turn. Persisted on the turn file
@@ -2111,6 +2189,10 @@ export interface AppendUserTurnInput {
 
 export interface AppendAgentTurnInput {
   content: string;
+  requestId?: string;
+  turnId?: string;
+  source?: "prompt" | "session-load";
+  chunkIds?: string[];
   ts?: string;
   sessionId?: string;
   tokens?: TurnTokens;
@@ -2123,6 +2205,7 @@ export interface AppendAgentTurnInput {
 
 export interface UpdateAgentTurnInput {
   content?: string;
+  requestId?: string;
   sessionId?: string;
   tokens?: TurnTokens;
   awaitingInput?: boolean;
@@ -2130,6 +2213,8 @@ export interface UpdateAgentTurnInput {
   exitCode?: number | null;
   error?: string;
   artifacts?: string[];
+  chunkIds?: string[];
+  completedAt?: string;
 }
 
 /**
@@ -2671,6 +2756,24 @@ async function writeTurnFile(
   await writeFileContent(turnFileFs(dir, turn.turn, turn.role), serializeTurn(turn));
 }
 
+async function findAdditionalTurn(
+  id: string,
+  role: TurnRole,
+  identity: { requestId?: string; turnId?: string },
+  cabinetPath?: string
+): Promise<ConversationTurn | null> {
+  if (!identity.requestId && !identity.turnId) return null;
+  const turns = await readAdditionalTurns(id, cabinetPath);
+  return (
+    turns.find(
+      (turn) =>
+        turn.role === role &&
+        ((identity.turnId && turn.id === identity.turnId) ||
+          (identity.requestId && turn.requestId === identity.requestId))
+    ) ?? null
+  );
+}
+
 function mergeArtifactPaths(
   existing: string[],
   incoming: string[] | undefined
@@ -2696,15 +2799,84 @@ export async function appendUserTurn(
   input: AppendUserTurnInput,
   cabinetPath?: string
 ): Promise<ConversationTurn | null> {
+  return withConversationWrite(id, () =>
+    appendUserTurnUnlocked(id, input, cabinetPath)
+  );
+}
+
+export type AcceptedConversationPrompt =
+  | { accepted: true; requestId: string; userTurn: ConversationTurn }
+  | { accepted: false; reason: "not_found" | "busy" };
+
+/**
+ * Atomically claim one follow-up prompt before a route dispatches background
+ * execution. The running lifecycle and stable request/user-turn identities
+ * reach disk in the same per-conversation write queue, so concurrent HTTP
+ * submissions cannot both dispatch a model prompt.
+ */
+export async function acceptConversationPrompt(
+  id: string,
+  input: Omit<AppendUserTurnInput, "requestId" | "source">,
+  cabinetPath?: string
+): Promise<AcceptedConversationPrompt> {
+  return withConversationWrite(id, async () => {
+    const meta = await readConversationMeta(id, cabinetPath);
+    if (!meta) return { accepted: false, reason: "not_found" };
+    if (meta.status === "running") {
+      return { accepted: false, reason: "busy" };
+    }
+    const requestId = randomUUID();
+    const userTurn = await appendUserTurnUnlocked(
+      id,
+      { ...input, requestId, source: "prompt" },
+      meta.cabinetPath || cabinetPath
+    );
+    if (!userTurn) return { accepted: false, reason: "not_found" };
+    return { accepted: true, requestId, userTurn };
+  });
+}
+
+async function appendUserTurnUnlocked(
+  id: string,
+  input: AppendUserTurnInput,
+  cabinetPath?: string
+): Promise<ConversationTurn | null> {
+  if (input.source === "session-load") return null;
   const meta = await readConversationMeta(id, cabinetPath);
   if (!meta) return null;
   const cp = meta.cabinetPath || cabinetPath;
+  const existing = await findAdditionalTurn(
+    id,
+    "user",
+    { requestId: input.requestId, turnId: input.turnId },
+    cp
+  );
+  if (existing) {
+    if (meta.status !== "running" || (meta.turnCount ?? 1) < existing.turn) {
+      const allTurns = await readConversationTurns(id, cp);
+      await writeConversationMeta({
+        ...meta,
+        turnCount: Math.max(Math.ceil(allTurns.length / 2), 1),
+        lastActivityAt: existing.ts,
+        status: "running",
+        awaitingInput: false,
+        doneAt: undefined,
+        archivedAt: undefined,
+        mentionedPaths: mergeArtifactPaths(
+          meta.mentionedPaths,
+          existing.mentionedPaths
+        ),
+      });
+    }
+    return existing;
+  }
 
   const turnNumber = await nextTurnNumber(id, cp);
   const ts = input.ts || new Date().toISOString();
 
   const turn: ConversationTurn = {
-    id: shortId(),
+    id: input.turnId || shortId(),
+    requestId: input.requestId,
     turn: turnNumber,
     role: "user",
     ts,
@@ -2716,20 +2888,35 @@ export async function appendUserTurn(
         : undefined,
   };
 
-  await writeTurnFile(id, cp, turn);
+  // Publish the lifecycle transition before the user turn file can become
+  // externally visible. Readers may briefly observe `running` with the prior
+  // cardinality, but can never observe a new user turn under stale terminal
+  // metadata (the 2-user/1-assistant + completed restart race).
+  const runningMeta: ConversationMeta = {
+    ...meta,
+    lastActivityAt: ts,
+    status: "running",
+    awaitingInput: false,
+    doneAt: undefined,
+    archivedAt: undefined,
+    mentionedPaths: mergeArtifactPaths(meta.mentionedPaths, input.mentionedPaths),
+  };
+  await writeConversationMeta(runningMeta);
+  try {
+    await writeTurnFile(id, cp, turn);
+  } catch (error) {
+    // Ordinary write failures restore the prior terminal projection. A hard
+    // process crash leaves the safer recoverable state: running with no newly
+    // visible user turn, which stale-run reconciliation can close on restart.
+    await writeConversationMeta(meta).catch(() => undefined);
+    throw error;
+  }
 
   // Update meta: bump turnCount, lastActivityAt, status back to running
   const allTurns = await readConversationTurns(id, cp);
   const updatedMeta: ConversationMeta = {
-    ...meta,
-    turnCount: Math.max(allTurns.length / 2 | 0, 1),
-    lastActivityAt: ts,
-    status: "running",
-    awaitingInput: false,
-    // User sending a new turn reopens a done or archived task.
-    doneAt: undefined,
-    archivedAt: undefined,
-    mentionedPaths: mergeArtifactPaths(meta.mentionedPaths, input.mentionedPaths),
+    ...runningMeta,
+    turnCount: Math.max(Math.ceil(allTurns.length / 2), 1),
   };
   await writeConversationMeta(updatedMeta);
 
@@ -2773,9 +2960,77 @@ export async function appendAgentTurn(
   input: AppendAgentTurnInput,
   cabinetPath?: string
 ): Promise<ConversationTurn | null> {
+  return withConversationWrite(id, () =>
+    appendAgentTurnUnlocked(id, input, cabinetPath)
+  );
+}
+
+async function appendAgentTurnUnlocked(
+  id: string,
+  input: AppendAgentTurnInput,
+  cabinetPath?: string,
+  options: { deferCompletionPublication?: boolean } = {}
+): Promise<ConversationTurn | null> {
+  if (input.source === "session-load") return null;
   const meta = await readConversationMeta(id, cabinetPath);
   if (!meta) return null;
   const cp = meta.cabinetPath || cabinetPath;
+  const existing = await findAdditionalTurn(
+    id,
+    "agent",
+    { requestId: input.requestId, turnId: input.turnId },
+    cp
+  );
+  if (existing) {
+    if (input.pending) return existing;
+    if (!existing.pending) {
+      const failed =
+        (typeof existing.exitCode === "number" && existing.exitCode !== 0) ||
+        !!existing.error;
+      const expectedStatus = failed ? "failed" : "completed";
+      if (meta.status !== expectedStatus || (meta.turnCount ?? 1) < existing.turn) {
+        return updateAgentTurnUnlocked(
+          id,
+          existing.turn,
+          {
+            content: existing.content,
+            requestId: existing.requestId,
+            sessionId: existing.sessionId,
+            tokens: existing.tokens,
+            awaitingInput: existing.awaitingInput,
+            pending: false,
+            exitCode: existing.exitCode,
+            error: existing.error,
+            artifacts: existing.artifacts,
+            chunkIds: existing.chunkIds,
+            completedAt: existing.completedAt,
+          },
+          cp,
+          options
+        );
+      }
+      return existing;
+    }
+    return updateAgentTurnUnlocked(
+      id,
+      existing.turn,
+      {
+        content: input.content,
+        requestId: input.requestId,
+        sessionId: input.sessionId,
+        tokens: input.tokens,
+        awaitingInput: input.awaitingInput,
+        pending: false,
+        exitCode: input.exitCode,
+        error: input.error,
+        artifacts: input.artifacts,
+        chunkIds: input.chunkIds,
+        completedAt: new Date().toISOString(),
+      },
+      cp,
+      options
+    );
+  }
 
   const turnNumber = await nextTurnNumber(id, cp);
   const ts = input.ts || new Date().toISOString();
@@ -2790,7 +3045,8 @@ export async function appendAgentTurn(
     : stripCabinetTrailer(input.content) || input.content;
 
   const turn: ConversationTurn = {
-    id: shortId(),
+    id: input.turnId || shortId(),
+    requestId: input.requestId,
     turn: turnNumber,
     role: "agent",
     ts,
@@ -2802,6 +3058,8 @@ export async function appendAgentTurn(
     exitCode: input.exitCode,
     error: input.error,
     artifacts: input.artifacts ?? parsed.artifactPaths,
+    chunkIds: input.chunkIds,
+    completedAt: input.pending ? undefined : new Date().toISOString(),
   };
 
   await writeTurnFile(id, cp, turn);
@@ -2829,7 +3087,9 @@ export async function appendAgentTurn(
       return recent ? meta.summary : parsed.summary;
     })(),
     contextSummary: parsed.contextSummary || meta.contextSummary,
-    status: input.pending
+    status: options.deferCompletionPublication
+      ? "running"
+      : input.pending
       ? "running"
       : failed
         ? "failed"
@@ -2841,18 +3101,20 @@ export async function appendAgentTurn(
     await sanitizeArtifactCabinetBlocks(turn.artifacts);
   }
 
-  const seq = await appendEventLog(
-    id,
-    { type: "turn.appended", turn: turnNumber, role: "agent", pending: !!input.pending },
-    cp
-  );
-  publishConversationEvent({
-    type: "turn.appended",
-    taskId: id,
-    cabinetPath: cp,
-    seq: seq ?? undefined,
-    payload: { turn: turnNumber, role: "agent", pending: !!input.pending },
-  });
+  if (!options.deferCompletionPublication) {
+    const seq = await appendEventLog(
+      id,
+      { type: "turn.appended", turn: turnNumber, role: "agent", pending: !!input.pending },
+      cp
+    );
+    publishConversationEvent({
+      type: "turn.appended",
+      taskId: id,
+      cabinetPath: cp,
+      seq: seq ?? undefined,
+      payload: { turn: turnNumber, role: "agent", pending: !!input.pending },
+    });
+  }
 
   return turn;
 }
@@ -2865,6 +3127,18 @@ export async function updateAgentTurn(
   turnNumber: number,
   patch: UpdateAgentTurnInput,
   cabinetPath?: string
+): Promise<ConversationTurn | null> {
+  return withConversationWrite(id, () =>
+    updateAgentTurnUnlocked(id, turnNumber, patch, cabinetPath)
+  );
+}
+
+async function updateAgentTurnUnlocked(
+  id: string,
+  turnNumber: number,
+  patch: UpdateAgentTurnInput,
+  cabinetPath?: string,
+  options: { deferCompletionPublication?: boolean } = {}
 ): Promise<ConversationTurn | null> {
   const meta = await readConversationMeta(id, cabinetPath);
   if (!meta) return null;
@@ -2888,6 +3162,7 @@ export async function updateAgentTurn(
 
   const nextTurn: ConversationTurn = {
     ...existing,
+    requestId: patch.requestId ?? existing.requestId,
     content,
     sessionId: patch.sessionId ?? existing.sessionId,
     tokens: patch.tokens ?? existing.tokens,
@@ -2896,6 +3171,11 @@ export async function updateAgentTurn(
     exitCode: patch.exitCode ?? existing.exitCode,
     error: patch.error ?? existing.error,
     artifacts: patch.artifacts ?? parsed.artifactPaths ?? existing.artifacts,
+    chunkIds: patch.chunkIds ?? existing.chunkIds,
+    completedAt:
+      patch.pending === false
+        ? patch.completedAt ?? existing.completedAt ?? new Date().toISOString()
+        : existing.completedAt,
   };
 
   await writeTurnFile(id, cp, nextTurn);
@@ -2921,7 +3201,9 @@ export async function updateAgentTurn(
       return recent ? meta.summary : parsed.summary;
     })(),
     contextSummary: parsed.contextSummary || meta.contextSummary,
-    status: nextTurn.pending
+    status: options.deferCompletionPublication
+      ? "running"
+      : nextTurn.pending
       ? "running"
       : failed
         ? "failed"
@@ -2935,20 +3217,208 @@ export async function updateAgentTurn(
     await sanitizeArtifactCabinetBlocks(nextTurn.artifacts);
   }
 
-  const seq = await appendEventLog(
-    id,
-    { type: "turn.updated", turn: turnNumber, role: "agent" },
-    cp
-  );
-  publishConversationEvent({
-    type: "turn.updated",
-    taskId: id,
-    cabinetPath: cp,
-    seq: seq ?? undefined,
-    payload: { turn: turnNumber, role: "agent" },
-  });
+  if (!options.deferCompletionPublication) {
+    const seq = await appendEventLog(
+      id,
+      { type: "turn.updated", turn: turnNumber, role: "agent" },
+      cp
+    );
+    publishConversationEvent({
+      type: "turn.updated",
+      taskId: id,
+      cabinetPath: cp,
+      seq: seq ?? undefined,
+      payload: { turn: turnNumber, role: "agent" },
+    });
+  }
 
   return nextTurn;
+}
+
+export interface AppendAgentTurnChunkInput {
+  requestId?: string;
+  turnId?: string;
+  chunkId: string;
+  content: string;
+}
+
+export async function appendAgentTurnChunk(
+  id: string,
+  input: AppendAgentTurnChunkInput,
+  cabinetPath?: string
+): Promise<ConversationTurn | null> {
+  return withConversationWrite(id, async () => {
+    const meta = await readConversationMeta(id, cabinetPath);
+    if (!meta) return null;
+    const cp = meta.cabinetPath || cabinetPath;
+    const existing = await findAdditionalTurn(
+      id,
+      "agent",
+      { requestId: input.requestId, turnId: input.turnId },
+      cp
+    );
+    if (!existing) {
+      return appendAgentTurnUnlocked(
+        id,
+        {
+          content: input.content,
+          pending: true,
+          requestId: input.requestId,
+          turnId: input.turnId,
+          chunkIds: [input.chunkId],
+        },
+        cp
+      );
+    }
+    if (!existing.pending || existing.chunkIds?.includes(input.chunkId)) {
+      return existing;
+    }
+    return updateAgentTurnUnlocked(
+      id,
+      existing.turn,
+      {
+        content: existing.content + input.content,
+        pending: true,
+        chunkIds: [...(existing.chunkIds ?? []), input.chunkId],
+      },
+      cp
+    );
+  });
+}
+
+export interface CommitTurnResultInput {
+  requestId: string;
+  user?: Omit<AppendUserTurnInput, "requestId" | "source">;
+  assistant: Omit<AppendAgentTurnInput, "requestId" | "source" | "pending">;
+  session: SessionHandle;
+}
+
+export interface CommittedTurnResult {
+  requestId: string;
+  userTurn: ConversationTurn | null;
+  assistantTurn: ConversationTurn;
+  session: SessionHandle;
+  committedAt: string;
+}
+
+function committedTurnResultPath(
+  id: string,
+  requestId: string,
+  cabinetPath?: string
+): string {
+  const digest = createHash("sha256").update(requestId).digest("hex");
+  return path.join(conversationDir(id, cabinetPath), "turn-results", `${digest}.json`);
+}
+
+/**
+ * Durable completion barrier for one prompt. The atomic result marker is
+ * written only after both canonical turns and the native session handle have
+ * reached disk. Callers must await this before publishing `completed`.
+ */
+export async function commitTurnResult(
+  id: string,
+  input: CommitTurnResultInput,
+  cabinetPath?: string
+): Promise<CommittedTurnResult | null> {
+  const result = await withConversationWrite(id, async () => {
+    const meta = await readConversationMeta(id, cabinetPath);
+    if (!meta) return null;
+    const cp = meta.cabinetPath || cabinetPath;
+    const markerPath = committedTurnResultPath(id, input.requestId, cp);
+    if (await fileExists(markerPath)) {
+      const committed = JSON.parse(
+        await readFileContent(markerPath)
+      ) as CommittedTurnResult;
+      if (meta.status === "running") {
+        const failed =
+          (typeof committed.assistantTurn.exitCode === "number" &&
+            committed.assistantTurn.exitCode !== 0) ||
+          !!committed.assistantTurn.error;
+        await writeConversationMeta({
+          ...meta,
+          status: failed ? "failed" : "completed",
+          awaitingInput: committed.assistantTurn.awaitingInput ? true : false,
+          exitCode:
+            committed.assistantTurn.exitCode ?? meta.exitCode ?? null,
+        });
+        const seq = await appendEventLog(
+          id,
+          {
+            type: "turn.updated",
+            turn: committed.assistantTurn.turn,
+            role: "agent",
+          },
+          cp
+        );
+        publishConversationEvent({
+          type: "turn.updated",
+          taskId: id,
+          cabinetPath: cp,
+          seq: seq ?? undefined,
+          payload: { turn: committed.assistantTurn.turn, role: "agent" },
+        });
+      }
+      return committed;
+    }
+
+    const userTurn = input.user
+      ? await appendUserTurnUnlocked(
+          id,
+          { ...input.user, requestId: input.requestId, source: "prompt" },
+          cp
+        )
+      : await findAdditionalTurn(id, "user", { requestId: input.requestId }, cp);
+    const assistantTurn = await appendAgentTurnUnlocked(
+      id,
+      {
+        ...input.assistant,
+        requestId: input.requestId,
+        pending: false,
+        source: "prompt",
+      },
+      cp,
+      { deferCompletionPublication: true }
+    );
+    if (!assistantTurn) return null;
+
+    await writeSession(id, input.session, cp);
+    const committed: CommittedTurnResult = {
+      requestId: input.requestId,
+      userTurn,
+      assistantTurn,
+      session: input.session,
+      committedAt: new Date().toISOString(),
+    };
+    await ensureDirectory(path.dirname(markerPath));
+    await writeFileAtomic(markerPath, JSON.stringify(committed, null, 2));
+    const durableMeta = await readConversationMeta(id, cp);
+    if (!durableMeta) return null;
+    const failed =
+      (typeof assistantTurn.exitCode === "number" &&
+        assistantTurn.exitCode !== 0) ||
+      !!assistantTurn.error;
+    await writeConversationMeta({
+      ...durableMeta,
+      status: failed ? "failed" : "completed",
+      awaitingInput: assistantTurn.awaitingInput ? true : false,
+      exitCode: assistantTurn.exitCode ?? durableMeta.exitCode ?? null,
+    });
+    const seq = await appendEventLog(
+      id,
+      { type: "turn.updated", turn: assistantTurn.turn, role: "agent" },
+      cp
+    );
+    publishConversationEvent({
+      type: "turn.updated",
+      taskId: id,
+      cabinetPath: cp,
+      seq: seq ?? undefined,
+      payload: { turn: assistantTurn.turn, role: "agent" },
+    });
+    return committed;
+  });
+  await flushConversation(id);
+  return result;
 }
 
 // ── Agent action proposals ────────────────────────────────────────────────

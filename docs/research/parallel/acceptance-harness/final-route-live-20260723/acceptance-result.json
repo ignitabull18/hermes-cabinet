@@ -1,0 +1,1085 @@
+{
+  "schemaVersion": 3,
+  "generatedAt": "2026-07-24T05:16:36.936Z",
+  "verdict": "NOT_ACCEPTED",
+  "scans": {
+    "secretIndicators": [],
+    "localPathIndicators": []
+  },
+  "stream": "acceptance-harness",
+  "branch": "fix/final-route-acceptance",
+  "testedBaseRevision": "5e94de3e1c789279459c704d4a7f0fa61c747163",
+  "applicationDiffFromBase": [
+    "docs/research/parallel/acp-provider-model-differential/differential.json",
+    "docs/research/parallel/acp-provider-model-differential/readiness-burnin.json",
+    "docs/research/parallel/acp-provider-model-differential/readiness-result.json",
+    "docs/research/parallel/acp-provider-model-differential/report.md",
+    "docs/research/parallel/acp-response-envelope/report.md",
+    "docs/research/parallel/acp-response-envelope/result.json",
+    "docs/research/parallel/operator-prompt-precedence/0001-fix-agent-honor-explicit-output-constraints.patch",
+    "docs/research/parallel/operator-prompt-precedence/report.md",
+    "docs/research/parallel/operator-prompt-precedence/result.json",
+    "e2e/assistant-message-content-boundary.spec.ts",
+    "e2e/conversation-reload-rendering.spec.ts",
+    "e2e/hermes-health-unavailable-semantics.spec.ts",
+    "e2e/hermes-no-tools-fail-closed.spec.ts",
+    "e2e/hermes-skills-management.spec.ts",
+    "experiments/acp-provider-model-differential/README.md",
+    "experiments/acp-provider-model-differential/differential.mjs",
+    "experiments/acp-provider-model-differential/differential.test.mjs",
+    "experiments/acp-provider-model-differential/readiness-burnin.test.mjs",
+    "experiments/acp-provider-model-differential/readiness_probe.py",
+    "experiments/acp-provider-model-differential/result-schema.test.mjs",
+    "experiments/acp-provider-model-differential/run-readiness-burnin.mjs",
+    "experiments/acp-provider-model-differential/run-readiness-diagnostic.mjs",
+    "experiments/acp-response-envelope/README.md",
+    "experiments/acp-response-envelope/trace.mjs",
+    "experiments/acp-response-envelope/trace.test.mjs",
+    "experiments/operator-prompt-precedence/README.md",
+    "experiments/operator-prompt-precedence/capture_precedence.py",
+    "package-lock.json",
+    "package.json",
+    "scripts/start-cabinet-supervised.mjs",
+    "src/app/agents/conversations/[id]/page.tsx",
+    "src/app/api/agents/conversations/[id]/acceptance-observability/route.ts",
+    "src/app/api/agents/conversations/[id]/continue/route.test.ts",
+    "src/app/api/agents/conversations/[id]/continue/route.ts",
+    "src/app/api/hermes/skills-management/route.test.ts",
+    "src/app/api/hermes/skills-management/route.ts",
+    "src/components/hermes/skills-management.tsx",
+    "src/components/tasks/conversation/turn-block.test.ts",
+    "src/components/tasks/conversation/turn-block.tsx",
+    "src/lib/agents/acceptance-observability-route.test.ts",
+    "src/lib/agents/acceptance-observability.test.ts",
+    "src/lib/agents/acceptance-observability.ts",
+    "src/lib/agents/adapters/hermes-runtime.test.ts",
+    "src/lib/agents/adapters/hermes-runtime.ts",
+    "src/lib/agents/adapters/types.ts",
+    "src/lib/agents/assistant-message-contract.ts",
+    "src/lib/agents/conversation-runner-continue.test.ts",
+    "src/lib/agents/conversation-runner-hermes-readiness.test.ts",
+    "src/lib/agents/conversation-runner.ts",
+    "src/lib/agents/conversation-store-turns.test.ts",
+    "src/lib/agents/conversation-store.ts",
+    "src/lib/agents/conversation-to-task-view.test.ts",
+    "src/lib/agents/conversation-to-task-view.ts",
+    "src/lib/agents/conversation-turns.ts",
+    "src/lib/hermes/acp-client.test.ts",
+    "src/lib/hermes/acp-client.ts",
+    "src/lib/hermes/acp-launch.ts",
+    "src/lib/hermes/model-readiness.test.ts",
+    "src/lib/hermes/model-readiness.ts",
+    "src/lib/hermes/server-config.test.ts",
+    "src/lib/hermes/server-config.ts",
+    "src/types/conversations.ts",
+    "test/supervised-launch.test.ts"
+  ],
+  "environment": {
+    "url": "http://127.0.0.1:4354",
+    "appPort": 4354,
+    "runtimeMode": "hermes",
+    "data": "isolated",
+    "productionTouched": false,
+    "liveModelMessagesSent": 2,
+    "transport": "hermes-acp-official-sdk",
+    "skillsMode": "fixture",
+    "browserPath": "in-app Browser preflight plus Playwright authoritative runner"
+  },
+  "routes": [
+    {
+      "route": "/",
+      "source": "src/app/page.tsx",
+      "kind": "static",
+      "discovered": true,
+      "exercised": false,
+      "status": "not_run",
+      "note": "NOT_RUN because the two-turn provider gate did not pass."
+    },
+    {
+      "route": "/*",
+      "source": "src/app/[...slug]/page.tsx",
+      "kind": "spa",
+      "discovered": true,
+      "exercised": false,
+      "status": "not_run",
+      "note": "NOT_RUN because the two-turn provider gate did not pass."
+    },
+    {
+      "route": "/agents/conversations/:id",
+      "source": "src/app/agents/conversations/[id]/page.tsx",
+      "kind": "dynamic",
+      "discovered": true,
+      "exercised": false,
+      "status": "not_run",
+      "note": "NOT_RUN because the two-turn provider gate did not pass."
+    },
+    {
+      "route": "/cockpit",
+      "source": "SPA navigation contract",
+      "kind": "spa",
+      "discovered": true,
+      "exercised": false,
+      "status": "not_run",
+      "note": "NOT_RUN because the two-turn provider gate did not pass."
+    },
+    {
+      "route": "/hermes",
+      "source": "SPA navigation contract",
+      "kind": "spa",
+      "discovered": true,
+      "exercised": false,
+      "status": "not_run",
+      "note": "NOT_RUN because the two-turn provider gate did not pass."
+    },
+    {
+      "route": "/hermes?mode=developer&section=developer",
+      "source": "SPA navigation contract",
+      "kind": "spa",
+      "discovered": true,
+      "exercised": false,
+      "status": "not_run",
+      "note": "NOT_RUN because the two-turn provider gate did not pass."
+    },
+    {
+      "route": "/integrations",
+      "source": "SPA navigation contract",
+      "kind": "spa",
+      "discovered": true,
+      "exercised": false,
+      "status": "not_run",
+      "note": "NOT_RUN because the two-turn provider gate did not pass."
+    },
+    {
+      "route": "/login",
+      "source": "src/app/login/page.tsx",
+      "kind": "static",
+      "discovered": true,
+      "exercised": false,
+      "status": "not_run",
+      "note": "NOT_RUN because the two-turn provider gate did not pass."
+    },
+    {
+      "route": "/room/acceptance-cabinet",
+      "source": "SPA navigation contract",
+      "kind": "spa",
+      "discovered": true,
+      "exercised": false,
+      "status": "not_run",
+      "note": "NOT_RUN because the two-turn provider gate did not pass."
+    },
+    {
+      "route": "/room/acceptance-cabinet/-/agents",
+      "source": "SPA navigation contract",
+      "kind": "spa",
+      "discovered": true,
+      "exercised": false,
+      "status": "not_run",
+      "note": "NOT_RUN because the two-turn provider gate did not pass."
+    },
+    {
+      "route": "/room/acceptance-cabinet/-/tasks",
+      "source": "SPA navigation contract",
+      "kind": "spa",
+      "discovered": true,
+      "exercised": false,
+      "status": "not_run",
+      "note": "NOT_RUN because the two-turn provider gate did not pass."
+    },
+    {
+      "route": "/settings",
+      "source": "SPA navigation contract",
+      "kind": "spa",
+      "discovered": true,
+      "exercised": false,
+      "status": "not_run",
+      "note": "NOT_RUN because the two-turn provider gate did not pass."
+    },
+    {
+      "route": "/settings/providers",
+      "source": "SPA navigation contract",
+      "kind": "spa",
+      "discovered": true,
+      "exercised": false,
+      "status": "not_run",
+      "note": "NOT_RUN because the two-turn provider gate did not pass."
+    },
+    {
+      "route": "/tasks",
+      "source": "src/app/tasks/page.tsx",
+      "kind": "static",
+      "discovered": true,
+      "exercised": false,
+      "status": "not_run",
+      "note": "NOT_RUN because the two-turn provider gate did not pass."
+    },
+    {
+      "route": "/tasks/:id",
+      "source": "src/app/tasks/[id]/page.tsx",
+      "kind": "dynamic",
+      "discovered": true,
+      "exercised": false,
+      "status": "not_run",
+      "note": "NOT_RUN because the two-turn provider gate did not pass."
+    }
+  ],
+  "visibleNavigation": {
+    "desktop": [],
+    "mobile": []
+  },
+  "checks": [
+    {
+      "id": "live-two-turn-contract",
+      "area": "conversation",
+      "status": "failed",
+      "summary": "Two-turn provider gate failed: Error: checkpoint B provider or no-tools accounting is invalid"
+    },
+    {
+      "id": "full-route-harness",
+      "area": "routes",
+      "status": "not_run",
+      "summary": "NOT_RUN because the two-turn provider gate did not pass; no additional conversation or model call was made."
+    }
+  ],
+  "blockers": [
+    {
+      "id": "live-two-turn-contract-failed",
+      "area": "conversation",
+      "summary": "Two-turn provider gate failed: Error: checkpoint B provider or no-tools accounting is invalid",
+      "reproduction": [
+        "Dispatch the bounded initial acceptance message once.",
+        "Continue the persisted native session once.",
+        "Verify the same session after the isolated Cabinet restart."
+      ],
+      "ownerHint": "ACP provider/model resolution"
+    }
+  ],
+  "network": {
+    "total": 59,
+    "byMethod": {
+      "POST": 2,
+      "GET": 57
+    },
+    "byPath": {
+      "/api/agents/conversations": 1,
+      "/api/agents/conversations/:id/continue": 1,
+      "/tasks/2026-07-24T05-16-02-095Z-dbe0cc16-editor-manual": 1,
+      "/_next/static/media/1a49d4e0ae8b373a-s.p.woff2": 1,
+      "/_next/static/media/543de0715397ac5b-s.p.woff2": 1,
+      "/_next/static/media/9cc5b37ab1350db7-s.p.woff2": 1,
+      "/_next/static/media/a2debe7ac595958e-s.p.woff2": 1,
+      "/_next/static/media/bb3ef058b751a6ad-s.p.woff2": 1,
+      "/_next/static/media/dd5486154c3f3016-s.p.woff2": 1,
+      "/_next/static/media/e4af272ccee01ff0-s.p.woff2": 1,
+      "/_next/static/media/e79904415a280b53-s.p.woff2": 1,
+      "/_next/static/media/f003255f6665c4bb-s.p.woff2": 1,
+      "/_next/static/css/869a76b47865c030.css": 1,
+      "/_next/static/css/b4ecf1847aafaed5.css": 1,
+      "/_next/static/chunks/webpack-9b0191046e4d2f62.js": 1,
+      "/_next/static/chunks/59734f22-0f089c524bd970df.js": 1,
+      "/_next/static/chunks/5582-a0e3f9738f807170.js": 1,
+      "/_next/static/chunks/main-app-cdc140c16ef0c83c.js": 1,
+      "/_next/static/chunks/f9260480-877f42f275f6b1fa.js": 1,
+      "/_next/static/chunks/3319-1e84700468a05564.js": 1,
+      "/_next/static/chunks/4862-a8151ad4cbd8e1bd.js": 1,
+      "/_next/static/chunks/5097-50a42a10f1a33d9e.js": 1,
+      "/_next/static/chunks/5376-4bd813b6d4b0da66.js": 1,
+      "/_next/static/chunks/app/layout-b3a0582587f232a7.js": 1,
+      "/_next/static/chunks/2567-0818a6734db02cd1.js": 1,
+      "/_next/static/chunks/514-d4043f3afd6045c1.js": 1,
+      "/_next/static/chunks/3316-f216a12b95367e46.js": 1,
+      "/_next/static/chunks/7328-199f642d602b9022.js": 1,
+      "/_next/static/chunks/2199-5f7df06465b69570.js": 1,
+      "/_next/static/chunks/2908-b5aaf60f8e0ec277.js": 1,
+      "/_next/static/chunks/3839-c1e388d0e5354708.js": 1,
+      "/_next/static/chunks/4469-e5c409196069fb81.js": 1,
+      "/_next/static/chunks/4543-cfb3e13a7ae6ad15.js": 1,
+      "/_next/static/chunks/7333-096905ce137a684d.js": 1,
+      "/_next/static/chunks/8411-c4cba514a488ca97.js": 1,
+      "/_next/static/chunks/9205-8e9837d5a5acffe5.js": 1,
+      "/_next/static/chunks/2184-cbfe67eb9f8a9f5f.js": 1,
+      "/_next/static/chunks/4332-dd55c9d2941de4c1.js": 1,
+      "/_next/static/chunks/2160-bf23aeded360755d.js": 1,
+      "/_next/static/chunks/5380-8bb8da771dd63f4c.js": 1,
+      "/_next/static/chunks/9802-6a9704ea269e133a.js": 1,
+      "/_next/static/chunks/3179-4b4cf40f7252adda.js": 1,
+      "/_next/static/chunks/app/tasks/%5Bid%5D/page-8e6e739e1cd84481.js": 1,
+      "/api/rooms": 1,
+      "/api/hermes/health": 1,
+      "/api/user/profile": 1,
+      "/api/agents/conversations/2026-07-24T05-16-02-095Z-dbe0cc16-editor-manual": 3,
+      "/api/agents/conversations/2026-07-24T05-16-02-095Z-dbe0cc16-editor-manual/events": 2,
+      "/api/agents/conversations/events": 1,
+      "/api/agents/conversations/2026-07-24T05-16-02-095Z-dbe0cc16-editor-manual/events-log": 2,
+      "/api/tree": 1,
+      "/api/cabinets/overview": 1,
+      "/api/agents/skills": 1,
+      "/api/agents/conversations/2026-07-24T05-16-02-095Z-dbe0cc16-editor-manual/diffs": 1,
+      "/api/agents/personas/editor": 1
+    },
+    "failed": [],
+    "legacyDaemonOutputRequests": 0,
+    "searchRequests": 0,
+    "ptyCreateOrWriteRequests": 0,
+    "modelMessageRequests": 2,
+    "consequentialHermesMutations": 0,
+    "mutations": 2
+  },
+  "browserIssues": [],
+  "conversationPersistence": {
+    "schemaVersion": 1,
+    "transport": "hermes-acp-official-sdk",
+    "checkpoints": [
+      {
+        "checkpoint": "A",
+        "recordedAt": "2026-07-24T05:16:01.638Z",
+        "eventType": "before_initial_submission",
+        "conversationIdentity": null,
+        "nativeSessionIdentity": null,
+        "requestIdentity": null,
+        "turns": [],
+        "durableStoreCounts": null,
+        "inMemoryCounts": null,
+        "pendingRequiredWrites": {
+          "state": "unknown",
+          "value": null,
+          "source": "acceptance_observability",
+          "reason": "authoritative_absent"
+        },
+        "observability": null
+      },
+      {
+        "checkpoint": "B",
+        "recordedAt": "2026-07-24T05:16:12.458Z",
+        "eventType": "initial_completed_emitted",
+        "conversationIdentity": "f12a42eaf759ee7a",
+        "nativeSessionIdentity": "015b484ea360c95c",
+        "requestIdentity": "initial",
+        "turns": [
+          {
+            "identity": "9bd18e95f0384dd7",
+            "sequence": 1,
+            "role": "user",
+            "lifecycleState": "completed"
+          },
+          {
+            "identity": "a230e84a0e1aec47",
+            "sequence": 1,
+            "role": "agent",
+            "lifecycleState": "completed"
+          }
+        ],
+        "durableStoreCounts": {
+          "user": 1,
+          "assistant": 1,
+          "completedAssistant": 1,
+          "total": 2,
+          "duplicateTurnIdentities": 0
+        },
+        "inMemoryCounts": {
+          "user": 1,
+          "assistant": 1,
+          "running": 0,
+          "failed": 0,
+          "completed": 2,
+          "completedAssistant": 1,
+          "total": 2
+        },
+        "pendingRequiredWrites": {
+          "state": "known",
+          "value": 0,
+          "source": "acceptance_observability",
+          "legacyState": "absent"
+        },
+        "observability": {
+          "contract": "cabinet.acceptance.conversation-observability",
+          "schemaVersion": 1,
+          "conversationIdentity": "f12a42eaf759ee7a",
+          "nativeSessionIdentity": "015b484ea360c95c",
+          "conversationStatus": "completed",
+          "turnIdentities": [
+            "9bd18e95f0384dd7",
+            "a230e84a0e1aec47"
+          ],
+          "requestIdentities": [
+            null,
+            null
+          ],
+          "durableStoreCounts": {
+            "user": 1,
+            "assistant": 1,
+            "running": 0,
+            "failed": 0,
+            "completed": 2,
+            "completedAssistant": 1,
+            "total": 2
+          },
+          "inMemoryCounts": {
+            "user": 1,
+            "assistant": 1,
+            "running": 0,
+            "failed": 0,
+            "completed": 2,
+            "completedAssistant": 1,
+            "total": 2
+          },
+          "inMemoryCountSource": "post_flush_projection",
+          "pendingRequiredWrites": 0,
+          "acpChildState": "running",
+          "readinessState": "ready",
+          "provider": "ollama-cloud",
+          "model": "glm-5.2",
+          "modelRequestsAttempted": 1,
+          "providerRetries": 0,
+          "fallbackAttempts": 0,
+          "toolEventCount": 0,
+          "decisionEventCount": 0,
+          "duplicateChunkCount": 1,
+          "mcpServerCount": 0,
+          "lastProviderHttpStatus": "none",
+          "lastFailureClass": "none"
+        }
+      },
+      {
+        "checkpoint": "C",
+        "recordedAt": "2026-07-24T05:16:12.474Z",
+        "eventType": "initial_persistence_drained",
+        "conversationIdentity": "f12a42eaf759ee7a",
+        "nativeSessionIdentity": "015b484ea360c95c",
+        "requestIdentity": "initial",
+        "turns": [
+          {
+            "identity": "9bd18e95f0384dd7",
+            "sequence": 1,
+            "role": "user",
+            "lifecycleState": "completed"
+          },
+          {
+            "identity": "a230e84a0e1aec47",
+            "sequence": 1,
+            "role": "agent",
+            "lifecycleState": "completed"
+          }
+        ],
+        "durableStoreCounts": {
+          "user": 1,
+          "assistant": 1,
+          "completedAssistant": 1,
+          "total": 2,
+          "duplicateTurnIdentities": 0
+        },
+        "inMemoryCounts": {
+          "user": 1,
+          "assistant": 1,
+          "running": 0,
+          "failed": 0,
+          "completed": 2,
+          "completedAssistant": 1,
+          "total": 2
+        },
+        "pendingRequiredWrites": {
+          "state": "known",
+          "value": 0,
+          "source": "acceptance_observability",
+          "legacyState": "absent"
+        },
+        "observability": {
+          "contract": "cabinet.acceptance.conversation-observability",
+          "schemaVersion": 1,
+          "conversationIdentity": "f12a42eaf759ee7a",
+          "nativeSessionIdentity": "015b484ea360c95c",
+          "conversationStatus": "completed",
+          "turnIdentities": [
+            "9bd18e95f0384dd7",
+            "a230e84a0e1aec47"
+          ],
+          "requestIdentities": [
+            null,
+            null
+          ],
+          "durableStoreCounts": {
+            "user": 1,
+            "assistant": 1,
+            "running": 0,
+            "failed": 0,
+            "completed": 2,
+            "completedAssistant": 1,
+            "total": 2
+          },
+          "inMemoryCounts": {
+            "user": 1,
+            "assistant": 1,
+            "running": 0,
+            "failed": 0,
+            "completed": 2,
+            "completedAssistant": 1,
+            "total": 2
+          },
+          "inMemoryCountSource": "post_flush_projection",
+          "pendingRequiredWrites": 0,
+          "acpChildState": "running",
+          "readinessState": "ready",
+          "provider": "ollama-cloud",
+          "model": "glm-5.2",
+          "modelRequestsAttempted": 1,
+          "providerRetries": 0,
+          "fallbackAttempts": 0,
+          "toolEventCount": 0,
+          "decisionEventCount": 0,
+          "duplicateChunkCount": 1,
+          "mcpServerCount": 0,
+          "lastProviderHttpStatus": "none",
+          "lastFailureClass": "none"
+        }
+      },
+      {
+        "checkpoint": "D",
+        "recordedAt": "2026-07-24T05:16:19.537Z",
+        "eventType": "first_restart_reloaded",
+        "conversationIdentity": "f12a42eaf759ee7a",
+        "nativeSessionIdentity": "015b484ea360c95c",
+        "requestIdentity": null,
+        "turns": [
+          {
+            "identity": "9bd18e95f0384dd7",
+            "sequence": 1,
+            "role": "user",
+            "lifecycleState": "completed"
+          },
+          {
+            "identity": "a230e84a0e1aec47",
+            "sequence": 1,
+            "role": "agent",
+            "lifecycleState": "completed"
+          }
+        ],
+        "durableStoreCounts": {
+          "user": 1,
+          "assistant": 1,
+          "completedAssistant": 1,
+          "total": 2,
+          "duplicateTurnIdentities": 0
+        },
+        "inMemoryCounts": {
+          "user": 1,
+          "assistant": 1,
+          "running": 0,
+          "failed": 0,
+          "completed": 2,
+          "completedAssistant": 1,
+          "total": 2
+        },
+        "pendingRequiredWrites": {
+          "state": "known",
+          "value": 0,
+          "source": "acceptance_observability",
+          "legacyState": "absent"
+        },
+        "observability": {
+          "contract": "cabinet.acceptance.conversation-observability",
+          "schemaVersion": 1,
+          "conversationIdentity": "f12a42eaf759ee7a",
+          "nativeSessionIdentity": "015b484ea360c95c",
+          "conversationStatus": "completed",
+          "turnIdentities": [
+            "9bd18e95f0384dd7",
+            "a230e84a0e1aec47"
+          ],
+          "requestIdentities": [
+            null,
+            null
+          ],
+          "durableStoreCounts": {
+            "user": 1,
+            "assistant": 1,
+            "running": 0,
+            "failed": 0,
+            "completed": 2,
+            "completedAssistant": 1,
+            "total": 2
+          },
+          "inMemoryCounts": {
+            "user": 1,
+            "assistant": 1,
+            "running": 0,
+            "failed": 0,
+            "completed": 2,
+            "completedAssistant": 1,
+            "total": 2
+          },
+          "inMemoryCountSource": "post_flush_projection",
+          "pendingRequiredWrites": 0,
+          "acpChildState": "unknown",
+          "readinessState": "unknown",
+          "provider": null,
+          "model": null,
+          "modelRequestsAttempted": 0,
+          "providerRetries": 0,
+          "fallbackAttempts": 0,
+          "toolEventCount": 0,
+          "decisionEventCount": 0,
+          "duplicateChunkCount": 0,
+          "mcpServerCount": 0,
+          "lastProviderHttpStatus": "none",
+          "lastFailureClass": "none"
+        }
+      },
+      {
+        "checkpoint": "E",
+        "recordedAt": "2026-07-24T05:16:19.917Z",
+        "eventType": "follow_up_accepted",
+        "conversationIdentity": "f12a42eaf759ee7a",
+        "nativeSessionIdentity": "015b484ea360c95c",
+        "requestIdentity": "follow-up",
+        "turns": [
+          {
+            "identity": "9bd18e95f0384dd7",
+            "sequence": 1,
+            "role": "user",
+            "lifecycleState": "completed"
+          },
+          {
+            "identity": "a230e84a0e1aec47",
+            "sequence": 1,
+            "role": "agent",
+            "lifecycleState": "completed"
+          },
+          {
+            "identity": "a3bae1b5d0f26fb4",
+            "sequence": 2,
+            "role": "user",
+            "lifecycleState": "completed"
+          }
+        ],
+        "durableStoreCounts": {
+          "user": 2,
+          "assistant": 1,
+          "completedAssistant": 1,
+          "total": 3,
+          "duplicateTurnIdentities": 0
+        },
+        "inMemoryCounts": {
+          "user": 2,
+          "assistant": 1,
+          "running": 0,
+          "failed": 0,
+          "completed": 3,
+          "completedAssistant": 1,
+          "total": 3
+        },
+        "pendingRequiredWrites": {
+          "state": "known",
+          "value": 1,
+          "source": "acceptance_observability",
+          "legacyState": "absent"
+        },
+        "observability": {
+          "contract": "cabinet.acceptance.conversation-observability",
+          "schemaVersion": 1,
+          "conversationIdentity": "f12a42eaf759ee7a",
+          "nativeSessionIdentity": "015b484ea360c95c",
+          "conversationStatus": "running",
+          "turnIdentities": [
+            "9bd18e95f0384dd7",
+            "a230e84a0e1aec47",
+            "a3bae1b5d0f26fb4"
+          ],
+          "requestIdentities": [
+            null,
+            null,
+            "024f14c3b66495df"
+          ],
+          "durableStoreCounts": {
+            "user": 2,
+            "assistant": 1,
+            "running": 0,
+            "failed": 0,
+            "completed": 3,
+            "completedAssistant": 1,
+            "total": 3
+          },
+          "inMemoryCounts": {
+            "user": 2,
+            "assistant": 1,
+            "running": 0,
+            "failed": 0,
+            "completed": 3,
+            "completedAssistant": 1,
+            "total": 3
+          },
+          "inMemoryCountSource": "post_flush_projection",
+          "pendingRequiredWrites": 1,
+          "acpChildState": "not_started",
+          "readinessState": "ready",
+          "provider": "ollama-cloud",
+          "model": "glm-5.2",
+          "modelRequestsAttempted": 0,
+          "providerRetries": 0,
+          "fallbackAttempts": 0,
+          "toolEventCount": 0,
+          "decisionEventCount": 0,
+          "duplicateChunkCount": 0,
+          "mcpServerCount": 0,
+          "lastProviderHttpStatus": "none",
+          "lastFailureClass": "none"
+        }
+      },
+      {
+        "checkpoint": "F",
+        "recordedAt": "2026-07-24T05:16:26.887Z",
+        "eventType": "follow_up_completed_emitted",
+        "conversationIdentity": "f12a42eaf759ee7a",
+        "nativeSessionIdentity": "015b484ea360c95c",
+        "requestIdentity": "follow-up",
+        "turns": [
+          {
+            "identity": "9bd18e95f0384dd7",
+            "sequence": 1,
+            "role": "user",
+            "lifecycleState": "completed"
+          },
+          {
+            "identity": "a230e84a0e1aec47",
+            "sequence": 1,
+            "role": "agent",
+            "lifecycleState": "completed"
+          },
+          {
+            "identity": "a3bae1b5d0f26fb4",
+            "sequence": 2,
+            "role": "user",
+            "lifecycleState": "completed"
+          },
+          {
+            "identity": "70c75de41a2c1ca5",
+            "sequence": 2,
+            "role": "agent",
+            "lifecycleState": "completed"
+          }
+        ],
+        "durableStoreCounts": {
+          "user": 2,
+          "assistant": 2,
+          "completedAssistant": 2,
+          "total": 4,
+          "duplicateTurnIdentities": 0
+        },
+        "inMemoryCounts": {
+          "user": 2,
+          "assistant": 2,
+          "running": 0,
+          "failed": 0,
+          "completed": 4,
+          "completedAssistant": 2,
+          "total": 4
+        },
+        "pendingRequiredWrites": {
+          "state": "known",
+          "value": 0,
+          "source": "acceptance_observability",
+          "legacyState": "absent"
+        },
+        "observability": {
+          "contract": "cabinet.acceptance.conversation-observability",
+          "schemaVersion": 1,
+          "conversationIdentity": "f12a42eaf759ee7a",
+          "nativeSessionIdentity": "015b484ea360c95c",
+          "conversationStatus": "completed",
+          "turnIdentities": [
+            "9bd18e95f0384dd7",
+            "a230e84a0e1aec47",
+            "a3bae1b5d0f26fb4",
+            "70c75de41a2c1ca5"
+          ],
+          "requestIdentities": [
+            null,
+            null,
+            "024f14c3b66495df",
+            "024f14c3b66495df"
+          ],
+          "durableStoreCounts": {
+            "user": 2,
+            "assistant": 2,
+            "running": 0,
+            "failed": 0,
+            "completed": 4,
+            "completedAssistant": 2,
+            "total": 4
+          },
+          "inMemoryCounts": {
+            "user": 2,
+            "assistant": 2,
+            "running": 0,
+            "failed": 0,
+            "completed": 4,
+            "completedAssistant": 2,
+            "total": 4
+          },
+          "inMemoryCountSource": "post_flush_projection",
+          "pendingRequiredWrites": 0,
+          "acpChildState": "running",
+          "readinessState": "ready",
+          "provider": "ollama-cloud",
+          "model": "glm-5.2",
+          "modelRequestsAttempted": 1,
+          "providerRetries": 0,
+          "fallbackAttempts": 0,
+          "toolEventCount": 0,
+          "decisionEventCount": 0,
+          "duplicateChunkCount": 0,
+          "mcpServerCount": 0,
+          "lastProviderHttpStatus": "none",
+          "lastFailureClass": "none"
+        }
+      },
+      {
+        "checkpoint": "G",
+        "recordedAt": "2026-07-24T05:16:26.903Z",
+        "eventType": "follow_up_persistence_drained",
+        "conversationIdentity": "f12a42eaf759ee7a",
+        "nativeSessionIdentity": "015b484ea360c95c",
+        "requestIdentity": "follow-up",
+        "turns": [
+          {
+            "identity": "9bd18e95f0384dd7",
+            "sequence": 1,
+            "role": "user",
+            "lifecycleState": "completed"
+          },
+          {
+            "identity": "a230e84a0e1aec47",
+            "sequence": 1,
+            "role": "agent",
+            "lifecycleState": "completed"
+          },
+          {
+            "identity": "a3bae1b5d0f26fb4",
+            "sequence": 2,
+            "role": "user",
+            "lifecycleState": "completed"
+          },
+          {
+            "identity": "70c75de41a2c1ca5",
+            "sequence": 2,
+            "role": "agent",
+            "lifecycleState": "completed"
+          }
+        ],
+        "durableStoreCounts": {
+          "user": 2,
+          "assistant": 2,
+          "completedAssistant": 2,
+          "total": 4,
+          "duplicateTurnIdentities": 0
+        },
+        "inMemoryCounts": {
+          "user": 2,
+          "assistant": 2,
+          "running": 0,
+          "failed": 0,
+          "completed": 4,
+          "completedAssistant": 2,
+          "total": 4
+        },
+        "pendingRequiredWrites": {
+          "state": "known",
+          "value": 0,
+          "source": "acceptance_observability",
+          "legacyState": "absent"
+        },
+        "observability": {
+          "contract": "cabinet.acceptance.conversation-observability",
+          "schemaVersion": 1,
+          "conversationIdentity": "f12a42eaf759ee7a",
+          "nativeSessionIdentity": "015b484ea360c95c",
+          "conversationStatus": "completed",
+          "turnIdentities": [
+            "9bd18e95f0384dd7",
+            "a230e84a0e1aec47",
+            "a3bae1b5d0f26fb4",
+            "70c75de41a2c1ca5"
+          ],
+          "requestIdentities": [
+            null,
+            null,
+            "024f14c3b66495df",
+            "024f14c3b66495df"
+          ],
+          "durableStoreCounts": {
+            "user": 2,
+            "assistant": 2,
+            "running": 0,
+            "failed": 0,
+            "completed": 4,
+            "completedAssistant": 2,
+            "total": 4
+          },
+          "inMemoryCounts": {
+            "user": 2,
+            "assistant": 2,
+            "running": 0,
+            "failed": 0,
+            "completed": 4,
+            "completedAssistant": 2,
+            "total": 4
+          },
+          "inMemoryCountSource": "post_flush_projection",
+          "pendingRequiredWrites": 0,
+          "acpChildState": "running",
+          "readinessState": "ready",
+          "provider": "ollama-cloud",
+          "model": "glm-5.2",
+          "modelRequestsAttempted": 1,
+          "providerRetries": 0,
+          "fallbackAttempts": 0,
+          "toolEventCount": 0,
+          "decisionEventCount": 0,
+          "duplicateChunkCount": 0,
+          "mcpServerCount": 0,
+          "lastProviderHttpStatus": "none",
+          "lastFailureClass": "none"
+        }
+      },
+      {
+        "checkpoint": "H",
+        "recordedAt": "2026-07-24T05:16:33.872Z",
+        "eventType": "second_restart_reloaded",
+        "conversationIdentity": "f12a42eaf759ee7a",
+        "nativeSessionIdentity": "015b484ea360c95c",
+        "requestIdentity": null,
+        "turns": [
+          {
+            "identity": "9bd18e95f0384dd7",
+            "sequence": 1,
+            "role": "user",
+            "lifecycleState": "completed"
+          },
+          {
+            "identity": "a230e84a0e1aec47",
+            "sequence": 1,
+            "role": "agent",
+            "lifecycleState": "completed"
+          },
+          {
+            "identity": "a3bae1b5d0f26fb4",
+            "sequence": 2,
+            "role": "user",
+            "lifecycleState": "completed"
+          },
+          {
+            "identity": "70c75de41a2c1ca5",
+            "sequence": 2,
+            "role": "agent",
+            "lifecycleState": "completed"
+          }
+        ],
+        "durableStoreCounts": {
+          "user": 2,
+          "assistant": 2,
+          "completedAssistant": 2,
+          "total": 4,
+          "duplicateTurnIdentities": 0
+        },
+        "inMemoryCounts": {
+          "user": 2,
+          "assistant": 2,
+          "running": 0,
+          "failed": 0,
+          "completed": 4,
+          "completedAssistant": 2,
+          "total": 4
+        },
+        "pendingRequiredWrites": {
+          "state": "known",
+          "value": 0,
+          "source": "acceptance_observability",
+          "legacyState": "absent"
+        },
+        "observability": {
+          "contract": "cabinet.acceptance.conversation-observability",
+          "schemaVersion": 1,
+          "conversationIdentity": "f12a42eaf759ee7a",
+          "nativeSessionIdentity": "015b484ea360c95c",
+          "conversationStatus": "completed",
+          "turnIdentities": [
+            "9bd18e95f0384dd7",
+            "a230e84a0e1aec47",
+            "a3bae1b5d0f26fb4",
+            "70c75de41a2c1ca5"
+          ],
+          "requestIdentities": [
+            null,
+            null,
+            "024f14c3b66495df",
+            "024f14c3b66495df"
+          ],
+          "durableStoreCounts": {
+            "user": 2,
+            "assistant": 2,
+            "running": 0,
+            "failed": 0,
+            "completed": 4,
+            "completedAssistant": 2,
+            "total": 4
+          },
+          "inMemoryCounts": {
+            "user": 2,
+            "assistant": 2,
+            "running": 0,
+            "failed": 0,
+            "completed": 4,
+            "completedAssistant": 2,
+            "total": 4
+          },
+          "inMemoryCountSource": "post_flush_projection",
+          "pendingRequiredWrites": 0,
+          "acpChildState": "unknown",
+          "readinessState": "unknown",
+          "provider": null,
+          "model": null,
+          "modelRequestsAttempted": 0,
+          "providerRetries": 0,
+          "fallbackAttempts": 0,
+          "toolEventCount": 0,
+          "decisionEventCount": 0,
+          "duplicateChunkCount": 0,
+          "mcpServerCount": 0,
+          "lastProviderHttpStatus": "none",
+          "lastFailureClass": "none"
+        }
+      }
+    ],
+    "nativeSessionIdentityStable": true,
+    "exactFinalCardinality": true,
+    "secondRestartCompleted": true,
+    "unavailableMeasurements": [
+      "inMemoryCounts",
+      "pendingRequiredWrites"
+    ]
+  },
+  "messageFidelity": [
+    {
+      "turn": "initial",
+      "exactNoncePresent": true,
+      "nonceOccurrenceCount": 1,
+      "surroundingFormattingPresent": true,
+      "alteredOrPartialNoncePresent": false,
+      "persistedContentMatchesRenderedContent": false,
+      "sessionContextPreserved": true,
+      "selector": "[data-testid=\"turn\"][data-turn-role=\"agent\"] > [data-testid=\"assistant-message-content\"][data-message-author=\"assistant\"][data-message-part=\"content\"]",
+      "elementCount": 2
+    },
+    {
+      "turn": "follow-up",
+      "exactNoncePresent": true,
+      "nonceOccurrenceCount": 1,
+      "surroundingFormattingPresent": true,
+      "alteredOrPartialNoncePresent": false,
+      "persistedContentMatchesRenderedContent": true,
+      "sessionContextPreserved": true,
+      "selector": "[data-testid=\"turn\"][data-turn-role=\"agent\"] > [data-testid=\"assistant-message-content\"][data-message-author=\"assistant\"][data-message-part=\"content\"]",
+      "elementCount": 2
+    }
+  ],
+  "screenshots": [],
+  "productionTouched": false
+}

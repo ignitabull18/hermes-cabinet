@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "verdict": "NOT_ACCEPTED",
+  "liveRuns": 1,
+  "retried": false,
+  "firstDivergenceLayer": "acp_normalized_response",
+  "rawModelFinalAvailable": false,
+  "exactness": {
+    "initial": {
+      "rawModelFinalExact": null,
+      "acpNormalizedExact": false,
+      "persistedExact": false,
+      "renderedMessageBodyExact": false,
+      "harnessExtractionExact": false,
+      "messageBodyElementCount": 0
+    },
+    "followUp": {
+      "rawModelFinalExact": null,
+      "acpNormalizedExact": false,
+      "persistedExact": true,
+      "renderedMessageBodyExact": false,
+      "harnessExtractionExact": true,
+      "messageBodyElementCount": 0
+    }
+  },
+  "provider": {
+    "identity": "ollama-cloud",
+    "model": "glm-5.2",
+    "requests": 2,
+    "retries": 0,
+    "fallbacks": 0
+  },
+  "persistence": {
+    "nativeSessionIdentityStable": true,
+    "secondRestartCompleted": true,
+    "userTurns": 2,
+    "completedAssistantTurns": 2,
+    "totalTurns": 4,
+    "duplicateTurnIdentities": 0,
+    "pendingRequiredWritesAfterCompletion": 0
+  },
+  "routes": {
+    "total": 15,
+    "accepted": 0,
+    "notRun": 15,
+    "reason": "The exact two-turn gate did not pass."
+  },
+  "browser": {
+    "fullDesktopRun": "NOT_RUN",
+    "fullMobileRun": "NOT_RUN",
+    "messageBodySelectorResolved": false,
+    "relevantRecordedIssues": 0
+  },
+  "safety": {
+    "productionTouched": false,
+    "consequentialHermesMutations": 0,
+    "externalHumanCommunications": 0,
+    "secretIndicatorsInPreservedArtifact": 0,
+    "localPathIndicatorsInPreservedArtifact": 0,
+    "diagnosticOutputIncident": "A local process-status diagnostic unexpectedly rendered inherited environment values in transient tool output. No value was retained in repository evidence, sent externally, or mutated."
+  }
+}

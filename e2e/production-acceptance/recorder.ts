@@ -5,11 +5,14 @@ import type {
   AcceptanceBlocker,
   BrowserIssue,
   AcceptanceCheck,
+  AcceptanceMessageFidelityEvidence,
   AcceptanceResult,
+  ConversationPersistenceEvidence,
   NetworkSummary,
   RouteChecklistEntry,
   ScreenshotEntry,
 } from "./contracts";
+import { pendingWriteLedger } from "./pending-required-writes";
 
 export function selectRelevantBrowserIssues(issues: BrowserIssue[]): BrowserIssue[] {
   const expectedByStage = new Map<string, number>();
@@ -19,14 +22,10 @@ export function selectRelevantBrowserIssues(issues: BrowserIssue[]): BrowserIssu
     }
   }
   return issues.filter((issue) => {
-    if (issue.severity !== "error" || issue.expectedUnavailableProjection) return false;
     if (
-      issue.source === "console" &&
-      issue.stage === "restart-route-persistence" &&
-      (
-        issue.summary.includes("ERR_CONNECTION_REFUSED") ||
-        issue.summary.includes("ERR_INCOMPLETE_CHUNKED_ENCODING")
-      )
+      issue.severity !== "error" ||
+      issue.expectedUnavailableProjection ||
+      issue.expectedControlledRestartTransport
     ) {
       return false;
     }
@@ -47,6 +46,8 @@ export class AcceptanceRecorder {
   readonly blockers: AcceptanceBlocker[] = [];
   readonly screenshots: ScreenshotEntry[] = [];
   readonly browserIssues: BrowserIssue[] = [];
+  conversationPersistence: ConversationPersistenceEvidence | null = null;
+  readonly messageFidelity: AcceptanceMessageFidelityEvidence[] = [];
   readonly navigation = { desktop: [] as string[], mobile: [] as string[] };
   readonly network: NetworkSummary = {
     total: 0,
@@ -79,14 +80,26 @@ export class AcceptanceRecorder {
     this.browserIssues.push({ ...issue, stage: issue.stage ?? this.activeStage });
   }
 
+  recordConversationPersistence(evidence: ConversationPersistenceEvidence): void {
+    this.conversationPersistence = evidence;
+  }
+
+  recordMessageFidelity(evidence: AcceptanceMessageFidelityEvidence[]): void {
+    this.messageFidelity.splice(0, this.messageFidelity.length, ...evidence);
+  }
+
   relevantBrowserIssues(): BrowserIssue[] {
     return selectRelevantBrowserIssues(this.browserIssues);
   }
 
   request(method: string, pathname: string): void {
+    const boundedPath = pathname.replace(
+      /^\/api\/agents\/conversations\/[^/]+\/continue$/,
+      "/api/agents/conversations/:id/continue",
+    );
     this.network.total += 1;
     this.network.byMethod[method] = (this.network.byMethod[method] ?? 0) + 1;
-    this.network.byPath[pathname] = (this.network.byPath[pathname] ?? 0) + 1;
+    this.network.byPath[boundedPath] = (this.network.byPath[boundedPath] ?? 0) + 1;
     if (pathname.includes("/api/daemon/session/") && pathname.endsWith("/output")) {
       this.network.legacyDaemonOutputRequests += 1;
     }
@@ -177,7 +190,7 @@ export async function writeAcceptanceArtifacts(
       ? "ACCEPTED"
       : "NOT_ACCEPTED";
   const result: AcceptanceResult = {
-    schemaVersion: 1,
+    schemaVersion: 3,
     generatedAt: new Date().toISOString(),
     verdict,
     scans,
@@ -197,6 +210,33 @@ export async function writeAcceptanceArtifacts(
   const blockers = result.blockers.length
     ? result.blockers.map((blocker) => `- \`${blocker.id}\`: ${blocker.summary}`).join("\n")
     : "- None.";
+  const providerSnapshots =
+    result.conversationPersistence?.checkpoints
+      .map((checkpoint) => checkpoint.observability)
+      .filter((snapshot) => snapshot !== null) ?? [];
+  const observedProviders = [
+    ...new Set(providerSnapshots.map((snapshot) => snapshot.provider).filter(Boolean)),
+  ];
+  const observedModels = [
+    ...new Set(providerSnapshots.map((snapshot) => snapshot.model).filter(Boolean)),
+  ];
+  const completedPromptSnapshots =
+    result.conversationPersistence?.checkpoints
+      .filter((checkpoint) => checkpoint.checkpoint === "B" || checkpoint.checkpoint === "F")
+      .map((checkpoint) => checkpoint.observability)
+      .filter((snapshot) => snapshot !== null) ?? [];
+  const providerRequests = completedPromptSnapshots.reduce(
+    (total, snapshot) => total + snapshot.modelRequestsAttempted,
+    0,
+  );
+  const providerRetries = completedPromptSnapshots.reduce(
+    (total, snapshot) => total + snapshot.providerRetries,
+    0,
+  );
+  const fallbackAttempts = completedPromptSnapshots.reduce(
+    (total, snapshot) => total + snapshot.fallbackAttempts,
+    0,
+  );
   const report = `# Production acceptance harness
 
 Verdict: **${result.verdict}**
@@ -215,12 +255,30 @@ ${blockers}
 
 ## Accounting
 
+- Exact nonce present: ${result.messageFidelity.map((entry) => `${entry.turn}=${entry.exactNoncePresent}`).join(", ") || "not observed"}
+- Nonce occurrence count: ${result.messageFidelity.map((entry) => `${entry.turn}=${entry.nonceOccurrenceCount}`).join(", ") || "not observed"}
+- Surrounding formatting present: ${result.messageFidelity.map((entry) => `${entry.turn}=${entry.surroundingFormattingPresent}`).join(", ") || "not observed"}
+- Altered or partial nonce present: ${result.messageFidelity.map((entry) => `${entry.turn}=${entry.alteredOrPartialNoncePresent}`).join(", ") || "not observed"}
+- Persisted content matches rendered content: ${result.messageFidelity.map((entry) => `${entry.turn}=${entry.persistedContentMatchesRenderedContent}`).join(", ") || "not observed"}
+- Session context preserved: ${result.messageFidelity.map((entry) => `${entry.turn}=${entry.sessionContextPreserved}`).join(", ") || "not observed"}
+- Message-body selector: ${result.messageFidelity[0]?.selector ?? "not observed"}
+- Message-body element count: ${result.messageFidelity[0]?.elementCount ?? "not observed"}
 - Requests: ${result.network.total}
 - Mutations observed: ${result.network.mutations}
 - Legacy daemon-output requests: ${result.network.legacyDaemonOutputRequests}
 - Search requests: ${result.network.searchRequests}
 - PTY create/write requests: ${result.network.ptyCreateOrWriteRequests}
 - Model message requests: ${result.network.modelMessageRequests}
+- Provider identities observed: ${observedProviders.join(", ") || "not observed"}
+- Effective model identities observed: ${observedModels.join(", ") || "not observed"}
+- Provider requests attempted: ${providerRequests}
+- Provider retries: ${providerRetries}
+- Fallback attempts: ${fallbackAttempts}
+- Tool events: ${completedPromptSnapshots.reduce((total, snapshot) => total + snapshot.toolEventCount, 0)}
+- Decision events: ${completedPromptSnapshots.reduce((total, snapshot) => total + snapshot.decisionEventCount, 0)}
+- Duplicate chunks: ${completedPromptSnapshots.reduce((total, snapshot) => total + snapshot.duplicateChunkCount, 0)}
+- MCP servers: ${completedPromptSnapshots.reduce((total, snapshot) => total + snapshot.mcpServerCount, 0)}
+- Pending required writes ledger: ${JSON.stringify(pendingWriteLedger(result.conversationPersistence))}
 - Consequential Hermes mutations: ${result.network.consequentialHermesMutations}
 - Relevant browser issues: ${selectRelevantBrowserIssues(result.browserIssues).length}
 - Developer diagnostics observed: ${result.checks.find((check) => check.id === "developer-diagnostics-48")?.evidence?.count ?? "not observed"}
@@ -232,6 +290,10 @@ ${blockers}
 ${result.verdict === "ACCEPTED"
   ? "The isolated integration passed the authoritative acceptance contract."
   : "Resolve only the exact blockers above, then rerun the same bounded acceptance."}
+
+## Known limitation
+
+Natural-language exact-output requests are not guaranteed byte-for-byte across all configured models. A future constrained-output contract is required for strict machine output.
 `;
   await fs.writeFile(path.join(outputDir, "report.md"), report);
   const streamResult = {

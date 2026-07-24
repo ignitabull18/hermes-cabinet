@@ -1,5 +1,6 @@
 import { assessHermesLiveReadiness, type HermesReadinessSourceState } from "./live-readonly-readiness";
 import { validateHermesUpstreamUrl } from "./upstream-url";
+import { DEFAULT_HERMES_PROFILE } from "./product-mode";
 import path from "node:path";
 
 export type HermesServerConfig = {
@@ -36,7 +37,9 @@ export type HermesSkillsServerConfig = {
 
 export type HermesExecutionServerConfig = {
   cliPath: string;
+  hermesHome: string;
   profile: string;
+  providerCredentialEnvName: "OLLAMA_API_KEY";
   timeoutMs: number;
   noTools: true;
 };
@@ -193,15 +196,29 @@ export function readHermesExecutionServerConfig(
       "Invalid server configuration: CABINET_HERMES_EXECUTION_CLI_PATH must be absolute",
     );
   }
-  const profile = required("CABINET_HERMES_PROFILE", env.CABINET_HERMES_PROFILE);
-  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(profile)) {
+  const hermesHome = required("HERMES_HOME", env.HERMES_HOME);
+  if (!path.isAbsolute(hermesHome)) {
     throw new HermesConfigurationError(
-      "Invalid server configuration: CABINET_HERMES_PROFILE is not a valid profile name",
+      "Invalid server configuration: HERMES_HOME must be absolute",
+    );
+  }
+  const profile = required("CABINET_HERMES_PROFILE", env.CABINET_HERMES_PROFILE);
+  if (profile !== DEFAULT_HERMES_PROFILE) {
+    throw new HermesConfigurationError(
+      `Invalid server configuration: CABINET_HERMES_PROFILE must be exactly ${DEFAULT_HERMES_PROFILE}`,
+    );
+  }
+  const providerCredentialEnvName = "OLLAMA_API_KEY" as const;
+  if (!env[providerCredentialEnvName]) {
+    throw new HermesConfigurationError(
+      "Missing server configuration: OLLAMA_API_KEY",
     );
   }
   return {
     cliPath,
+    hermesHome,
     profile,
+    providerCredentialEnvName,
     timeoutMs: timeout(env.CABINET_HERMES_TIMEOUT_MS),
     noTools: requiredLiteralTrue(
       "CABINET_HERMES_EXECUTION_NO_TOOLS",

@@ -147,25 +147,33 @@ test("Hermes Skills configuration depends only on the canonical profile", () => 
 test("Hermes execution configuration is an absolute CLI and bounded profile contract", () => {
   assert.deepEqual(readHermesExecutionServerConfig({
     CABINET_HERMES_EXECUTION_CLI_PATH: "/opt/hermes/bin/hermes",
+    HERMES_HOME: "/var/empty/hermes",
     CABINET_HERMES_PROFILE: "operator-os",
+    OLLAMA_API_KEY: "fixture",
     CABINET_HERMES_EXECUTION_NO_TOOLS: "true",
   }), {
     cliPath: "/opt/hermes/bin/hermes",
+    hermesHome: "/var/empty/hermes",
     profile: "operator-os",
+    providerCredentialEnvName: "OLLAMA_API_KEY",
     timeoutMs: 3_000,
     noTools: true,
   });
   for (const value of [undefined, "false", "1", " true ", "TRUE", "unexpected"]) {
     assert.throws(() => readHermesExecutionServerConfig({
       CABINET_HERMES_EXECUTION_CLI_PATH: "/opt/hermes/bin/hermes",
+      HERMES_HOME: "/var/empty/hermes",
       CABINET_HERMES_PROFILE: "operator-os",
+      OLLAMA_API_KEY: "fixture",
       CABINET_HERMES_EXECUTION_NO_TOOLS: value,
     }), /must be exactly true/);
   }
   assert.throws(
     () => readHermesExecutionServerConfig({
       CABINET_HERMES_EXECUTION_CLI_PATH: "hermes",
+      HERMES_HOME: "/var/empty/hermes",
       CABINET_HERMES_PROFILE: "operator-os",
+      OLLAMA_API_KEY: "fixture",
       CABINET_HERMES_EXECUTION_NO_TOOLS: "true",
     }),
     /must be absolute/,
@@ -173,9 +181,21 @@ test("Hermes execution configuration is an absolute CLI and bounded profile cont
   assert.throws(
     () => readHermesExecutionServerConfig({
       CABINET_HERMES_EXECUTION_CLI_PATH: "/opt/hermes/bin/hermes",
+      HERMES_HOME: "/var/empty/hermes",
       CABINET_HERMES_PROFILE: "operator os; unsafe",
+      OLLAMA_API_KEY: "fixture",
       CABINET_HERMES_EXECUTION_NO_TOOLS: "true",
     }),
-    /valid profile name/,
+    /must be exactly operator-os/,
+  );
+  assert.throws(
+    () => readHermesExecutionServerConfig({
+      CABINET_HERMES_EXECUTION_CLI_PATH: "/opt/hermes/bin/hermes",
+      HERMES_HOME: "relative/hermes",
+      CABINET_HERMES_PROFILE: "operator-os",
+      OLLAMA_API_KEY: "fixture",
+      CABINET_HERMES_EXECUTION_NO_TOOLS: "true",
+    }),
+    /HERMES_HOME must be absolute/,
   );
 });

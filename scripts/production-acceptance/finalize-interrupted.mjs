@@ -8,6 +8,11 @@ const outputDir = path.resolve(
 );
 const resultPath = path.join(outputDir, "acceptance-result.json");
 const result = JSON.parse(fs.readFileSync(resultPath, "utf8"));
+result.schemaVersion = 3;
+result.conversationPersistence ??= null;
+result.messageFidelity ??= [];
+result.environment.skillsMode ??=
+  process.env.CABINET_ACCEPTANCE_SKILLS_MODE ?? "fixture";
 
 const requiredChecks = [
   ["route-manifest", "routes"],
@@ -107,6 +112,10 @@ ${blockers}
 - Live model message requests: ${result.network.modelMessageRequests ?? 0}
 - Consequential Hermes mutations: ${result.network.consequentialHermesMutations ?? 0}
 - Production touched: false
+
+## Known limitation
+
+Natural-language exact-output requests are not guaranteed byte-for-byte across all configured models. A future constrained-output contract is required for strict machine output.
 `;
 fs.writeFileSync(path.join(outputDir, "report.md"), report);
 process.stdout.write(`${resultPath}\n`);

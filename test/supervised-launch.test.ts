@@ -16,14 +16,16 @@ function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "cabinet-launch-test-"));
   const data = path.join(root, "data");
   const cli = path.join(root, "hermes");
+  const hermesHome = path.join(root, "hermes-home");
   const envFile = path.join(root, "cabinet.env");
   fs.mkdirSync(path.join(root, ".next", "standalone"), { recursive: true });
   fs.mkdirSync(data);
+  fs.mkdirSync(hermesHome);
   fs.writeFileSync(path.join(root, ".next", "standalone", "server.js"), "");
   fs.writeFileSync(cli, "");
   fs.chmodSync(cli, 0o700);
   fs.writeFileSync(envFile, "CABINET_AUTH_SALT=fixture\n", { mode: 0o600 });
-  return { root, data, cli, envFile };
+  return { root, data, cli, envFile, hermesHome };
 }
 
 async function freePort(): Promise<number> {
@@ -76,6 +78,7 @@ function wrapperEnvironment(item: ReturnType<typeof fixture>): NodeJS.ProcessEnv
     CABINET_HERMES_EXECUTION_CLI_PATH: item.cli,
     CABINET_HERMES_EXECUTION_NO_TOOLS: "true",
     CABINET_HERMES_PROFILE: "operator-os",
+    HERMES_HOME: item.hermesHome,
     CABINET_ENV_FILE: item.envFile,
     CABINET_HERMES_INTERVENTIONS_ENABLED: "false",
     HOSTNAME: "127.0.0.1",
@@ -125,6 +128,7 @@ test("supervised launch accepts only the private Hermes production contract", ()
       CABINET_HERMES_EXECUTION_CLI_PATH: item.cli,
       CABINET_HERMES_EXECUTION_NO_TOOLS: "true",
       CABINET_HERMES_PROFILE: "operator-os",
+      HERMES_HOME: item.hermesHome,
       CABINET_ENV_FILE: item.envFile,
       CABINET_HERMES_INTERVENTIONS_ENABLED: "false",
       HOSTNAME: "127.0.0.1",
@@ -144,6 +148,7 @@ test("supervised launch rejects public listeners and enabled interventions", () 
     CABINET_HERMES_EXECUTION_CLI_PATH: item.cli,
     CABINET_HERMES_EXECUTION_NO_TOOLS: "true",
     CABINET_HERMES_PROFILE: "operator-os",
+    HERMES_HOME: item.hermesHome,
     CABINET_ENV_FILE: item.envFile,
     CABINET_HERMES_INTERVENTIONS_ENABLED: "false",
     HOSTNAME: "127.0.0.1",
@@ -164,6 +169,7 @@ test("supervised launch rejects missing, false, and malformed no-tools state", (
     CABINET_RUNTIME_MODE: "hermes",
     CABINET_HERMES_EXECUTION_CLI_PATH: item.cli,
     CABINET_HERMES_PROFILE: "operator-os",
+    HERMES_HOME: item.hermesHome,
     CABINET_ENV_FILE: item.envFile,
     CABINET_HERMES_INTERVENTIONS_ENABLED: "false",
     HOSTNAME: "127.0.0.1",
@@ -320,6 +326,7 @@ require("node:http").createServer((_, response) => response.end("ok")).listen(pr
     CABINET_RUNTIME_MODE: "hermes",
     CABINET_HERMES_EXECUTION_CLI_PATH: item.cli,
     CABINET_HERMES_PROFILE: "operator-os",
+    HERMES_HOME: item.hermesHome,
     CABINET_ENV_FILE: item.envFile,
     CABINET_HERMES_INTERVENTIONS_ENABLED: "false",
     HOSTNAME: "127.0.0.1",

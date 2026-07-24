@@ -4,25 +4,41 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { buildHermesAcceptanceFixtureProjection } from "../../src/lib/hermes/control-center-acceptance-fixture";
-import { buildHermesSkillsAcceptanceSnapshot } from "../../src/lib/hermes/skills-management-fixture";
-import type { AcceptanceStatus, RouteChecklistEntry } from "./contracts";
+import type {
+  AcceptanceStatus,
+  RouteChecklistEntry,
+} from "./contracts";
 import { bootIsolatedCabinet, type IsolatedCabinet } from "./isolated-cabinet";
 import {
   AcceptanceRecorder,
-  classifyHttpIssue,
   markRoute,
   scanIndicators,
   writeAcceptanceArtifacts,
 } from "./recorder";
 import { discoverRouteManifest } from "./route-discovery";
-import { TRANSPORT_TOKEN, selectTransport } from "./transport";
+import {
+  assertAcceptanceNonce,
+  TRANSPORT_NONCE,
+  selectTransport,
+  type AcceptanceConversation,
+} from "./transport";
+import {
+  assertMessageFidelityEvidence,
+  captureMessageFidelityEvidence,
+} from "./message-exactness";
+import { assertLiveConversationEvidence } from "./conversation-gate";
+import {
+  ControlledRestartTracker,
+  type RestartRequest,
+} from "./restart-handling";
+import { sampleHermesHealthProjection } from "./health-observation";
 
 test.describe.configure({ mode: "serial" });
 test.setTimeout(600_000);
 
 const CHECK_TIMEOUT_MS = 45_000;
 const INTERACTION_TIMEOUT_MS = 15_000;
-const appPort = Number(process.env.CABINET_ACCEPTANCE_PORT ?? 4304);
+const appPort = Number(process.env.CABINET_ACCEPTANCE_PORT ?? 4344);
 const repoRoot = process.cwd();
 const acceptanceBaseRef = process.env.CABINET_ACCEPTANCE_BASE_REVISION ?? "origin/main";
 const acceptanceBaseRevision = execFileSync("git", ["rev-parse", acceptanceBaseRef], {
@@ -36,13 +52,23 @@ const outputDir = path.resolve(
 const screenshotDir = path.join(outputDir, "screenshots");
 const recorder = new AcceptanceRecorder();
 const transport = selectTransport();
+const allowIntegrationDiff =
+  process.env.CABINET_ACCEPTANCE_ALLOW_INTEGRATION_DIFF === "1";
+const skillsMode = process.env.CABINET_ACCEPTANCE_SKILLS_MODE;
+if (skillsMode !== "fixture" && skillsMode !== "production") {
+  throw new Error(
+    "CABINET_ACCEPTANCE_SKILLS_MODE must be explicitly set to fixture or production.",
+  );
+}
 const projection = buildHermesAcceptanceFixtureProjection({
   implementationRevision: acceptanceBaseRevision,
   artifactGeneratedAt: "2026-07-23T00:00:00.000Z",
 });
 let cabinet: IsolatedCabinet;
 let routes: RouteChecklistEntry[] = [];
-let controlledRestartInProgress = false;
+let controlledRestart: ControlledRestartTracker | null = null;
+const restartRequests = new WeakMap<import("@playwright/test").Request, RestartRequest>();
+let providerGateConversation: AcceptanceConversation | null = null;
 
 function addCheck(
   id: string,
@@ -117,49 +143,42 @@ async function installPageObservation(page: Page) {
     const url = new URL(request.url());
     if (url.origin === new URL(cabinet.appUrl).origin) {
       recorder.request(request.method(), url.pathname);
+      restartRequests.set(request, {
+        method: request.method(),
+        path: url.pathname,
+        startedPhase: controlledRestart?.phase ?? null,
+      });
     }
   });
   page.on("requestfailed", (request) => {
     const url = new URL(request.url());
     if (url.origin === new URL(cabinet.appUrl).origin) {
+      const errorText = request.failure()?.errorText ?? "request failed";
       recorder.requestFailed(
         request.method(),
         url.pathname,
-        request.failure()?.errorText ?? "request failed"
+        errorText,
       );
+      const restartRequest = restartRequests.get(request);
+      if (controlledRestart && restartRequest) {
+        const classification = controlledRestart.requestFailed(
+          restartRequest,
+          errorText,
+        );
+        recorder.browserIssue({
+          source: "request",
+          severity: classification.expected ? "warning" : "error",
+          path: url.pathname,
+          summary: classification.reason,
+          expectedControlledRestartTransport: classification.expected,
+        });
+      }
     }
   });
-  page.on("response", async (response) => {
+  page.on("response", (response) => {
     const url = new URL(response.url());
     if (url.origin !== new URL(cabinet.appUrl).origin) return;
     if (url.pathname === "/api/hermes/health" && response.status() === 200) {
-      if (!transport.sendsLiveModelMessages) return;
-      try {
-        const body = await response.json() as Record<string, unknown>;
-        const state = typeof body.sourceState === "string"
-          ? body.sourceState
-          : typeof body.status === "string"
-            ? body.status
-            : undefined;
-        if (state && ["unavailable", "not_configured", "timeout", "stale", "authentication_failed"].includes(state)) {
-          recorder.browserIssue({
-            source: "http",
-            ...classifyHttpIssue({
-              path: url.pathname,
-              status: response.status(),
-              typedProjection: true,
-              projectionState: state,
-            }),
-          });
-        }
-      } catch {
-        recorder.browserIssue({
-          source: "http",
-          severity: "error",
-          path: url.pathname,
-          summary: "Hermes health returned an unreadable projection.",
-        });
-      }
       return;
     }
     if (
@@ -186,20 +205,28 @@ async function installPageObservation(page: Page) {
   });
   page.on("console", (message) => {
     if (["error", "warning"].includes(message.type())) {
-      const prefix = controlledRestartInProgress
+      const expectedRestartTransport =
+        message.type() === "error" &&
+        controlledRestart?.consoleTransportFailure(message.text()) === true;
+      const prefix = expectedRestartTransport
         ? `expected-restart-${message.type()}`
         : message.type();
       recorder.scanText.push(`${prefix}: ${message.text()}`);
       recorder.browserIssue({
         source: "console",
-        severity: message.type() === "error" ? "error" : "warning",
+        severity: expectedRestartTransport
+          ? "warning"
+          : message.type() === "error"
+            ? "error"
+            : "warning",
         summary: conciseError(message.text()),
+        expectedControlledRestartTransport: expectedRestartTransport,
       });
     }
   });
   page.on("pageerror", (error) => {
-    const prefix = controlledRestartInProgress ? "expected-restart-pageerror" : "pageerror";
-    recorder.scanText.push(`${prefix}: ${error.message}`);
+    controlledRestart?.unhandledError();
+    recorder.scanText.push(`pageerror: ${error.message}`);
     recorder.browserIssue({
       source: "pageerror",
       severity: "error",
@@ -225,15 +252,6 @@ async function installPageObservation(page: Page) {
   await page.route("**/api/hermes/control-center", (route) =>
     route.fulfill({ json: projection })
   );
-  await page.route("**/api/hermes/skills-management**", (route) => {
-    if (route.request().method() === "GET") {
-      return route.fulfill({ json: buildHermesSkillsAcceptanceSnapshot() });
-    }
-    return route.fulfill({
-      status: 405,
-      json: { error: "Acceptance harness forbids governed Skill mutations." },
-    });
-  });
 }
 
 async function pageIdentity(page: Page, route: string, meaningful: RegExp) {
@@ -289,9 +307,10 @@ test.afterAll(async () => {
     (file) =>
       !file.startsWith("e2e/production-acceptance/") &&
       !file.startsWith("scripts/production-acceptance/") &&
-      !file.startsWith("docs/research/parallel/acceptance-harness/")
+      !file.startsWith("docs/research/parallel/acceptance-harness/") &&
+      file !== "PROGRESS.md"
   );
-  if (applicationDiff.length) {
+  if (applicationDiff.length && !allowIntegrationDiff) {
     recorder.blocker({
       id: "application-diff-outside-owned-lane",
       area: "safety",
@@ -316,6 +335,7 @@ test.afterAll(async () => {
       productionTouched: false,
       liveModelMessagesSent: recorder.network.modelMessageRequests,
       transport: transport.id,
+      skillsMode,
       browserPath: process.env.CABINET_ACCEPTANCE_BROWSER_PATH ?? "Playwright runner",
     },
     routes,
@@ -324,13 +344,86 @@ test.afterAll(async () => {
     blockers: recorder.blockers,
     network: recorder.network,
     browserIssues: recorder.browserIssues,
+    conversationPersistence: recorder.conversationPersistence,
+    messageFidelity: recorder.messageFidelity,
     screenshots: recorder.screenshots,
     productionTouched: false,
   }, recorder.scanText.join("\n"));
   await cabinet?.close();
 });
 
+test("two-turn provider gate", async ({ page }) => {
+  await installPageObservation(page);
+  providerGateConversation = await observed(
+    transport.sendsLiveModelMessages
+      ? "live-two-turn-contract"
+      : "fixture-two-turn-contract",
+    "conversation",
+    async () => {
+      const result = await transport.runTwoTurnContract(
+        cabinet,
+        (evidence) => recorder.recordConversationPersistence(evidence),
+        (method, pathname) => recorder.request(method, pathname),
+      );
+      if (transport.sendsLiveModelMessages) {
+        const fidelity = await captureMessageFidelityEvidence(
+          page,
+          cabinet.appUrl,
+          result,
+        );
+        recorder.recordMessageFidelity(fidelity);
+        assertMessageFidelityEvidence(fidelity);
+        assertLiveConversationEvidence(recorder.conversationPersistence);
+      } else {
+        assertAcceptanceNonce(result.firstResponse, "initial");
+        assertAcceptanceNonce(result.secondResponse, "follow-up");
+      }
+      expect(result.sameSession).toBe(true);
+      expect(result.userTurns).toBe(2);
+      expect(result.completedAssistantTurns).toBe(2);
+      if (transport.sendsLiveModelMessages) expect(result.cabinetRestart).toBe(true);
+      return result;
+    },
+    (result) =>
+      `${transport.id} returned the exact nonce once per response with two user and two completed assistant turns` +
+      `${result.cabinetRestart ? " across a Cabinet restart" : ""}.`,
+    (error) => `Two-turn provider gate failed: ${String(error)}`,
+    {
+      id: "live-two-turn-contract-failed",
+      reproduction: [
+        "Dispatch the bounded initial acceptance message once.",
+        "Continue the persisted native session once.",
+        "Verify the same session after the isolated Cabinet restart.",
+      ],
+      ownerHint: "ACP provider/model resolution",
+    },
+    300_000,
+  );
+  if (!transport.sendsLiveModelMessages) {
+    addCheck(
+      "live-two-turn-contract",
+      "conversation",
+      "blocked",
+      "No live transport was selected; zero live model messages were sent.",
+    );
+  }
+});
+
 test("authoritative isolated production acceptance", async ({ page }) => {
+  if (!providerGateConversation) {
+    for (const route of routes) {
+      route.exercised = false;
+      route.status = "not_run";
+      route.note = "NOT_RUN because the two-turn provider gate did not pass.";
+    }
+    notRun(
+      "full-route-harness",
+      "routes",
+      "NOT_RUN because the two-turn provider gate did not pass; no additional conversation or model call was made.",
+    );
+    return;
+  }
+
   await installPageObservation(page);
   await page.setViewportSize({ width: 1440, height: 900 });
 
@@ -677,7 +770,9 @@ test("authoritative isolated production acceptance", async ({ page }) => {
     "operator-mode",
     "Hermes",
     async () => {
-      await page.goto(`${cabinet.appUrl}/hermes?skillsFixture=acceptance`);
+      await page.goto(
+        `${cabinet.appUrl}/hermes`,
+      );
       await expect(page.getByTestId("hermes-control-center")).toBeVisible();
       await expect(page.getByRole("tab", { name: "Operator" })).toHaveAttribute(
         "aria-selected",
@@ -753,44 +848,7 @@ test("authoritative isolated production acceptance", async ({ page }) => {
   );
   await screenshot(page, "developer-diagnostics", "/hermes?mode=developer", "48 diagnostic rows");
 
-  const conversation = await observed(
-    transport.sendsLiveModelMessages
-      ? "live-two-turn-contract"
-      : "fixture-two-turn-contract",
-    "conversation",
-    async () => {
-      const result = await transport.runTwoTurnContract(cabinet);
-      expect(result.firstResponse).toBe(TRANSPORT_TOKEN);
-      expect(result.secondResponse).toBe(TRANSPORT_TOKEN);
-      expect(result.sameSession).toBe(true);
-      expect(result.userTurns).toBe(2);
-      expect(result.completedAssistantTurns).toBe(2);
-      if (transport.sendsLiveModelMessages) expect(result.cabinetRestart).toBe(true);
-      return result;
-    },
-    (result) =>
-      `${transport.id} returned the exact token twice with two user and two completed assistant turns` +
-      `${result.cabinetRestart ? " across a Cabinet restart" : ""}.`,
-    (error) => `Two-turn transport contract failed: ${String(error)}`,
-    {
-      id: "live-two-turn-contract-failed",
-      reproduction: [
-        "Dispatch the bounded initial acceptance message once.",
-        "Continue the persisted native session once.",
-        "Verify the same session after the isolated Cabinet restart.",
-      ],
-      ownerHint: "ACP production parity",
-    },
-    300_000,
-  );
-  if (!transport.sendsLiveModelMessages) {
-    addCheck(
-      "live-two-turn-contract",
-      "conversation",
-      "blocked",
-      "No live transport was selected; zero live model messages were sent.",
-    );
-  }
+  const conversation = providerGateConversation;
 
   if (conversation && transport.sendsLiveModelMessages) {
     await observed(
@@ -808,7 +866,15 @@ test("authoritative isolated production acceptance", async ({ page }) => {
         await page.goto(
           `${cabinet.appUrl}/agents/conversations/${conversation.conversationId}`,
         );
-        await expect(page.locator("body")).toContainText(TRANSPORT_TOKEN);
+        const transcriptBodies = page.locator(
+          '[data-testid="turn"][data-turn-role="agent"] > ' +
+            '[data-testid="assistant-message-content"]' +
+            '[data-message-author="assistant"][data-message-part="content"]',
+        );
+        await expect(transcriptBodies).toHaveCount(2);
+        for (const body of await transcriptBodies.allInnerTexts()) {
+          expect(body.split(TRANSPORT_NONCE)).toHaveLength(2);
+        }
         markRoute(routes, "/agents/conversations/:id", "passed");
         return { directTask: true, reload: true, transcript: true };
       },
@@ -842,15 +908,26 @@ test("authoritative isolated production acceptance", async ({ page }) => {
     async () => {
       await page.goto(`${cabinet.appUrl}/room/acceptance-cabinet`);
       await expect(page.getByText("Acceptance Cabinet", { exact: true }).first()).toBeVisible();
-      controlledRestartInProgress = true;
+      const tracker = new ControlledRestartTracker();
+      controlledRestart = tracker;
       try {
-        await cabinet.restart();
+        await cabinet.restart((phase) => tracker.transition(phase));
+        // The controlled transport-loss window ends at health readiness. Keep
+        // the local tracker for the remaining phase ledger, but stop assigning
+        // the intentional reload's ERR_ABORTED cancellations to listener loss.
+        controlledRestart = null;
+        await page.reload();
+        await expect(page.getByText("Acceptance Cabinet", { exact: true }).first()).toBeVisible();
+        tracker.transition("browser_reconnected");
+        tracker.transition("acceptance_resumed");
+        return {
+          cabinetRestart: true,
+          routePersisted: true,
+          ...tracker.complete(),
+        };
       } finally {
-        controlledRestartInProgress = false;
+        controlledRestart = null;
       }
-      await page.reload();
-      await expect(page.getByText("Acceptance Cabinet", { exact: true }).first()).toBeVisible();
-      return { cabinetRestart: true, routePersisted: true };
     },
     () => `Isolated Cabinet restarted on port ${appPort} and the room route persisted.`,
     (error) => `Cabinet restart persistence failed: ${String(error)}`,
@@ -969,6 +1046,26 @@ test("authoritative isolated production acceptance", async ({ page }) => {
       reproduction: incompleteRoutes.map((entry) => `Open ${entry.route}.`),
       ownerHint: "acceptance harness",
     });
+  }
+
+  if (transport.sendsLiveModelMessages) {
+    recorder.stage("console-health");
+    try {
+      const healthIssue = await sampleHermesHealthProjection(page, cabinet.appUrl);
+      if (healthIssue) {
+        recorder.browserIssue({
+          source: "http",
+          ...healthIssue,
+        });
+      }
+    } catch (error) {
+      recorder.browserIssue({
+        source: "http",
+        severity: "error",
+        path: "/api/hermes/health",
+        summary: `Hermes health observation failed: ${conciseError(String(error))}`,
+      });
+    }
   }
 
   const relevantBrowserIssues = recorder.relevantBrowserIssues();

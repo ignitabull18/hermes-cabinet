@@ -50,15 +50,144 @@ export interface NetworkSummary {
 
 export interface BrowserIssue {
   stage: string;
-  source: "console" | "pageerror" | "http";
+  source: "console" | "pageerror" | "http" | "request";
   severity: "warning" | "error";
   summary: string;
   path?: string;
   expectedUnavailableProjection?: boolean;
+  expectedControlledRestartTransport?: boolean;
+}
+
+export interface ConversationTurnDiagnostic {
+  identity: string;
+  sequence: number;
+  role: "user" | "agent";
+  lifecycleState: "pending" | "completed" | "failed";
+}
+
+export interface AcceptanceConversationObservation {
+  contract: "cabinet.acceptance.conversation-observability";
+  schemaVersion: 1;
+  conversationIdentity: string | null;
+  nativeSessionIdentity: string | null;
+  conversationStatus: "idle" | "running" | "completed" | "failed" | "cancelled";
+  turnIdentities: Array<string | null>;
+  requestIdentities: Array<string | null>;
+  durableStoreCounts: {
+    user: number;
+    assistant: number;
+    running: number;
+    failed: number;
+    completed: number;
+    completedAssistant: number;
+    total: number;
+  };
+  inMemoryCounts: {
+    user: number;
+    assistant: number;
+    running: number;
+    failed: number;
+    completed: number;
+    completedAssistant: number;
+    total: number;
+  };
+  inMemoryCountSource: "post_flush_projection";
+  pendingRequiredWrites: number;
+  acpChildState: "not_started" | "running" | "exited" | "unknown";
+  readinessState: "ready" | "blocked" | "unknown";
+  provider: string | null;
+  model: string | null;
+  modelRequestsAttempted: number;
+  providerRetries: number;
+  fallbackAttempts: number;
+  toolEventCount: number;
+  decisionEventCount: number;
+  duplicateChunkCount: number;
+  mcpServerCount: number;
+  lastProviderHttpStatus: "none" | "2xx" | "4xx" | "5xx" | "network";
+  lastFailureClass:
+    | "none"
+    | "readiness"
+    | "provider_not_found"
+    | "provider_authentication"
+    | "provider_rate_limit"
+    | "provider_failure"
+    | "transport"
+    | "timeout"
+    | "unknown";
+}
+
+export type NormalizedPendingRequiredWrites =
+  | {
+      state: "known";
+      value: number;
+      source: "acceptance_observability";
+      legacyState: "absent" | "null" | "matching";
+    }
+  | {
+      state: "unknown";
+      value: null;
+      source: "acceptance_observability";
+      reason:
+        | "authoritative_absent"
+        | "authoritative_null"
+        | "authoritative_malformed"
+        | "authoritative_negative"
+        | "legacy_malformed"
+        | "legacy_disagreement";
+      legacyValue?: number;
+      authoritativeValue?: number;
+    };
+
+export interface ConversationCheckpointEvidence {
+  checkpoint: "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H";
+  recordedAt: string;
+  eventType: string;
+  conversationIdentity: string | null;
+  nativeSessionIdentity: string | null;
+  requestIdentity: "initial" | "follow-up" | null;
+  turns: ConversationTurnDiagnostic[];
+  durableStoreCounts: {
+    user: number;
+    assistant: number;
+    completedAssistant: number;
+    total: number;
+    duplicateTurnIdentities: number;
+  } | null;
+  inMemoryCounts: {
+    user: number;
+    assistant: number;
+    completedAssistant: number;
+    total: number;
+  } | null;
+  pendingRequiredWrites: NormalizedPendingRequiredWrites;
+  observability: AcceptanceConversationObservation | null;
+}
+
+export interface ConversationPersistenceEvidence {
+  schemaVersion: 1;
+  transport: string;
+  checkpoints: ConversationCheckpointEvidence[];
+  nativeSessionIdentityStable: boolean | null;
+  exactFinalCardinality: boolean | null;
+  secondRestartCompleted: boolean;
+  unavailableMeasurements: string[];
+}
+
+export interface AcceptanceMessageFidelityEvidence {
+  turn: "initial" | "follow-up";
+  exactNoncePresent: boolean;
+  nonceOccurrenceCount: number;
+  surroundingFormattingPresent: boolean;
+  alteredOrPartialNoncePresent: boolean;
+  persistedContentMatchesRenderedContent: boolean;
+  sessionContextPreserved: boolean;
+  selector: string;
+  elementCount: number;
 }
 
 export interface AcceptanceResult {
-  schemaVersion: 1;
+  schemaVersion: 3;
   generatedAt: string;
   verdict: "ACCEPTED" | "NOT_ACCEPTED";
   stream: "acceptance-harness";
@@ -73,6 +202,7 @@ export interface AcceptanceResult {
     productionTouched: false;
     liveModelMessagesSent: number;
     transport: string;
+    skillsMode: "fixture" | "production";
     browserPath: string;
   };
   routes: RouteChecklistEntry[];
@@ -84,6 +214,8 @@ export interface AcceptanceResult {
   blockers: AcceptanceBlocker[];
   network: NetworkSummary;
   browserIssues: BrowserIssue[];
+  conversationPersistence: ConversationPersistenceEvidence | null;
+  messageFidelity: AcceptanceMessageFidelityEvidence[];
   screenshots: ScreenshotEntry[];
   scans: {
     secretIndicators: string[];

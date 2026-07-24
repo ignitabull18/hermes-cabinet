@@ -1,0 +1,221 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import type { ConversationPersistenceEvidence } from "./contracts";
+import {
+  assertAcceptanceNonce,
+  buildConversationCheckpoint,
+  LiveCabinetAcpTransport,
+  TRANSPORT_NONCE,
+} from "./transport";
+
+test("nonce failures never retain assistant content", () => {
+  const privateResponse = `${TRANSPORT_NONCE}-altered plus private model output`;
+  assert.throws(
+    () => assertAcceptanceNonce(privateResponse, "initial"),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.equal(
+        error.message,
+        "initial response did not contain the exact acceptance nonce exactly once",
+      );
+      assert.doesNotMatch(error.message, /private model output/);
+      return true;
+    },
+  );
+});
+
+test("content-free checkpoint records exact cardinality and duplicate identities", () => {
+  const checkpoint = buildConversationCheckpoint(
+    "H",
+    "second_restart_reloaded",
+    {
+      meta: { id: "conversation-private", status: "completed" },
+      session: { resumeId: "session-private", alive: false },
+      turns: [
+        { id: "u1", turn: 1, role: "user", content: "private" },
+        { id: "a1", turn: 1, role: "agent", content: "private" },
+        { id: "u2", turn: 2, role: "user", content: "private" },
+        { id: "a2", turn: 2, role: "agent", content: "private" },
+      ],
+      persistence: {
+        pendingRequiredWrites: 0,
+        inMemoryCounts: { user: 2, assistant: 2, completedAssistant: 2, total: 4 },
+      },
+    },
+    null,
+  );
+
+  assert.deepEqual(checkpoint.durableStoreCounts, {
+    user: 2,
+    assistant: 2,
+    completedAssistant: 2,
+    total: 4,
+    duplicateTurnIdentities: 0,
+  });
+  assert.deepEqual(checkpoint.pendingRequiredWrites, {
+    state: "unknown",
+    value: null,
+    source: "acceptance_observability",
+    reason: "authoritative_absent",
+  });
+  assert.doesNotMatch(JSON.stringify(checkpoint), /private/);
+});
+
+test("checkpoint persistence measurements fall back to authoritative observability", () => {
+  const checkpoint = buildConversationCheckpoint(
+    "H",
+    "second_restart_reloaded",
+    {
+      meta: { id: "conversation", status: "completed" },
+      session: { resumeId: "session", alive: false },
+      turns: [
+        { id: "u1", turn: 1, role: "user", content: "hidden" },
+        { id: "a1", turn: 1, role: "agent", content: "hidden" },
+        { id: "u2", turn: 2, role: "user", content: "hidden" },
+        { id: "a2", turn: 2, role: "agent", content: "hidden" },
+      ],
+      acceptanceObservability: {
+        contract: "cabinet.acceptance.conversation-observability",
+        schemaVersion: 1,
+        conversationIdentity: "conversation-hash",
+        nativeSessionIdentity: "session-hash",
+        conversationStatus: "completed",
+        turnIdentities: [],
+        requestIdentities: [],
+        durableStoreCounts: {
+          user: 2,
+          assistant: 2,
+          running: 0,
+          failed: 0,
+          completed: 4,
+          completedAssistant: 2,
+          total: 4,
+        },
+        inMemoryCounts: {
+          user: 2,
+          assistant: 2,
+          running: 0,
+          failed: 0,
+          completed: 4,
+          completedAssistant: 2,
+          total: 4,
+        },
+        inMemoryCountSource: "post_flush_projection",
+        pendingRequiredWrites: 0,
+        acpChildState: "running",
+        readinessState: "ready",
+        provider: "provider",
+        model: "model",
+        modelRequestsAttempted: 1,
+        providerRetries: 0,
+        fallbackAttempts: 0,
+        toolEventCount: 0,
+        decisionEventCount: 0,
+        duplicateChunkCount: 0,
+        mcpServerCount: 0,
+        lastProviderHttpStatus: "2xx",
+        lastFailureClass: "none",
+      },
+    },
+    null,
+  );
+
+  assert.deepEqual(checkpoint.pendingRequiredWrites, {
+    state: "known",
+    value: 0,
+    source: "acceptance_observability",
+    legacyState: "absent",
+  });
+  assert.deepEqual(checkpoint.inMemoryCounts, {
+    user: 2,
+    assistant: 2,
+    running: 0,
+    failed: 0,
+    completed: 4,
+    completedAssistant: 2,
+    total: 4,
+  });
+});
+
+test("pending and failed assistant lifecycle states are preserved without content", () => {
+  const checkpoint = buildConversationCheckpoint(
+    "E",
+    "follow_up_accepted",
+    {
+      meta: { id: "conversation", status: "running" },
+      turns: [
+        { id: "u2", turn: 2, role: "user", content: "hidden" },
+        { id: "a2", turn: 2, role: "agent", content: "", pending: true },
+        { id: "a3", turn: 3, role: "agent", content: "hidden", exitCode: 1 },
+      ],
+    },
+    "follow-up",
+  );
+
+  assert.deepEqual(
+    checkpoint.turns.map((turn) => turn.lifecycleState),
+    ["completed", "pending", "failed"],
+  );
+  assert.doesNotMatch(JSON.stringify(checkpoint), /hidden/);
+});
+
+test("failed cardinality still exports the complete diagnostic ledger", async () => {
+  const originalFetch = globalThis.fetch;
+  const completedDetail = {
+    meta: { id: "conversation-private", status: "completed" },
+    session: { resumeId: "session-private", alive: false },
+    turns: [
+      { id: "u1", turn: 1, role: "user", content: "hidden" },
+      { id: "a1", turn: 1, role: "agent", content: TRANSPORT_NONCE },
+      { id: "u2", turn: 2, role: "user", content: "hidden" },
+    ],
+  };
+  let postCount = 0;
+  let restarts = 0;
+  let evidence: ConversationPersistenceEvidence | null = null;
+  const requests: Array<{ method: string; pathname: string }> = [];
+  globalThis.fetch = async (_input, init) => {
+    if (init?.method === "POST") {
+      postCount += 1;
+      return Response.json(
+        postCount === 1
+          ? { conversation: { id: "conversation-private", status: "running" } }
+          : { ok: true },
+      );
+    }
+    return Response.json(completedDetail);
+  };
+  try {
+    await assert.rejects(
+      new LiveCabinetAcpTransport().runTwoTurnContract(
+        {
+          appUrl: "http://127.0.0.1:4314",
+          restart: async () => {
+            restarts += 1;
+          },
+        },
+        (value) => {
+          evidence = value;
+        },
+        (method, pathname) => requests.push({ method, pathname }),
+      ),
+      /exactly two user and two assistant turns/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(restarts, 2);
+  assert.equal(evidence?.checkpoints.length, 8);
+  assert.equal(evidence?.checkpoints.at(-1)?.checkpoint, "H");
+  assert.equal(evidence?.exactFinalCardinality, false);
+  assert.deepEqual(requests, [
+    { method: "POST", pathname: "/api/agents/conversations" },
+    {
+      method: "POST",
+      pathname: "/api/agents/conversations/conversation-private/continue",
+    },
+  ]);
+  assert.doesNotMatch(JSON.stringify(evidence), /hidden|private/);
+});

@@ -3,13 +3,14 @@ import fs from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import type { RestartPhase } from "./restart-handling";
 
-const DEFAULT_APP_PORT = 4304;
+const DEFAULT_APP_PORT = 4344;
 
 export interface IsolatedCabinet {
   appUrl: string;
   dataDir: string;
-  restart(): Promise<void>;
+  restart(onPhase?: (phase: RestartPhase) => void): Promise<void>;
   logs(): string;
   close(): Promise<void>;
 }
@@ -68,14 +69,15 @@ export async function bootIsolatedCabinet(repoRoot: string): Promise<IsolatedCab
   const dataDir = path.join(stateRoot, "data");
   const homeDir = path.join(stateRoot, "home");
   const cabinetEnvFile = path.join(stateRoot, "cabinet.env");
+  const hermesHome = path.join(homeDir, ".hermes-cabinet-acp");
   await fs.mkdir(path.join(homeDir, ".local/bin"), { recursive: true });
-  await fs.mkdir(path.join(homeDir, ".hermes-cabinet-acp"), { recursive: true });
+  await fs.mkdir(hermesHome, { recursive: true });
   await fs.mkdir(path.join(dataDir, "acceptance-cabinet/.agents/editor"), { recursive: true });
   await fs.mkdir(path.join(dataDir, ".agents/.config"), { recursive: true });
   await fs.mkdir(path.join(dataDir, ".home"), { recursive: true });
   await fs.writeFile(cabinetEnvFile, "", { mode: 0o600 });
   await fs.writeFile(
-    path.join(homeDir, ".hermes-cabinet-acp/config.yaml"),
+    path.join(hermesHome, "config.yaml"),
     "model:\n  default: glm-5.2\n  provider: ollama-cloud\n",
     { mode: 0o600 },
   );
@@ -157,6 +159,7 @@ Isolated acceptance fixture. No model execution is authorized.
     LOGNAME: process.env.LOGNAME,
     OLLAMA_API_KEY: process.env.OLLAMA_API_KEY,
     HOME: homeDir,
+    HERMES_HOME: hermesHome,
     CABINET_DATA_DIR: dataDir,
     CABINET_ENV_FILE: cabinetEnvFile,
     CABINET_RUNTIME_MODE: "hermes",
@@ -165,6 +168,10 @@ Isolated acceptance fixture. No model execution is authorized.
     CABINET_HERMES_EXECUTION_NO_TOOLS: "true",
     CABINET_HERMES_PROFILE: "operator-os",
     CABINET_HERMES_INTERVENTIONS_ENABLED: "false",
+    CABINET_ACCEPTANCE_ISOLATED: "1",
+    CABINET_ACCEPTANCE_OBSERVABILITY: "1",
+    CABINET_ACCEPTANCE_SKILLS_MODE:
+      process.env.CABINET_ACCEPTANCE_SKILLS_MODE,
     CABINET_DAEMON_PORT: String(appPort + 10),
     KB_PASSWORD: "",
     NODE_ENV: "production",
@@ -187,10 +194,15 @@ Isolated acceptance fixture. No model execution is authorized.
   return {
     appUrl: `http://127.0.0.1:${appPort}`,
     dataDir,
-    restart: async () => {
+    restart: async (onPhase) => {
+      onPhase?.("restart_requested");
+      onPhase?.("child_stopping");
       await stop(app);
       await assertPortAvailable(appPort);
+      onPhase?.("listener_unavailable");
+      onPhase?.("child_starting");
       await start();
+      onPhase?.("health_ready");
     },
     logs: () => logs.join(""),
     close: async () => {

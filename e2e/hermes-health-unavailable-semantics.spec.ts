@@ -59,6 +59,11 @@ async function prepare(
   initial: HermesConnectionState,
   expectGlobalHealthControl = true,
 ) {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("cabinet.dataDirConfirmed", "1");
+    window.localStorage.setItem("cabinet.wizard-done", "1");
+    window.localStorage.setItem("cabinet.tour-done", "1");
+  });
   const errors: string[] = [];
   browserErrors.set(page, errors);
   page.on("console", (message) => {

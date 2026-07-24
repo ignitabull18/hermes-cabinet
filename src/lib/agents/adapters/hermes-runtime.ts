@@ -1,6 +1,11 @@
 import type { ConversationErrorClassification } from "@/types/conversations";
 import { HermesAcpError, runHermesAcpTurn, validateHermesAcpExecutable } from "@/lib/hermes/acp-client";
 import { readHermesExecutionServerConfig } from "@/lib/hermes/server-config";
+import {
+  parseHermesModelReadiness,
+  resolveHermesModelReadiness,
+  HermesModelReadinessError,
+} from "@/lib/hermes/model-readiness";
 import type {
   AdapterExecutionContext,
   AdapterExecutionResult,
@@ -8,6 +13,9 @@ import type {
 } from "./types";
 
 function classifyAcpFailure(error: unknown): ConversationErrorClassification {
+  if (error instanceof HermesModelReadinessError) {
+    return { kind: "model_unavailable", hint: error.message };
+  }
   if (error instanceof HermesAcpError) {
     if (error.kind === "timeout") {
       return { kind: "timeout", hint: "Hermes did not respond in time. Retry the turn." };
@@ -26,6 +34,9 @@ async function executeHermes(ctx: AdapterExecutionContext): Promise<AdapterExecu
   let sessionId = ctx.sessionId || "";
   try {
     const config = readHermesExecutionServerConfig();
+    const readiness = ctx.executionPreflight
+      ? parseHermesModelReadiness(ctx.executionPreflight, config.profile)
+      : await resolveHermesModelReadiness({ config, cwd: ctx.cwd });
     let child: import("node:child_process").ChildProcessWithoutNullStreams | null = null;
     ctx.registerInterrupt?.(async () => {
       child?.kill("SIGTERM");
@@ -60,9 +71,16 @@ async function executeHermes(ctx: AdapterExecutionContext): Promise<AdapterExecu
         sessionId,
         protocol: "acp-stdio-v1",
         noTools: config.noTools,
+        readiness,
+        providerAttempts: result.providerAttempts,
+        toolEventCount: result.toolEventCount,
+        decisionEventCount: result.decisionEventCount,
+        duplicateChunkCount: result.duplicateChunkCount,
+        mcpServerCount: result.mcpServerCount,
       },
       sessionDisplayId: sessionId,
       provider: "hermes",
+      model: readiness.model,
       billingType: "unknown",
     };
   } catch (error) {
@@ -71,7 +89,9 @@ async function executeHermes(ctx: AdapterExecutionContext): Promise<AdapterExecu
       exitCode: classification.kind === "timeout" ? 124 : 1,
       signal: null,
       timedOut: classification.kind === "timeout",
-      errorMessage: error instanceof HermesAcpError ? error.message : "Hermes execution failed.",
+      errorMessage: error instanceof HermesAcpError || error instanceof HermesModelReadinessError
+        ? error.message
+        : "Hermes execution failed.",
       errorCode: classification.kind,
       sessionId: sessionId || null,
     };
@@ -86,6 +106,10 @@ export const hermesRuntimeAdapter: AgentExecutionAdapter = {
   executionEngine: "process",
   supportsSessionResume: true,
   supportsDetachedRuns: true,
+  async preflight(ctx) {
+    const config = readHermesExecutionServerConfig();
+    return resolveHermesModelReadiness({ config, cwd: ctx.cwd });
+  },
   sessionCodec: {
     deserialize(raw) {
       if (!raw || typeof raw !== "object") return null;
@@ -101,6 +125,9 @@ export const hermesRuntimeAdapter: AgentExecutionAdapter = {
         sessionId: params.sessionId,
         protocol: "acp-stdio-v1",
         noTools: params.noTools,
+        ...(params.readiness && typeof params.readiness === "object"
+          ? { readiness: params.readiness }
+          : {}),
       };
     },
     getDisplayId(params) {

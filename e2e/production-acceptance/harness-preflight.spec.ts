@@ -4,6 +4,10 @@ import { execFileSync } from "node:child_process";
 import { bootIsolatedCabinet, type IsolatedCabinet } from "./isolated-cabinet";
 import { AcceptanceRecorder, classifyHttpIssue, scanIndicators } from "./recorder";
 import { DeliberateFailureTransport } from "./transport";
+import {
+  classifyHermesHealthProjection,
+  sampleHermesHealthProjection,
+} from "./health-observation";
 
 test.describe.configure({ mode: "serial" });
 test.setTimeout(90_000);
@@ -12,10 +16,10 @@ let cabinet: IsolatedCabinet;
 
 test.beforeAll(async () => {
   expect(
-    execFileSync("git", ["merge-base", "HEAD", "origin/main"], {
+    execFileSync("git", ["merge-base", "HEAD", "b02c9d7c4430ae89026182d1cbf5567553b189ad"], {
       encoding: "utf8",
     }).trim(),
-  ).toBe("6854d52eb6697c96d1355f1c7f4d443076d68602");
+  ).toBe("b02c9d7c4430ae89026182d1cbf5567553b189ad");
   cabinet = await bootIsolatedCabinet(process.cwd());
 });
 
@@ -90,13 +94,12 @@ test("Cockpit identity remains deterministic when multiple alerts exist", async 
   ).toHaveCount(1);
 });
 
-test("deliberate conversation failure does not prevent independent route checks", async ({ page }) => {
+test("deliberate provider-gate failure sends no follow-up route or model request", async ({ page }) => {
   const transport = new DeliberateFailureTransport();
   await expect(transport.runTwoTurnContract()).rejects.toThrow(
     "deliberate conversation failure",
   );
-  await page.goto(`${cabinet.appUrl}/tasks`);
-  await expect(page.getByRole("heading", { name: "Tasks" })).toBeVisible();
+  expect(page.url()).toBe("about:blank");
 });
 
 test("typed unavailable projections are attached but excluded from relevant errors", async () => {
@@ -115,13 +118,55 @@ test("typed unavailable projections are attached but excluded from relevant erro
   expect(recorder.relevantBrowserIssues()).toEqual([]);
 });
 
-test("controlled restart transport errors stay attributed without failing console health", async () => {
+test("health projection sampling remains readable after browser history navigation", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("cabinet.dataDirConfirmed", "1");
+    window.localStorage.setItem("cabinet.wizard-done", "1");
+    window.localStorage.setItem("cabinet.tour-done", "1");
+  });
+  await page.route("**/api/hermes/health", (route) =>
+    route.fulfill({
+      json: {
+        enabled: true,
+        status: "online",
+        version: "fixture",
+        profile: "operator-os",
+      },
+    }),
+  );
+  await page.goto(`${cabinet.appUrl}/room/acceptance-cabinet`);
+  await page.goto(`${cabinet.appUrl}/cockpit`);
+  await page.goBack();
+  await page.goForward();
+
+  await expect(
+    sampleHermesHealthProjection(page, cabinet.appUrl),
+  ).resolves.toBeNull();
+});
+
+test("explicit health projection sampling remains fail-closed for malformed JSON", async () => {
+  expect(classifyHermesHealthProjection(200, "{")).toEqual({
+    path: "/api/hermes/health",
+    severity: "error",
+    summary: "Hermes health returned an unreadable projection.",
+    expectedUnavailableProjection: false,
+  });
+  expect(classifyHermesHealthProjection(200, "null")).toEqual({
+    path: "/api/hermes/health",
+    severity: "error",
+    summary: "Hermes health returned an unreadable projection.",
+    expectedUnavailableProjection: false,
+  });
+});
+
+test("controlled restart transport errors require explicit phase correlation", async () => {
   const recorder = new AcceptanceRecorder();
   recorder.stage("restart-route-persistence");
   recorder.browserIssue({
-    source: "console",
-    severity: "error",
-    summary: "Failed to load resource: net::ERR_CONNECTION_REFUSED",
+    source: "request",
+    severity: "warning",
+    summary: "expected_read_only_listener_loss",
+    expectedControlledRestartTransport: true,
   });
   expect(recorder.browserIssues).toHaveLength(1);
   expect(recorder.relevantBrowserIssues()).toEqual([]);

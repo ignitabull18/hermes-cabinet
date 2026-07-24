@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-24T02:40:00.875Z",
+  "verdict": "NOT_ACCEPTED",
+  "liveRunConsumed": true,
+  "retryAuthorized": false,
+  "productConversationContract": {
+    "initial": {
+      "exactNoncePresent": true,
+      "nonceOccurrenceCount": 1,
+      "surroundingFormattingPresent": true,
+      "alteredOrPartialNoncePresent": false,
+      "persistedContentMatchesRenderedContent": false,
+      "sessionContextPreserved": true
+    },
+    "followUp": {
+      "exactNoncePresent": true,
+      "nonceOccurrenceCount": 1,
+      "surroundingFormattingPresent": true,
+      "alteredOrPartialNoncePresent": false,
+      "persistedContentMatchesRenderedContent": false,
+      "sessionContextPreserved": true
+    },
+    "assistantContentElementCount": 2,
+    "sameNativeSession": true,
+    "exactFinalCardinality": true,
+    "secondRestartCompleted": true,
+    "provider": "ollama-cloud",
+    "model": "glm-5.2",
+    "modelRequests": 2,
+    "providerRetries": 0,
+    "fallbackAttempts": 0,
+    "toolEvents": 0,
+    "decisionEvents": 0,
+    "duplicateChunks": 0,
+    "mcpServers": 0,
+    "pendingRequiredWritesAfterInitial": 0,
+    "pendingRequiredWritesAfterFollowUp": 0,
+    "pendingRequiredWritesAfterSecondRestart": 0
+  },
+  "harnessFailure": {
+    "classification": "measurement_source_binding",
+    "summary": "The gate asserted an optional conversation-detail pending-write field that was null instead of the authoritative acceptance-observability value of zero.",
+    "correctiveCommitRequired": true
+  },
+  "fullRouteHarness": "NOT_RUN",
+  "draftPullRequest": "NOT_OPENED",
+  "productionTouched": false,
+  "security": {
+    "secretIndicators": 0,
+    "localPathIndicators": 0,
+    "consequentialHermesMutations": 0,
+    "searchRequests": 0,
+    "ptyCreateOrWriteRequests": 0,
+    "legacyDaemonOutputRequests": 0
+  },
+  "knownLimitation": "Natural-language exact-output requests are not guaranteed byte-for-byte across all configured models. A future constrained-output contract is required for strict machine output."
+}
