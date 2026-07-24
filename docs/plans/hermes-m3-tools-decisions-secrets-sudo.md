@@ -1,8 +1,15 @@
 # M3 Tools, Decisions, Secrets, and Sudo
 
+> Historical milestone evidence from 2026-07-18. Gateway decision handling and
+> pre-cutover language below describe M3 at that time, not the current native
+> conversation transport. See
+> [`../CURRENT_IMPLEMENTATION.md`](../CURRENT_IMPLEMENTATION.md).
+
 Status: accepted on 2026-07-18
 
-This is the implementation and acceptance record for the M3 governed Hermes interaction layer. It is not cutover approval. Cabinet remains a secondary Hermes interface until M7 passes and Jeremy explicitly approves cutover.
+This is the implementation and acceptance record for the M3 governed Hermes
+interaction layer. At capture it did not approve cutover; M7 later passed and
+superseded that boundary.
 
 ## Delivered architecture
 

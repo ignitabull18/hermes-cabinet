@@ -1,5 +1,10 @@
 # PR #139 Windows Smoke Test Guide
 
+> Historical v0.4.4 smoke procedure for PR #139. Keep its exact commands and
+> expected version paths as release evidence. For current Windows packaging,
+> use [`deployment-packaging-versioning.md`](deployment-packaging-versioning.md)
+> and `.github/workflows/electron-release.yml`.
+
 This guide validates PR #139, `fix(windows): repair CLI install path + remaining POSIX-only assumptions`, on a real Windows 11 machine before release.
 
 The goal is not only to prove TypeScript/tests pass. The important part is to exercise the Windows-only paths that macOS/Linux CI cannot prove:

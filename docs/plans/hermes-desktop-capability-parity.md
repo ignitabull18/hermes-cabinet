@@ -1,6 +1,13 @@
 # Hermes Desktop Capability Parity and Visibility
 
-Status: **Phases 1 through 4C implemented and merged; this remains a living parity and live-evidence register**
+Status: **Phases 1 through 4C implemented and merged. Generated evidence below is a timestamped snapshot, not current live health.**
+
+The latest embedded projection was captured on 2026-07-21. The 2026-07-24
+documentation audit observed `/api/hermes/health` as `probe_unavailable`, so no
+current live-visibility or Live-Proven credit is inferred from the older table.
+Use [`../CURRENT_IMPLEMENTATION.md`](../CURRENT_IMPLEMENTATION.md) for the
+current architecture boundary and regenerate this file before using its
+percentages as operational evidence.
 
 This audit compares runtime-detected installed Hermes metadata, live installed Hermes Agent management/runtime surfaces, a dated upstream `NousResearch/hermes-agent` audit, Cabinet `feat/hermes-functional-parity`, and Cabinet-native equivalents. Installed Hermes determines what can work now. Upstream-only functionality is never counted as current installed support.
 

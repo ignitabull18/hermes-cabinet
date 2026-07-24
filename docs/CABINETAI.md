@@ -61,7 +61,7 @@ Starts Cabinet serving the current cabinet directory.
 ```bash
 cabinetai run
 cabinetai run --no-open              # don't open browser
-cabinetai run --app-version 0.3.1    # use a specific app version
+cabinetai run --app-version 0.5.0    # use a specific published app version
 ```
 
 On first run, downloads a prebuilt app bundle to `~/.cabinet/app/` (on platforms without a bundle it falls back to a source download + `npm install`). If the current directory is not already a cabinet, `run` bootstraps it in place by creating the `.cabinet`, `.agents/`, `.jobs/`, and `.cabinet-state/` structure before starting the server.
@@ -139,7 +139,7 @@ With `--all`, also removes the platform-specific telemetry directory:
 ```
 ~/.cabinet/
   app/
-    v0.3.1/               # Version-pinned app install
+    vX.Y.Z/               # Version-pinned app install
       package.json
       node_modules/
       .next/
@@ -202,13 +202,19 @@ access:
 
 ## Package Structure
 
-Three npm packages, all versioned in lockstep:
+Three packages are intended to release in lockstep:
 
 | File | npm package | Purpose |
 |---|---|---|
 | `package.json` | `cabinet` (private) | The Next.js web app. Source of truth for version. |
 | `cli/package.json` | `create-cabinet` | Thin wrapper — delegates to `cabinetai create` + `cabinetai run` |
 | `cabinetai/package.json` | `cabinetai` | Full CLI. All logic lives here. |
+
+**Current source state (2026-07-24):** all three package manifests are version
+`0.5.3`, but `create-cabinet@0.5.3` still declares `cabinetai@0.4.4`. The latest
+public npm versions are `create-cabinet@0.5.0` and `cabinetai@0.5.0`; GitHub tag
+`v0.5.3` exists, but there is no published `v0.5.3` GitHub Release. Treat the
+dependency mismatch as a release blocker, not as evidence of lockstep delivery.
 
 ```
 cabinet/
@@ -255,7 +261,8 @@ The wrapper resolves `cabinetai` from local `node_modules` first, then falls bac
 
 ## Releasing
 
-One command bumps all versions, commits, tags, and pushes:
+The repository release helper bumps all three package versions, regenerates the
+manifest, commits, tags, and pushes:
 
 ```bash
 ./scripts/release.sh patch   # or minor, major
@@ -275,14 +282,21 @@ One command bumps all versions, commits, tags, and pushes:
 7. Creates git tag: `vX.Y.Z`
 8. Pushes commit + tag to `origin/main`
 
-### What GitHub Actions does (triggered by the tag)
+The helper does **not** update `create-cabinet`'s `cabinetai` dependency. Verify
+and update that dependency before creating a tag.
+
+### What the tag-triggered release workflow does
 
 | Job | What it publishes |
 |---|---|
-| `release-assets` | GitHub Release + `cabinet-release.json` artifact |
+| `release-assets` | Draft GitHub Release + `cabinet-release.json` artifact |
+| `publish-app-bundles` | macOS and Linux standalone app bundles |
 | `publish-cli` | `create-cabinet@X.Y.Z` to npm |
 | `publish-cabinetai` | `cabinetai@X.Y.Z` to npm (builds with esbuild first) |
-| `electron-macos` | Signed macOS DMG + ZIP attached to the GitHub Release |
+
+Desktop Electron artifacts are handled by the separate, manually dispatched
+`electron-release.yml` workflow. It validates macOS and Windows packages and
+publishes them only when a release tag is supplied.
 
 ### Verify after release
 
@@ -323,7 +337,7 @@ https://github.com/cabinetai/cabinet/releases/latest/download/cabinet-release.js
 
 Checks if `~/.cabinet/app/v{version}/` is installed and ready — either a prebuilt bundle (`server.js` + `server/cabinet-daemon.cjs` + `.next/static` + `.native/node-pty`) or a legacy source install (`node_modules/next`). If not installed, it prefers a prebuilt bundle and falls back to a source install:
 
-1. Fetches the release manifest from GitHub and resolves the app bundle for this platform/arch (`darwin-arm64`, `darwin-x64`, `linux-arm64`, `linux-x64`; `win32-x64` is pending validation, see PR #192).
+1. Fetches the release manifest from GitHub and resolves the app bundle for this platform/arch (`darwin-arm64`, `darwin-x64`, `linux-arm64`, `linux-x64`). The current release workflow and manifest do not publish a `win32-x64` standalone bundle, so Windows uses the source fallback.
 2. **Bundle path:** streams `cabinet-app-<key>-vX.Y.Z.tgz`, verifies its SHA-256 when a `.sha256` sidecar is published, extracts to a staging dir, and atomically renames it into place. No `npm install` — it's a ready-to-run standalone build.
 3. **Source fallback** (no bundle for the platform, or the download failed): downloads the release tarball (`/archive/refs/tags/vX.Y.Z.tar.gz`), falls back to `git clone --depth 1 --branch vX.Y.Z` then `git clone --depth 1` (HEAD), runs `npm install`, and copies `.env.example` to `.env.local`.
 

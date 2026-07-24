@@ -1,8 +1,9 @@
 # Contributing translations
 
-Cabinet ships in English and Hebrew today. This doc explains how to add a
-string, audit what's still hardcoded, and add a third locale when the time
-comes.
+Cabinet ships 40 locale bundles today. This doc explains how to add a string,
+audit what is still hardcoded, and add another locale. The authoritative
+locale set is `SUPPORTED_LOCALES` in `src/i18n/index.ts`; do not maintain a
+second hand-written list here.
 
 ## File layout
 
@@ -12,9 +13,10 @@ src/i18n/
   use-locale.ts             useLocale() hook: { t, locale, setLocale, dir }
   formatters.ts             Intl-based date/time/number helpers
   locales/
-    en.json                 ALL English strings, organized by namespace
-    he.json                 ALL Hebrew strings, organized by namespace
-    <new-locale>.json       drop a new file here to add a language
+    en.json                 English source strings, organized by namespace
+    he.json                 Hebrew strings
+    zh-CN.json              Simplified Chinese strings
+    <locale>.json           one consolidated file per supported locale
 ```
 
 Each locale is **one consolidated JSON file** with namespaces as top-level
@@ -28,9 +30,12 @@ keys:
 }
 ```
 
-App locale lives in `localStorage` under `cabinet-locale` (`en` | `he`). A
-pre-hydration inline script in `src/app/layout.tsx` reads it and sets
-`<html dir>` / `<html lang>` before first paint so RTL doesn't flash.
+App locale lives in `localStorage` under `cabinet-locale` and must be a member
+of `SUPPORTED_LOCALES`. `LocaleInitializer` applies the selected locale after
+hydration. The pre-hydration inline script in `src/app/layout.tsx` currently
+recognizes only `en`, `he`, `zh-CN`, and `zh-TW`; the other supported locales
+start with English document metadata until hydration. Keep that limitation
+visible until the inline list is derived or synchronized.
 
 Per-document direction is separate: every page's `dir: ltr | rtl` lives in
 its markdown frontmatter (`src/types/index.ts`). The editor reads it and
@@ -39,13 +44,10 @@ respects it, even if the app chrome is the opposite direction.
 ## Adding a string
 
 1. Pick a namespace from the top level of `en.json` (or create a new one
-   if no existing namespace fits — keep the count small).
-2. Add the key to **both** `en.json` and `he.json`. Prefer nested objects
+   if no existing namespace fits; keep the count small).
+2. Add the English key and value to `en.json`. Prefer nested objects
    (`toolbar.bold`) over flat keys (`toolbarBold`).
-3. If you don't have a translation, leave the Hebrew value empty (`""`) —
-   `i18n.init` falls back to English at render time, and the empty value
-   flags it in code review.
-4. Wrap the call site:
+3. Wrap the call site:
    ```tsx
    import { useLocale } from "@/i18n/use-locale";
 
@@ -54,11 +56,18 @@ respects it, even if the app chrome is the opposite direction.
      return <button title={t("editor:toolbar.bold")}>...</button>;
    }
    ```
-5. For interpolated values:
+4. For interpolated values:
    ```tsx
    t("sidebar:refreshedWithChanges", { added, removed })
-   // JSON: "refreshedWithChanges": "Refreshed — {{added}} added, {{removed}} removed."
-   ```
+    // JSON: "refreshedWithChanges": "Refreshed — {{added}} added, {{removed}} removed."
+    ```
+5. Run `npm run i18n:extract` to add statically detected missing keys to
+   `en.json` and `he.json`. This script does not update the other 38 locale
+   files.
+6. Run `npm run i18n:translate -- --all` with `GOOGLE_AI_API_KEY` configured,
+   or update the remaining locale files manually. Missing keys fall back to
+   English, but an explicit empty string does not currently fall back because
+   i18next's `returnEmptyString` option is not disabled.
 
 ## Auto-extracting keys you forgot to add
 
@@ -66,12 +75,19 @@ If you sprinkled new `t()` calls through code but didn't add the keys to
 the JSON yet, this script walks `src/` and fills them in:
 
 ```sh
-npm run i18n:extract         # adds missing keys (en: defaults to key path, he: empty)
-npm run i18n:check           # exits non-zero if any keys missing (use in CI)
+npm run i18n:extract         # adds missing keys to en.json and he.json
+npm run i18n:check           # exits non-zero if en/he keys are missing
+npm run i18n:translate -- --all  # fills missing values in translation targets
 ```
 
 `i18n:extract` is idempotent: existing keys are preserved, only missing
-ones are added. Diff the JSON to review.
+ones are added. It scans literal `t("namespace:key.path")` calls and does not
+prove that every supported locale is complete. Diff the JSON to review.
+
+**Current validation status (2026-07-24):** `npm run i18n:check` reports six
+missing English keys and 81 missing Hebrew keys. This is existing translation
+debt. The check does not inspect the other 38 catalogs or flag explicit empty
+values.
 
 ## Finding what's still hardcoded
 
@@ -87,30 +103,23 @@ trend down.
 
 ## Adding a new locale
 
-**TL;DR — to add Spanish:**
+1. Copy `src/i18n/locales/en.json` to the new BCP-47 locale file.
+2. Translate every value.
+3. Update `src/i18n/index.ts`: add the import, `SUPPORTED_LOCALES`,
+   `LOCALE_LABELS`, and `resources` entries.
+4. Add the locale mapping to `LOCALE_TO_BCP47` in
+   `src/i18n/formatters.ts`.
+5. If the locale is RTL, add its base language to `RTL_LOCALE_PREFIXES` and
+   the pre-hydration RTL list in `src/app/layout.tsx`.
+6. Run `npm run i18n:check`.
+7. Add the locale to `TARGETS` in `scripts/i18n-translate.mjs` if it should be
+   maintained by the batch translation workflow.
+8. Add it to the pre-hydration supported-locale list in `src/app/layout.tsx`
+   until that list is generated from `SUPPORTED_LOCALES`.
 
-1. `cp src/i18n/locales/en.json src/i18n/locales/es.json`
-2. Translate every value
-3. Add 3 lines in `src/i18n/index.ts` (`import es`, `SUPPORTED_LOCALES`, `LOCALE_LABELS`)
-4. Add a row in `formatters.ts` BCP47 map
-5. Add a row in settings-page `LanguageSection` options
-
-End-to-end (e.g. Spanish):
-
-1. Copy `src/i18n/locales/en.json` → `es.json`. Translate every value.
-2. In `src/i18n/index.ts`:
-   - Add `import es from "./locales/es.json";`
-   - Add to `SUPPORTED_LOCALES`: `["en", "he", "es"]`
-   - Add to `LOCALE_LABELS`: `es: "Español"`
-   - Add to `resources`: `{ en, he, es }`
-3. In `src/i18n/formatters.ts` add `es: "es-ES"` to `LOCALE_TO_BCP47`.
-4. In `src/components/settings/settings-page.tsx`, add a row to the
-   `LanguageSection` options array.
-5. If the new locale is RTL (Arabic, Persian, Urdu), update `localeToDir`
-   in `src/i18n/index.ts` to return `"rtl"` for it. Most RTL polish for
-   Hebrew also handles other RTL scripts.
-
-That's it. No per-namespace files to sync; one file in, one language out.
+`LanguageSection` and onboarding derive their choices from
+`SUPPORTED_LOCALES` and `LOCALE_LABELS`; no separate settings list is needed.
+There are no per-namespace files to synchronize.
 
 ## RTL polish patterns
 
@@ -140,7 +149,7 @@ the user's locale from `localStorage` and adds it to every POST to
 `src/app/api/agents/conversations/route.ts` threads it into the prompt
 builders in `src/lib/agents/conversation-runner.ts`, which inject a
 "Respond in {{language}}" system instruction near the top of the prompt.
-This is how agents reply in Hebrew when the UI is in Hebrew.
+This is how agents reply in the selected UI language.
 
 When `writePage()` (`src/lib/storage/page-io.ts`) saves a note without
 explicit `dir` in frontmatter, it auto-detects Hebrew Unicode range
@@ -149,15 +158,14 @@ Hebrew letters dominate. Explicit frontmatter `dir` always wins.
 
 ## What is intentionally not translated
 
-- **Brand mark `cabinet`** — Latin script, kept in both locales. Renders
+- **Brand mark `cabinet`** — Latin script, kept across locales. Renders
   in Cardo italic when `<html dir="rtl">`.
 - **Keyboard shortcuts** (⌘K, ⌘[, ⌘]) — inline, no translation needed.
 - **Provider identifiers** (`gemini-cli`, `claude-code`, etc.) — code, not
   prose.
 - **Starter team names** in `src/lib/onboarding/rooms.ts` (`Cold Email
-  Agency`, `SEO War Room`, etc.) — these are SaaS jargon brand-names and
-  rarely have natural Hebrew equivalents. Open to revisiting if a Hebrew
-  speaker wants to redesign.
+  Agency`, `SEO War Room`, etc.) — these are product template names rather
+  than locale strings.
 - **The dictionary-card intro** in `IntroStep` (English wordplay on
   "cabinet"). The CTA + tagline translate; the dictionary stays English.
 - **Auto-update prompt text** — sourced from `update-electron-app`.

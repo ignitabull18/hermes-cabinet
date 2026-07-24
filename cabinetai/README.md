@@ -1,6 +1,8 @@
 # cabinetai
 
-AI-first self-hosted knowledge base and startup OS. All content lives as markdown files on disk. Humans define intent. Agents do the work. The knowledge base is the shared memory between both.
+AI-first self-hosted knowledge base and startup OS. Durable knowledge lives as
+markdown files and assets on disk; Cabinet keeps local runtime and index state
+in SQLite. Humans define intent. Agents do the work.
 
 ## Quick Start
 
@@ -27,7 +29,7 @@ That's it — no global install needed. `run` bootstraps the directory, download
 
 ```
 ~/.cabinet/              Global app cache (auto-managed)
-  app/v0.3.0/            Version-pinned prebuilt app bundle
+  app/vX.Y.Z/            Version-pinned prebuilt app bundle
 
 ~/my-startup/            Your cabinet (this is your data)
   .cabinet               YAML manifest
@@ -60,7 +62,7 @@ Start Cabinet serving the current directory.
 ```bash
 npx cabinetai run
 npx cabinetai run --no-open              # don't open browser
-npx cabinetai run --app-version 0.2.12   # use a specific app version
+npx cabinetai run --app-version 0.5.0    # use a published app version
 ```
 
 On first run, downloads the prebuilt app bundle to `~/.cabinet/app/`. If the current directory is not already a cabinet, `run` bootstraps it in place by creating the `.cabinet`, `.agents/`, `.jobs/`, and `.cabinet-state/` structure before starting the server.

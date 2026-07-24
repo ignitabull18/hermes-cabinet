@@ -1,5 +1,9 @@
 # Hermes Runtime Execution Visibility Contract Audit
 
+> Dated contract audit for the installed Hermes 0.18.2 topology captured during
+> Phase 3A. It is not current live health or the current native conversation
+> transport. See [`../CURRENT_IMPLEMENTATION.md`](../CURRENT_IMPLEMENTATION.md).
+
 Phase 3A is a read-only projection over interfaces verified in the installed Hermes Agent `0.18.2` runtime. The installed source identity is commit `594308d4bbe95548c9fe418bb10c449099426f93` (`v2026.7.7.2-1150-g594308d4b`). Cabinet does not create a second runtime store or executor.
 
 ## Verified installed interfaces
@@ -31,4 +35,3 @@ Phase 3A is a read-only projection over interfaces verified in the installed Her
 ## Safety boundary
 
 The projection removes prompts, previews, task titles, complete tool payloads, outputs, reasoning, raw errors, command lines, process identifiers, usernames, email addresses, local paths, remote URLs, credential files, authorization material, and arbitrary metadata before the accepted recursive browser sanitizer. No Phase 3A route exposes approve, reject, cancel, retry, pause, resume, terminate, shell, file-content, restart, or configuration controls.
-

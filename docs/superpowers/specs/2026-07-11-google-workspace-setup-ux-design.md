@@ -1,7 +1,9 @@
 # Google Workspace setup UX — design
 
 **Date:** 2026-07-11
-**Status:** Approved, ready for planning
+**Status at capture:** Approved, ready for planning. This is a dated design
+input, not current integration readiness. Verify current catalog and
+authentication behavior in source before using its problem statements.
 **Goal:** Make connecting Google Workspace possible for a non-technical user. Today it is not.
 
 ## Why

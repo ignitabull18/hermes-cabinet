@@ -6,9 +6,15 @@ All notable changes to Cabinet.
 
 ---
 
-## v0.5.3 · 2026-07-14
+## v0.5.3 source candidate · prepared 2026-07-14
 
-Cabinet v0.5.3 brings the complete desktop delivery and provider-setup work prepared for v0.5.1, plus a clearer Slack setup flow and Google Ads integration. The unpublished v0.5.1 and v0.5.2 candidates were superseded after their release gates caught npm authorization and early-publication failures.
+**Distribution status checked 2026-07-24:** the source, manifest, and tag are
+`0.5.3`, but no v0.5.3 GitHub Release exists and npm still reports `0.5.0` as
+latest. The checked `create-cabinet@0.5.3` source also depends on
+`cabinetai@0.4.4`. This section describes prepared source changes, not a
+verified public release.
+
+The v0.5.3 candidate brings the complete desktop delivery and provider-setup work prepared for v0.5.1, plus a clearer Slack setup flow and Google Ads integration. The unpublished v0.5.1 and v0.5.2 candidates were superseded after their release gates caught npm authorization and early-publication failures.
 
 ### 🟢 New
 - 🟢 **Guided provider setup:** install, sign in, and verify supported agent CLIs from one self-advancing dialog, with browser and interactive terminal login flows handled in-app.
@@ -30,7 +36,11 @@ Cabinet v0.5.3 brings the complete desktop delivery and provider-setup work prep
 
 ### Windows signing status
 
-Windows signing is intentionally optional for v0.5.3. The pipeline still installs, launches, health-checks, and uninstalls the unsigned application before upload. Users may see an “Unknown publisher” label or Microsoft Defender SmartScreen warning until production signing is added.
+Windows signing is intentionally optional for the v0.5.3 candidate. The
+workflow is configured to install, launch, health-check, and uninstall the
+unsigned application before upload. A future published unsigned build may show
+an “Unknown publisher” label or Microsoft Defender SmartScreen warning until
+production signing is added.
 
 ---
 

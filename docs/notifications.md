@@ -1,5 +1,7 @@
 # In-App Notifications
 
+Source rechecked 2026-07-24.
+
 ## Overview
 
 Cabinet has an in-app toast notification system that alerts users when agent conversations (tasks) start, complete, or fail. Notifications appear as slide-in toasts in the bottom-right corner and are clickable to navigate directly to the conversation.
@@ -69,7 +71,10 @@ The following notification types are not yet implemented but are candidates for 
 ## Customization (Future)
 
 - Notification preferences (mute per agent, mute by type)
-- Sound alerts
 - Notification history panel
 - Desktop notifications (Electron)
 - Persistent notification badge in header
+
+Hermes Settings has a Cabinet-local notification preference preview and test
+action. Those preferences are not canonical Hermes Desktop settings and do not
+currently gate the conversation toast/sound path documented above.

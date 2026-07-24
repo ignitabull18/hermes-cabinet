@@ -1,5 +1,10 @@
 # M7 Full Conversion Acceptance and Cutover Evidence
 
+> Historical cutover evidence from 2026-07-18. It proves the M7 decision at the
+> recorded revisions; its Gateway references do not describe the current native
+> ACP conversation transport. See
+> [`../CURRENT_IMPLEMENTATION.md`](../CURRENT_IMPLEMENTATION.md).
+
 Status: cutover approved by Jeremy Hamilton on 2026-07-18; M7 complete
 
 This document is the evidence package for IG-448, IG-449, IG-419, and Jeremy's decision in IG-450. Jeremy recorded **Approve cutover** on 2026-07-18. Cabinet is now approved as his primary Hermes interface. The cutover decision did not itself authorize a merge; PR #1 was subsequently approved and merged as `e2b0ba4c`.

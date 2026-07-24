@@ -10,7 +10,9 @@
 
 Status: verified against the installed Hermes runtime on 2026-07-18
 
-This record supports the Hermes-first Cabinet implementation plan. It is not a cutover approval. Cabinet must remain a secondary Hermes interface until M7 passes and the operator explicitly approves cutover.
+This record supported the Hermes-first Cabinet implementation plan. At capture
+it was not cutover approval. M7 later passed, and the historical Gateway
+execution recommendation below was superseded by ACP over stdio.
 
 ## Verified runtime
 

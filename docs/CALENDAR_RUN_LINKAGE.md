@@ -3,6 +3,10 @@
 Date: 2026-04-17
 Branch: `main` (commits `480ce33`, `e4fa13d`)
 
+**Status:** Historical implementation record. Current schedule UI is
+centralized in `src/components/cabinets/schedule-view.tsx`; use current source
+and [`CLAUDE.md`](CLAUDE.md) when a path below no longer exists.
+
 ## What prompted this work
 
 The Jobs & heartbeats calendar had three problems visible in the user's screenshots:

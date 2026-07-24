@@ -1,6 +1,9 @@
 # PRD — Cabinet Mobile Responsive
 
-**Author.** hilash · **Date.** 2026-05-15 · **Status.** Draft · **Related.** PR #21 (micahbrich, stalled)
+**Author.** hilash · **Date.** 2026-05-15 · **Status.** Historical draft, not a
+current completion checklist. Mobile behavior has since shipped across several
+surfaces with 390x844 Playwright coverage, but this broad original scope was
+not re-certified as one unit in the 2026-07-24 documentation audit.
 
 ## Goal
 

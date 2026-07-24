@@ -35,7 +35,7 @@ npx cabinetai --help               # Show all commands
 
 ## What You Get
 
-- WYSIWYG markdown editor with AI editing panel (Claude)
+- WYSIWYG markdown editor with provider-backed AI editing
 - Agent dashboard — define personas, run tasks, view transcripts
 - Scheduled jobs — cron-based automation with YAML configs
 - Kanban task board

@@ -1,8 +1,14 @@
 # M6 First-Class Hermes Management Acceptance
 
+> Historical milestone evidence from 2026-07-18. The pre-cutover and Hermes
+> 0.18.2 limitations below are a dated management-contract record. See
+> [`../CURRENT_IMPLEMENTATION.md`](../CURRENT_IMPLEMENTATION.md).
+
 Status: implementation and acceptance evidence complete on 2026-07-18
 
-This milestone makes Cabinet a governed management surface over Hermes. It does not approve daily cutover. Cabinet remains secondary until M7 passes and Jeremy explicitly approves the cutover.
+This milestone made Cabinet a governed management surface over Hermes. At
+capture it did not approve daily cutover; M7 later passed and superseded that
+boundary.
 
 ## Source-of-truth architecture
 
