@@ -80,4 +80,3 @@ test("source contract has no downstream operator-envelope injection", async () =
     /Changed: none|Success criteria: response completed|Next action: none/,
   );
 });
-
