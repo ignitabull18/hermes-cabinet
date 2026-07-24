@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "verdict": "NOT_ACCEPTED",
+  "liveRuns": 1,
+  "retried": false,
+  "remainingProductBlocker": "The initial assistant response was not the exact required response.",
+  "firstLiveObservableDivergence": "acp_normalized_response",
+  "envelopeOwner": "pre-ACP response generation under operator-os formatting precedence",
+  "exactness": {
+    "initial": {
+      "rawModelFinalExact": null,
+      "acpNormalizedExact": false,
+      "persistedExact": false,
+      "renderedMessageBodyExact": false,
+      "harnessExtractionExact": false,
+      "messageBodyElementCount": 2
+    },
+    "followUp": {
+      "rawModelFinalExact": null,
+      "acpNormalizedExact": false,
+      "persistedExact": true,
+      "renderedMessageBodyExact": true,
+      "harnessExtractionExact": true,
+      "messageBodyElementCount": 2
+    }
+  },
+  "provider": {
+    "identity": "ollama-cloud",
+    "model": "glm-5.2",
+    "requests": 2,
+    "retries": 0,
+    "fallbacks": 0
+  },
+  "persistence": {
+    "nativeSessionIdentityStable": true,
+    "secondRestartCompleted": true,
+    "userTurns": 2,
+    "completedAssistantTurns": 2,
+    "totalTurns": 4,
+    "duplicateTurnIdentities": 0,
+    "pendingRequiredWritesAfterCompletion": 0
+  },
+  "assistantContentBoundary": {
+    "selectorResolved": true,
+    "elementCount": 2,
+    "followUpRenderedExact": true,
+    "zeroElementDefectResolved": true
+  },
+  "routes": {
+    "total": 15,
+    "accepted": 0,
+    "notRun": 15,
+    "reason": "The exact two-turn gate did not pass."
+  },
+  "browser": {
+    "fullDesktopRun": "NOT_RUN",
+    "fullMobileRun": "NOT_RUN",
+    "relevantRecordedIssues": 0
+  },
+  "safety": {
+    "productionTouched": false,
+    "consequentialHermesMutations": 0,
+    "searchRequests": 0,
+    "ptyCreateOrWriteRequests": 0,
+    "secretIndicatorsInPreservedArtifact": 0,
+    "localPathIndicatorsInPreservedArtifact": 0,
+    "credentialRotationPerformed": false,
+    "transientBrowserPathDisclosure": "The isolated onboarding UI rendered its temporary data location in transient Browser tool output. It was not retained in repository evidence or sent externally."
+  }
+}
