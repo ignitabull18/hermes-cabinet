@@ -104,3 +104,13 @@ test("missing, duplicate, or non-exact rendered message bodies fail closed", () 
     );
   }
 });
+
+test("the production selector identifies only the assistant persisted-content semantic", () => {
+  assert.equal(
+    selector,
+    '[data-testid="turn"][data-turn-role="agent"] > ' +
+      '[data-testid="assistant-message-content"]' +
+      '[data-message-author="assistant"][data-message-part="content"]',
+  );
+  assert.doesNotMatch(selector, /class|:nth|text=|CABINET_ACCEPTANCE_OK/);
+});

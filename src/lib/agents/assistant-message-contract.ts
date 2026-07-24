@@ -19,7 +19,8 @@ export const TURN_TEST_IDS = {
 } as const;
 
 export const ASSISTANT_MESSAGE_CONTENT_SELECTOR =
-  `[data-testid="${TURN_TEST_IDS.assistantContent}"]`;
+  `[data-testid="${TURN_TEST_IDS.assistantContent}"]` +
+  `[data-message-author="assistant"][data-message-part="content"]`;
 
 export const ASSISTANT_TURN_SELECTOR =
   `[data-testid="${TURN_TEST_IDS.turn}"][data-turn-role="agent"]`;

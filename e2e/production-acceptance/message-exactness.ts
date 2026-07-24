@@ -1,4 +1,4 @@
-import type { Locator, Page } from "@playwright/test";
+import { errors, type Locator, type Page } from "@playwright/test";
 
 import {
   ASSISTANT_MESSAGE_CONTENT_SELECTOR,
@@ -37,6 +37,28 @@ export async function captureMessageExactnessEvidence(
     `${ASSISTANT_TURN_SELECTOR} > ${ASSISTANT_MESSAGE_CONTENT_SELECTOR}`,
   );
   const turnContainers = page.locator(ASSISTANT_TURN_SELECTOR);
+
+  // TaskConversationPage loads durable turns in a client effect after the
+  // document load event. Locator.count() is an immediate snapshot, so reading
+  // it here without an explicit DOM cardinality barrier races that fetch and
+  // can report zero even when both persisted turns render moments later.
+  try {
+    await page.waitForFunction(
+      ({ selector, expected }) =>
+        document.querySelectorAll(selector).length === expected,
+      {
+        selector:
+          `${ASSISTANT_TURN_SELECTOR} > ${ASSISTANT_MESSAGE_CONTENT_SELECTOR}`,
+        expected: 2,
+      },
+      { timeout: 30_000 },
+    );
+  } catch (error) {
+    // Preserve the content-free equality ledger on a genuine cardinality
+    // timeout; assertMessageExactnessEvidence will still fail closed on the
+    // captured count. Navigation/browser errors remain immediate failures.
+    if (!(error instanceof errors.TimeoutError)) throw error;
+  }
   const elementCount = await messageBodies.count();
   const persisted = [conversation.firstResponse, conversation.secondResponse];
 
