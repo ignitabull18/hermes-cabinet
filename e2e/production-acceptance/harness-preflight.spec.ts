@@ -15,7 +15,7 @@ test.beforeAll(async () => {
     execFileSync("git", ["merge-base", "HEAD", "origin/main"], {
       encoding: "utf8",
     }).trim(),
-  ).toBe("6854d52eb6697c96d1355f1c7f4d443076d68602");
+  ).toBe("6178270d7276418e04c78b6eff14285d2b622fc2");
   cabinet = await bootIsolatedCabinet(process.cwd());
 });
 

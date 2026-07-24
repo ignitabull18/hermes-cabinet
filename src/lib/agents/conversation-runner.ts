@@ -54,6 +54,7 @@ import { looksLikeAwaitingInput } from "./task-heuristics";
 import { emit as emitTelemetry } from "@/lib/telemetry";
 import {
   readAcceptanceRuntimeObservation,
+  recordAcceptanceResponseExactness,
   recordAcceptanceRuntimeObservation,
   type AcceptanceFailureClass,
   type AcceptanceProviderHttpStatus,
@@ -841,6 +842,9 @@ export async function startConversationRun(
           ? adapter.classifyError(result.errorMessage || "", result.exitCode ?? null)
           : null;
         recordHermesExecutionObservation(meta.id, result, classified?.kind);
+        recordAcceptanceResponseExactness(meta.id, "initial", {
+          acpNormalized: result.output,
+        });
 
         if (!failed && (result.sessionId || result.sessionParams)) {
           const codecBlob = adapter.sessionCodec && result.sessionParams
@@ -1568,6 +1572,9 @@ async function runContinueInProcess(input: {
     }
     if (adapter.type === "hermes_runtime") {
       recordHermesExecutionObservation(conversationId, result, classified?.kind);
+      recordAcceptanceResponseExactness(conversationId, "followUp", {
+        acpNormalized: result.output,
+      });
     }
 
     const tokens = result.usage

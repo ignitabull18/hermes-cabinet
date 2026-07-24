@@ -3,8 +3,10 @@ import fs from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import { createHash } from "node:crypto";
+import { TRANSPORT_TOKEN } from "./transport";
 
-const DEFAULT_APP_PORT = 4325;
+const DEFAULT_APP_PORT = 4335;
 
 export interface IsolatedCabinet {
   appUrl: string;
@@ -169,6 +171,9 @@ Isolated acceptance fixture. No model execution is authorized.
     CABINET_HERMES_INTERVENTIONS_ENABLED: "false",
     CABINET_ACCEPTANCE_ISOLATED: "1",
     CABINET_ACCEPTANCE_OBSERVABILITY: "1",
+    CABINET_ACCEPTANCE_EXPECTED_RESPONSE_SHA256: createHash("sha256")
+      .update(TRANSPORT_TOKEN)
+      .digest("hex"),
     CABINET_DAEMON_PORT: String(appPort + 10),
     KB_PASSWORD: "",
     NODE_ENV: "production",

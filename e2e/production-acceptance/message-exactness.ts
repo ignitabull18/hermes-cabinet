@@ -44,11 +44,17 @@ export async function captureMessageExactnessEvidence(
     (["initial", "follow-up"] as const).map(async (turn, index) => {
       const renderedMessageBody = await innerTextAt(messageBodies, index);
       const largerContainer = await innerTextAt(turnContainers, index);
+      const responseExactness = index === 0
+        ? conversation.responseExactness.initial
+        : conversation.responseExactness.followUp;
       return {
         turn,
+        rawModelFinalExact: responseExactness.rawModelFinalExact,
+        acpNormalizedExact: responseExactness.acpNormalizedExact,
         persistedExact: exact(persisted[index]),
         renderedMessageBodyExact:
           renderedMessageBody === null ? false : exact(renderedMessageBody),
+        harnessExtractionExact: exact(persisted[index]),
         largerContainerExact:
           largerContainer === null ? false : exact(largerContainer),
         selector:
@@ -71,6 +77,15 @@ export function assertMessageExactnessEvidence(
     }
     if (!entry.persistedExact) {
       throw new Error(`${entry.turn} persisted response was not the exact acceptance token`);
+    }
+    if (entry.rawModelFinalExact === false) {
+      throw new Error(`${entry.turn} raw model final response was not exact`);
+    }
+    if (entry.acpNormalizedExact !== true) {
+      throw new Error(`${entry.turn} ACP normalized response was not exact`);
+    }
+    if (!entry.harnessExtractionExact) {
+      throw new Error(`${entry.turn} harness extraction was not exact`);
     }
     if (!entry.renderedMessageBodyExact) {
       throw new Error(`${entry.turn} rendered message body was not the exact acceptance token`);

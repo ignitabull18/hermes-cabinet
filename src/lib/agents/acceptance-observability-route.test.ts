@@ -12,6 +12,7 @@ import {
 } from "@/lib/agents/conversation-store";
 import {
   clearAcceptanceRuntimeObservation,
+  recordAcceptanceResponseExactness,
   recordAcceptanceRuntimeObservation,
 } from "@/lib/agents/acceptance-observability";
 import { GET } from "@/app/api/agents/conversations/[id]/acceptance-observability/route";
@@ -21,10 +22,13 @@ function setAcceptanceEnvironment(): () => void {
     enabled: process.env.CABINET_ACCEPTANCE_OBSERVABILITY,
     isolated: process.env.CABINET_ACCEPTANCE_ISOLATED,
     mode: process.env.CABINET_RUNTIME_MODE,
+    expected: process.env.CABINET_ACCEPTANCE_EXPECTED_RESPONSE_SHA256,
   };
   process.env.CABINET_ACCEPTANCE_OBSERVABILITY = "1";
   process.env.CABINET_ACCEPTANCE_ISOLATED = "1";
   process.env.CABINET_RUNTIME_MODE = "hermes";
+  process.env.CABINET_ACCEPTANCE_EXPECTED_RESPONSE_SHA256 =
+    "cf67f6dfb6fd6f991f7fcb980116362a121dc1478ced0d515b97393bd3f28d62";
   return () => {
     if (previous.enabled === undefined) delete process.env.CABINET_ACCEPTANCE_OBSERVABILITY;
     else process.env.CABINET_ACCEPTANCE_OBSERVABILITY = previous.enabled;
@@ -32,6 +36,8 @@ function setAcceptanceEnvironment(): () => void {
     else process.env.CABINET_ACCEPTANCE_ISOLATED = previous.isolated;
     if (previous.mode === undefined) delete process.env.CABINET_RUNTIME_MODE;
     else process.env.CABINET_RUNTIME_MODE = previous.mode;
+    if (previous.expected === undefined) delete process.env.CABINET_ACCEPTANCE_EXPECTED_RESPONSE_SHA256;
+    else process.env.CABINET_ACCEPTANCE_EXPECTED_RESPONSE_SHA256 = previous.expected;
   };
 }
 
@@ -92,6 +98,9 @@ test("acceptance observability returns content-free 2/2 counts and provider diag
       lastFailureClass: "none",
       acpChildState: "running",
     });
+    recordAcceptanceResponseExactness(meta.id, "initial", {
+      acpNormalized: "private initial response",
+    });
 
     const response = await GET(new Request("http://127.0.0.1/"), {
       params: Promise.resolve({ id: meta.id }),
@@ -114,9 +123,19 @@ test("acceptance observability returns content-free 2/2 counts and provider diag
     assert.equal(body.modelRequestsAttempted, 2);
     assert.equal(body.providerRetries, 0);
     assert.equal(body.fallbackAttempts, 0);
+    assert.deepEqual(body.responseExactness, {
+      initial: {
+        rawModelFinalExact: null,
+        acpNormalizedExact: false,
+      },
+      followUp: {
+        rawModelFinalExact: null,
+        acpNormalizedExact: null,
+      },
+    });
     assert.doesNotMatch(
       JSON.stringify(body),
-      /private|prompt|response|content|header|endpoint|environment|path/i,
+      /private|prompt|content|header|endpoint|environment|path/i,
     );
   } finally {
     clearAcceptanceRuntimeObservation(meta.id);

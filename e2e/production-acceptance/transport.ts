@@ -7,7 +7,7 @@ import type {
   ConversationTurnDiagnostic,
 } from "./contracts";
 
-export const ACCEPTANCE_NAME = "CABINET ACP PROVIDER FINAL — 2026-07-23";
+export const ACCEPTANCE_NAME = "CABINET ACP EXACT RESPONSE FINAL — 2026-07-23";
 export const INITIAL_PROMPT =
   "This is a local Cabinet acceptance test. Do not use tools or contact external systems. Reply with exactly CABINET_ACCEPTANCE_OK.";
 export const FOLLOW_UP_PROMPT =
@@ -68,6 +68,7 @@ export interface AcceptanceConversation {
   cabinetRestart: boolean;
   userTurns: number;
   completedAssistantTurns: number;
+  responseExactness: AcceptanceConversationObservation["responseExactness"];
 }
 
 export interface AcceptanceTransport {
@@ -347,6 +348,24 @@ export class LiveCabinetAcpTransport implements AcceptanceTransport {
         cabinetRestart: true,
         userTurns: users.length,
         completedAssistantTurns: assistants.length,
+        responseExactness: {
+          initial: {
+            rawModelFinalExact:
+              firstDurable.acceptanceObservability?.responseExactness.initial.rawModelFinalExact
+              ?? null,
+            acpNormalizedExact:
+              firstDurable.acceptanceObservability?.responseExactness.initial.acpNormalizedExact
+              ?? null,
+          },
+          followUp: {
+            rawModelFinalExact:
+              secondDurable.acceptanceObservability?.responseExactness.followUp.rawModelFinalExact
+              ?? null,
+            acpNormalizedExact:
+              secondDurable.acceptanceObservability?.responseExactness.followUp.acpNormalizedExact
+              ?? null,
+          },
+        },
       };
     } finally {
       const sessionIdentities = checkpoints
@@ -393,6 +412,16 @@ export class FixtureAcceptanceTransport implements AcceptanceTransport {
       cabinetRestart: false,
       userTurns: 2,
       completedAssistantTurns: 2,
+      responseExactness: {
+        initial: {
+          rawModelFinalExact: null,
+          acpNormalizedExact: true,
+        },
+        followUp: {
+          rawModelFinalExact: null,
+          acpNormalizedExact: true,
+        },
+      },
     };
   }
 }

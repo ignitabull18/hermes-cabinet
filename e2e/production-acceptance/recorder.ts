@@ -259,7 +259,11 @@ ${blockers}
 ## Accounting
 
 - Persisted exact: ${result.messageExactness.map((entry) => `${entry.turn}=${entry.persistedExact}`).join(", ") || "not observed"}
+- Raw model final exact: ${result.messageExactness.map((entry) => `${entry.turn}=${entry.rawModelFinalExact}`).join(", ") || "not observed"}
+- ACP normalized exact: ${result.messageExactness.map((entry) => `${entry.turn}=${entry.acpNormalizedExact}`).join(", ") || "not observed"}
 - Rendered message-body exact: ${result.messageExactness.map((entry) => `${entry.turn}=${entry.renderedMessageBodyExact}`).join(", ") || "not observed"}
+- Harness extraction exact: ${result.messageExactness.map((entry) => `${entry.turn}=${entry.harnessExtractionExact}`).join(", ") || "not observed"}
+- Larger container exact: ${result.messageExactness.map((entry) => `${entry.turn}=${entry.largerContainerExact}`).join(", ") || "not observed"}
 - Larger container exact: ${result.messageExactness.map((entry) => `${entry.turn}=${entry.largerContainerExact}`).join(", ") || "not observed"}
 - Message-body selector: ${result.messageExactness[0]?.selector ?? "not observed"}
 - Message-body element count: ${result.messageExactness[0]?.elementCount ?? "not observed"}

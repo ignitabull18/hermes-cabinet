@@ -79,5 +79,15 @@ export async function GET(
     fallbackAttempts: runtime?.fallbackAttempts ?? 0,
     lastProviderHttpStatus: runtime?.lastProviderHttpStatus ?? "none",
     lastFailureClass: runtime?.lastFailureClass ?? "none",
+    responseExactness: runtime?.responseExactness ?? {
+      initial: {
+        rawModelFinalExact: null,
+        acpNormalizedExact: null,
+      },
+      followUp: {
+        rawModelFinalExact: null,
+        acpNormalizedExact: null,
+      },
+    },
   });
 }

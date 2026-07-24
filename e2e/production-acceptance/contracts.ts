@@ -110,6 +110,16 @@ export interface AcceptanceConversationObservation {
     | "transport"
     | "timeout"
     | "unknown";
+  responseExactness: {
+    initial: {
+      rawModelFinalExact: boolean | null;
+      acpNormalizedExact: boolean | null;
+    };
+    followUp: {
+      rawModelFinalExact: boolean | null;
+      acpNormalizedExact: boolean | null;
+    };
+  };
 }
 
 export interface ConversationCheckpointEvidence {
@@ -149,8 +159,11 @@ export interface ConversationPersistenceEvidence {
 
 export interface AcceptanceMessageExactnessEvidence {
   turn: "initial" | "follow-up";
+  rawModelFinalExact: boolean | null;
+  acpNormalizedExact: boolean | null;
   persistedExact: boolean;
   renderedMessageBodyExact: boolean;
+  harnessExtractionExact: boolean;
   largerContainerExact: boolean;
   selector: string;
   elementCount: number;
