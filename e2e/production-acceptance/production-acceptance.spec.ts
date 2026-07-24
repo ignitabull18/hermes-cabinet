@@ -5,7 +5,11 @@ import path from "node:path";
 
 import { buildHermesAcceptanceFixtureProjection } from "../../src/lib/hermes/control-center-acceptance-fixture";
 import { buildHermesSkillsAcceptanceSnapshot } from "../../src/lib/hermes/skills-management-fixture";
-import type { AcceptanceStatus, RouteChecklistEntry } from "./contracts";
+import type {
+  AcceptanceStatus,
+  ConversationPersistenceEvidence,
+  RouteChecklistEntry,
+} from "./contracts";
 import { bootIsolatedCabinet, type IsolatedCabinet } from "./isolated-cabinet";
 import {
   AcceptanceRecorder,
@@ -16,14 +20,14 @@ import {
 } from "./recorder";
 import { discoverRouteManifest } from "./route-discovery";
 import {
-  assertExactAcceptanceToken,
-  TRANSPORT_TOKEN,
+  assertAcceptanceNonce,
+  TRANSPORT_NONCE,
   selectTransport,
   type AcceptanceConversation,
 } from "./transport";
 import {
-  assertMessageExactnessEvidence,
-  captureMessageExactnessEvidence,
+  assertMessageFidelityEvidence,
+  captureMessageFidelityEvidence,
 } from "./message-exactness";
 
 test.describe.configure({ mode: "serial" });
@@ -31,7 +35,7 @@ test.setTimeout(600_000);
 
 const CHECK_TIMEOUT_MS = 45_000;
 const INTERACTION_TIMEOUT_MS = 15_000;
-const appPort = Number(process.env.CABINET_ACCEPTANCE_PORT ?? 4343);
+const appPort = Number(process.env.CABINET_ACCEPTANCE_PORT ?? 4344);
 const repoRoot = process.cwd();
 const acceptanceBaseRef = process.env.CABINET_ACCEPTANCE_BASE_REVISION ?? "origin/main";
 const acceptanceBaseRevision = execFileSync("git", ["rev-parse", acceptanceBaseRef], {
@@ -123,6 +127,48 @@ async function observed<T>(
 
 function notRun(id: string, area: string, summary: string): void {
   addCheck(id, area, "not_run", summary);
+}
+
+function assertLiveConversationEvidence(
+  evidence: ConversationPersistenceEvidence | null,
+): void {
+  expect(evidence).not.toBeNull();
+  expect(evidence?.nativeSessionIdentityStable).toBe(true);
+  expect(evidence?.exactFinalCardinality).toBe(true);
+  expect(evidence?.secondRestartCompleted).toBe(true);
+  const byCheckpoint = new Map(
+    evidence?.checkpoints.map((checkpoint) => [checkpoint.checkpoint, checkpoint]),
+  );
+  for (const checkpoint of ["B", "C", "D"] as const) {
+    expect(byCheckpoint.get(checkpoint)?.durableStoreCounts).toMatchObject({
+      user: 1,
+      completedAssistant: 1,
+      total: 2,
+      duplicateTurnIdentities: 0,
+    });
+  }
+  for (const checkpoint of ["G", "H"] as const) {
+    expect(byCheckpoint.get(checkpoint)?.durableStoreCounts).toMatchObject({
+      user: 2,
+      completedAssistant: 2,
+      total: 4,
+      duplicateTurnIdentities: 0,
+    });
+  }
+  for (const checkpoint of ["C", "G", "H"] as const) {
+    expect(byCheckpoint.get(checkpoint)?.pendingRequiredWrites).toBe(0);
+  }
+  for (const checkpoint of ["B", "F"] as const) {
+    expect(byCheckpoint.get(checkpoint)?.observability).toMatchObject({
+      modelRequestsAttempted: 1,
+      providerRetries: 0,
+      fallbackAttempts: 0,
+      toolEventCount: 0,
+      decisionEventCount: 0,
+      duplicateChunkCount: 0,
+      mcpServerCount: 0,
+    });
+  }
 }
 
 async function installPageObservation(page: Page) {
@@ -348,7 +394,7 @@ test.afterAll(async () => {
     network: recorder.network,
     browserIssues: recorder.browserIssues,
     conversationPersistence: recorder.conversationPersistence,
-    messageExactness: recorder.messageExactness,
+    messageFidelity: recorder.messageFidelity,
     screenshots: recorder.screenshots,
     productionTouched: false,
   }, recorder.scanText.join("\n"));
@@ -369,16 +415,17 @@ test("two-turn provider gate", async ({ page }) => {
         (method, pathname) => recorder.request(method, pathname),
       );
       if (transport.sendsLiveModelMessages) {
-        const exactness = await captureMessageExactnessEvidence(
+        const fidelity = await captureMessageFidelityEvidence(
           page,
           cabinet.appUrl,
           result,
         );
-        recorder.recordMessageExactness(exactness);
-        assertMessageExactnessEvidence(exactness);
+        recorder.recordMessageFidelity(fidelity);
+        assertMessageFidelityEvidence(fidelity);
+        assertLiveConversationEvidence(recorder.conversationPersistence);
       } else {
-        assertExactAcceptanceToken(result.firstResponse, "initial");
-        assertExactAcceptanceToken(result.secondResponse, "follow-up");
+        assertAcceptanceNonce(result.firstResponse, "initial");
+        assertAcceptanceNonce(result.secondResponse, "follow-up");
       }
       expect(result.sameSession).toBe(true);
       expect(result.userTurns).toBe(2);
@@ -387,7 +434,7 @@ test("two-turn provider gate", async ({ page }) => {
       return result;
     },
     (result) =>
-      `${transport.id} returned the exact token twice with two user and two completed assistant turns` +
+      `${transport.id} returned the exact nonce once per response with two user and two completed assistant turns` +
       `${result.cabinetRestart ? " across a Cabinet restart" : ""}.`,
     (error) => `Two-turn provider gate failed: ${String(error)}`,
     {
@@ -868,7 +915,15 @@ test("authoritative isolated production acceptance", async ({ page }) => {
         await page.goto(
           `${cabinet.appUrl}/agents/conversations/${conversation.conversationId}`,
         );
-        await expect(page.locator("body")).toContainText(TRANSPORT_TOKEN);
+        const transcriptBodies = page.locator(
+          '[data-testid="turn"][data-turn-role="agent"] > ' +
+            '[data-testid="assistant-message-content"]' +
+            '[data-message-author="assistant"][data-message-part="content"]',
+        );
+        await expect(transcriptBodies).toHaveCount(2);
+        for (const body of await transcriptBodies.allInnerTexts()) {
+          expect(body.split(TRANSPORT_NONCE)).toHaveLength(2);
+        }
         markRoute(routes, "/agents/conversations/:id", "passed");
         return { directTask: true, reload: true, transcript: true };
       },

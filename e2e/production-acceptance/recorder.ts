@@ -5,7 +5,7 @@ import type {
   AcceptanceBlocker,
   BrowserIssue,
   AcceptanceCheck,
-  AcceptanceMessageExactnessEvidence,
+  AcceptanceMessageFidelityEvidence,
   AcceptanceResult,
   ConversationPersistenceEvidence,
   NetworkSummary,
@@ -50,7 +50,7 @@ export class AcceptanceRecorder {
   readonly screenshots: ScreenshotEntry[] = [];
   readonly browserIssues: BrowserIssue[] = [];
   conversationPersistence: ConversationPersistenceEvidence | null = null;
-  readonly messageExactness: AcceptanceMessageExactnessEvidence[] = [];
+  readonly messageFidelity: AcceptanceMessageFidelityEvidence[] = [];
   readonly navigation = { desktop: [] as string[], mobile: [] as string[] };
   readonly network: NetworkSummary = {
     total: 0,
@@ -87,8 +87,8 @@ export class AcceptanceRecorder {
     this.conversationPersistence = evidence;
   }
 
-  recordMessageExactness(evidence: AcceptanceMessageExactnessEvidence[]): void {
-    this.messageExactness.splice(0, this.messageExactness.length, ...evidence);
+  recordMessageFidelity(evidence: AcceptanceMessageFidelityEvidence[]): void {
+    this.messageFidelity.splice(0, this.messageFidelity.length, ...evidence);
   }
 
   relevantBrowserIssues(): BrowserIssue[] {
@@ -193,7 +193,7 @@ export async function writeAcceptanceArtifacts(
       ? "ACCEPTED"
       : "NOT_ACCEPTED";
   const result: AcceptanceResult = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     generatedAt: new Date().toISOString(),
     verdict,
     scans,
@@ -258,14 +258,14 @@ ${blockers}
 
 ## Accounting
 
-- Persisted exact: ${result.messageExactness.map((entry) => `${entry.turn}=${entry.persistedExact}`).join(", ") || "not observed"}
-- Raw model final exact: ${result.messageExactness.map((entry) => `${entry.turn}=${entry.rawModelFinalExact}`).join(", ") || "not observed"}
-- ACP normalized exact: ${result.messageExactness.map((entry) => `${entry.turn}=${entry.acpNormalizedExact}`).join(", ") || "not observed"}
-- Rendered message-body exact: ${result.messageExactness.map((entry) => `${entry.turn}=${entry.renderedMessageBodyExact}`).join(", ") || "not observed"}
-- Harness extraction exact: ${result.messageExactness.map((entry) => `${entry.turn}=${entry.harnessExtractionExact}`).join(", ") || "not observed"}
-- Larger container exact: ${result.messageExactness.map((entry) => `${entry.turn}=${entry.largerContainerExact}`).join(", ") || "not observed"}
-- Message-body selector: ${result.messageExactness[0]?.selector ?? "not observed"}
-- Message-body element count: ${result.messageExactness[0]?.elementCount ?? "not observed"}
+- Exact nonce present: ${result.messageFidelity.map((entry) => `${entry.turn}=${entry.exactNoncePresent}`).join(", ") || "not observed"}
+- Nonce occurrence count: ${result.messageFidelity.map((entry) => `${entry.turn}=${entry.nonceOccurrenceCount}`).join(", ") || "not observed"}
+- Surrounding formatting present: ${result.messageFidelity.map((entry) => `${entry.turn}=${entry.surroundingFormattingPresent}`).join(", ") || "not observed"}
+- Altered or partial nonce present: ${result.messageFidelity.map((entry) => `${entry.turn}=${entry.alteredOrPartialNoncePresent}`).join(", ") || "not observed"}
+- Persisted content matches rendered content: ${result.messageFidelity.map((entry) => `${entry.turn}=${entry.persistedContentMatchesRenderedContent}`).join(", ") || "not observed"}
+- Session context preserved: ${result.messageFidelity.map((entry) => `${entry.turn}=${entry.sessionContextPreserved}`).join(", ") || "not observed"}
+- Message-body selector: ${result.messageFidelity[0]?.selector ?? "not observed"}
+- Message-body element count: ${result.messageFidelity[0]?.elementCount ?? "not observed"}
 - Requests: ${result.network.total}
 - Mutations observed: ${result.network.mutations}
 - Legacy daemon-output requests: ${result.network.legacyDaemonOutputRequests}
@@ -277,6 +277,10 @@ ${blockers}
 - Provider requests attempted: ${providerRequests}
 - Provider retries: ${providerRetries}
 - Fallback attempts: ${fallbackAttempts}
+- Tool events: ${completedPromptSnapshots.reduce((total, snapshot) => total + snapshot.toolEventCount, 0)}
+- Decision events: ${completedPromptSnapshots.reduce((total, snapshot) => total + snapshot.decisionEventCount, 0)}
+- Duplicate chunks: ${completedPromptSnapshots.reduce((total, snapshot) => total + snapshot.duplicateChunkCount, 0)}
+- MCP servers: ${completedPromptSnapshots.reduce((total, snapshot) => total + snapshot.mcpServerCount, 0)}
 - Consequential Hermes mutations: ${result.network.consequentialHermesMutations}
 - Relevant browser issues: ${selectRelevantBrowserIssues(result.browserIssues).length}
 - Developer diagnostics observed: ${result.checks.find((check) => check.id === "developer-diagnostics-48")?.evidence?.count ?? "not observed"}
@@ -288,6 +292,10 @@ ${blockers}
 ${result.verdict === "ACCEPTED"
   ? "The isolated integration passed the authoritative acceptance contract."
   : "Resolve only the exact blockers above, then rerun the same bounded acceptance."}
+
+## Known limitation
+
+Natural-language exact-output requests are not guaranteed byte-for-byte across all configured models. A future constrained-output contract is required for strict machine output.
 `;
   await fs.writeFile(path.join(outputDir, "report.md"), report);
   const streamResult = {

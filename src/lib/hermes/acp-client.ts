@@ -25,6 +25,8 @@ type TurnState = {
   seen: Set<string>;
   messageIds: Set<string>;
   toolEventCount: number;
+  decisionEventCount: number;
+  duplicateChunkCount: number;
   fatal: HermesAcpError | null;
   onDelta?: (text: string) => Promise<void> | void;
 };
@@ -45,6 +47,9 @@ export type HermesAcpTurnResult = {
   sessionId: string;
   stopReason: string;
   toolEventCount: number;
+  decisionEventCount: number;
+  duplicateChunkCount: number;
+  mcpServerCount: number;
   providerAttempts: HermesProviderAttemptAccounting;
 };
 
@@ -143,7 +148,10 @@ class PersistentHermesAcpClient {
     const app = acp
       .client({ name: "cabinet" })
       .onRequest(acp.methods.client.session.requestPermission, () => {
-        if (this.activeTurn) this.activeTurn.toolEventCount += 1;
+        if (this.activeTurn) {
+          this.activeTurn.toolEventCount += 1;
+          this.activeTurn.decisionEventCount += 1;
+        }
         return { outcome: { outcome: "cancelled" as const } };
       })
       .onRequest(acp.methods.client.fs.readTextFile, forbiddenClientMethod)
@@ -175,10 +183,14 @@ class PersistentHermesAcpClient {
             update.messageId &&
             this.completedMessageIds.get(turn.sessionId)?.has(update.messageId)
           ) {
+            turn.duplicateChunkCount += 1;
             return;
           }
           const signature = JSON.stringify(update);
-          if (turn.seen.has(signature)) return;
+          if (turn.seen.has(signature)) {
+            turn.duplicateChunkCount += 1;
+            return;
+          }
           turn.seen.add(signature);
           if (update.messageId) turn.messageIds.add(update.messageId);
           turn.output += update.content.text;
@@ -284,6 +296,8 @@ class PersistentHermesAcpClient {
       seen: new Set(),
       messageIds: new Set(),
       toolEventCount: 0,
+      decisionEventCount: 0,
+      duplicateChunkCount: 0,
       fatal: null,
       onDelta,
     };
@@ -314,6 +328,9 @@ class PersistentHermesAcpClient {
         sessionId,
         stopReason: response.stopReason,
         toolEventCount: state.toolEventCount,
+        decisionEventCount: state.decisionEventCount,
+        duplicateChunkCount: state.duplicateChunkCount,
+        mcpServerCount: 0,
         providerAttempts: parseHermesProviderAttempts(
           response._meta?.hermes &&
             typeof response._meta.hermes === "object" &&

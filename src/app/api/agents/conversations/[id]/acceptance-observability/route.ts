@@ -77,17 +77,11 @@ export async function GET(
     modelRequestsAttempted: runtime?.modelRequestsAttempted ?? 0,
     providerRetries: runtime?.providerRetries ?? 0,
     fallbackAttempts: runtime?.fallbackAttempts ?? 0,
+    toolEventCount: runtime?.toolEventCount ?? 0,
+    decisionEventCount: runtime?.decisionEventCount ?? 0,
+    duplicateChunkCount: runtime?.duplicateChunkCount ?? 0,
+    mcpServerCount: runtime?.mcpServerCount ?? 0,
     lastProviderHttpStatus: runtime?.lastProviderHttpStatus ?? "none",
     lastFailureClass: runtime?.lastFailureClass ?? "none",
-    responseExactness: runtime?.responseExactness ?? {
-      initial: {
-        rawModelFinalExact: null,
-        acpNormalizedExact: null,
-      },
-      followUp: {
-        rawModelFinalExact: null,
-        acpNormalizedExact: null,
-      },
-    },
   });
 }

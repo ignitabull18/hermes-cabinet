@@ -6,99 +6,75 @@ import {
   ASSISTANT_TURN_SELECTOR,
 } from "../../src/lib/agents/assistant-message-contract";
 import {
-  assertMessageExactnessEvidence,
+  assertMessageFidelityEvidence,
 } from "./message-exactness";
 
 const selector =
   `${ASSISTANT_TURN_SELECTOR} > ${ASSISTANT_MESSAGE_CONTENT_SELECTOR}`;
 
-test("exact persisted and rendered message-body evidence passes independently of its container", () => {
+function accepted(
+  turn: "initial" | "follow-up",
+  surroundingFormattingPresent: boolean,
+) {
+  return {
+    turn,
+    exactNoncePresent: true,
+    nonceOccurrenceCount: 1,
+    surroundingFormattingPresent,
+    alteredOrPartialNoncePresent: false,
+    persistedContentMatchesRenderedContent: !surroundingFormattingPresent,
+    sessionContextPreserved: true,
+    selector,
+    elementCount: 2,
+  };
+}
+
+test("exactly-once nonce fidelity permits surrounding operator formatting", () => {
   assert.doesNotThrow(() =>
-    assertMessageExactnessEvidence([
-      {
-        turn: "initial",
-        rawModelFinalExact: null,
-        acpNormalizedExact: true,
-        persistedExact: true,
-        renderedMessageBodyExact: true,
-        harnessExtractionExact: true,
-        largerContainerExact: false,
-        selector,
-        elementCount: 2,
-      },
-      {
-        turn: "follow-up",
-        rawModelFinalExact: null,
-        acpNormalizedExact: true,
-        persistedExact: true,
-        renderedMessageBodyExact: true,
-        harnessExtractionExact: true,
-        largerContainerExact: false,
-        selector,
-        elementCount: 2,
-      },
+    assertMessageFidelityEvidence([
+      accepted("initial", true),
+      accepted("follow-up", false),
     ]),
   );
 });
 
-test("a persisted operator envelope still fails even if a body projection looks exact", () => {
-  assert.throws(
-    () =>
-      assertMessageExactnessEvidence([
-        {
-          turn: "initial",
-          rawModelFinalExact: null,
-          acpNormalizedExact: true,
-          persistedExact: false,
-          renderedMessageBodyExact: true,
-          harnessExtractionExact: true,
-          largerContainerExact: false,
-          selector,
-          elementCount: 2,
-        },
-        {
-          turn: "follow-up",
-          rawModelFinalExact: null,
-          acpNormalizedExact: true,
-          persistedExact: true,
-          renderedMessageBodyExact: true,
-          harnessExtractionExact: true,
-          largerContainerExact: false,
-          selector,
-          elementCount: 2,
-        },
-      ]),
-    /initial persisted response was not the exact acceptance token/,
+test("persisted/rendered byte equality is classified separately and is nonblocking", () => {
+  const initial = accepted("initial", true);
+  initial.persistedContentMatchesRenderedContent = false;
+  assert.doesNotThrow(() =>
+    assertMessageFidelityEvidence([
+      initial,
+      accepted("follow-up", false),
+    ]),
   );
 });
 
-test("missing, duplicate, or non-exact rendered message bodies fail closed", () => {
+test("missing, repeated, altered, or partial nonce forms fail closed", () => {
+  const invalid = [
+    { exactNoncePresent: false, nonceOccurrenceCount: 0 },
+    { exactNoncePresent: false, nonceOccurrenceCount: 2 },
+    { alteredOrPartialNoncePresent: true },
+    { sessionContextPreserved: false },
+  ];
+  for (const override of invalid) {
+    assert.throws(
+      () =>
+        assertMessageFidelityEvidence([
+          { ...accepted("initial", true), ...override },
+          accepted("follow-up", false),
+        ]),
+      /acceptance nonce|session context/,
+    );
+  }
+});
+
+test("missing or duplicate assistant-content boundaries fail closed", () => {
   for (const elementCount of [0, 1, 3]) {
     assert.throws(
       () =>
-        assertMessageExactnessEvidence([
-          {
-            turn: "initial",
-            rawModelFinalExact: null,
-            acpNormalizedExact: true,
-            persistedExact: true,
-            renderedMessageBodyExact: elementCount !== 1,
-            harnessExtractionExact: true,
-            largerContainerExact: false,
-            selector,
-            elementCount,
-          },
-          {
-            turn: "follow-up",
-            rawModelFinalExact: null,
-            acpNormalizedExact: true,
-            persistedExact: true,
-            renderedMessageBodyExact: true,
-            harnessExtractionExact: true,
-            largerContainerExact: false,
-            selector,
-            elementCount,
-          },
+        assertMessageFidelityEvidence([
+          { ...accepted("initial", true), elementCount },
+          { ...accepted("follow-up", false), elementCount },
         ]),
       /did not resolve exactly two elements/,
     );
@@ -112,5 +88,5 @@ test("the production selector identifies only the assistant persisted-content se
       '[data-testid="assistant-message-content"]' +
       '[data-message-author="assistant"][data-message-part="content"]',
   );
-  assert.doesNotMatch(selector, /class|:nth|text=|CABINET_ACCEPTANCE_OK/);
+  assert.doesNotMatch(selector, /class|:nth|text=|CABINET-NONCE/);
 });

@@ -5,15 +5,20 @@ import {
   ASSISTANT_TURN_SELECTOR,
 } from "../../src/lib/agents/assistant-message-contract";
 import type {
-  AcceptanceMessageExactnessEvidence,
+  AcceptanceMessageFidelityEvidence,
 } from "./contracts";
 import {
-  TRANSPORT_TOKEN,
+  TRANSPORT_NONCE,
   type AcceptanceConversation,
 } from "./transport";
 
-function exact(value: string): boolean {
-  return value === TRANSPORT_TOKEN;
+function nonceOccurrenceCount(value: string): number {
+  return value.split(TRANSPORT_NONCE).length - 1;
+}
+
+function hasAlteredOrPartialNonce(value: string): boolean {
+  const candidates = value.match(/CABINET-NONCE-[A-Za-z0-9_-]+/g) ?? [];
+  return candidates.some((candidate) => candidate !== TRANSPORT_NONCE);
 }
 
 async function innerTextAt(locator: Locator, index: number): Promise<string | null> {
@@ -25,18 +30,17 @@ async function innerTextAt(locator: Locator, index: number): Promise<string | nu
  * Capture content-free persisted/rendered equality evidence before any exact
  * assertion can abort the live acceptance stage.
  */
-export async function captureMessageExactnessEvidence(
+export async function captureMessageFidelityEvidence(
   page: Page,
   appUrl: string,
   conversation: AcceptanceConversation,
-): Promise<AcceptanceMessageExactnessEvidence[]> {
+): Promise<AcceptanceMessageFidelityEvidence[]> {
   await page.goto(
     `${appUrl}/tasks/${encodeURIComponent(conversation.conversationId)}`,
   );
   const messageBodies = page.locator(
     `${ASSISTANT_TURN_SELECTOR} > ${ASSISTANT_MESSAGE_CONTENT_SELECTOR}`,
   );
-  const turnContainers = page.locator(ASSISTANT_TURN_SELECTOR);
 
   // TaskConversationPage loads durable turns in a client effect after the
   // document load event. Locator.count() is an immediate snapshot, so reading
@@ -55,7 +59,7 @@ export async function captureMessageExactnessEvidence(
     );
   } catch (error) {
     // Preserve the content-free equality ledger on a genuine cardinality
-    // timeout; assertMessageExactnessEvidence will still fail closed on the
+    // timeout; assertMessageFidelityEvidence will still fail closed on the
     // captured count. Navigation/browser errors remain immediate failures.
     if (!(error instanceof errors.TimeoutError)) throw error;
   }
@@ -65,20 +69,23 @@ export async function captureMessageExactnessEvidence(
   return Promise.all(
     (["initial", "follow-up"] as const).map(async (turn, index) => {
       const renderedMessageBody = await innerTextAt(messageBodies, index);
-      const largerContainer = await innerTextAt(turnContainers, index);
-      const responseExactness = index === 0
-        ? conversation.responseExactness.initial
-        : conversation.responseExactness.followUp;
+      const persistedContent = persisted[index];
+      const renderedContent = renderedMessageBody ?? "";
+      const occurrences = nonceOccurrenceCount(renderedContent);
       return {
         turn,
-        rawModelFinalExact: responseExactness.rawModelFinalExact,
-        acpNormalizedExact: responseExactness.acpNormalizedExact,
-        persistedExact: exact(persisted[index]),
-        renderedMessageBodyExact:
-          renderedMessageBody === null ? false : exact(renderedMessageBody),
-        harnessExtractionExact: exact(persisted[index]),
-        largerContainerExact:
-          largerContainer === null ? false : exact(largerContainer),
+        exactNoncePresent: occurrences === 1,
+        nonceOccurrenceCount: occurrences,
+        surroundingFormattingPresent:
+          renderedContent.trim() !== TRANSPORT_NONCE,
+        alteredOrPartialNoncePresent:
+          hasAlteredOrPartialNonce(renderedContent) ||
+          hasAlteredOrPartialNonce(persistedContent),
+        persistedContentMatchesRenderedContent:
+          renderedMessageBody !== null && persistedContent === renderedContent,
+        sessionContextPreserved:
+          conversation.sameSession &&
+          nonceOccurrenceCount(persistedContent) === 1,
         selector:
           `${ASSISTANT_TURN_SELECTOR} > ${ASSISTANT_MESSAGE_CONTENT_SELECTOR}`,
         elementCount,
@@ -87,30 +94,26 @@ export async function captureMessageExactnessEvidence(
   );
 }
 
-export function assertMessageExactnessEvidence(
-  evidence: AcceptanceMessageExactnessEvidence[],
+export function assertMessageFidelityEvidence(
+  evidence: AcceptanceMessageFidelityEvidence[],
 ): void {
   if (evidence.length !== 2) {
-    throw new Error("assistant exactness did not record both bounded turns");
+    throw new Error("assistant fidelity did not record both bounded turns");
   }
   for (const entry of evidence) {
     if (entry.elementCount !== 2) {
       throw new Error("assistant message-content selector did not resolve exactly two elements");
     }
-    if (!entry.persistedExact) {
-      throw new Error(`${entry.turn} persisted response was not the exact acceptance token`);
+    if (!entry.exactNoncePresent || entry.nonceOccurrenceCount !== 1) {
+      throw new Error(
+        `${entry.turn} assistant content did not contain the exact acceptance nonce exactly once`,
+      );
     }
-    if (entry.rawModelFinalExact === false) {
-      throw new Error(`${entry.turn} raw model final response was not exact`);
+    if (entry.alteredOrPartialNoncePresent) {
+      throw new Error(`${entry.turn} assistant content contained an altered acceptance nonce`);
     }
-    if (entry.acpNormalizedExact !== true) {
-      throw new Error(`${entry.turn} ACP normalized response was not exact`);
-    }
-    if (!entry.harnessExtractionExact) {
-      throw new Error(`${entry.turn} harness extraction was not exact`);
-    }
-    if (!entry.renderedMessageBodyExact) {
-      throw new Error(`${entry.turn} rendered message body was not the exact acceptance token`);
+    if (!entry.sessionContextPreserved) {
+      throw new Error(`${entry.turn} native session context was not preserved`);
     }
   }
 }

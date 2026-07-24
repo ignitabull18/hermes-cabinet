@@ -3,18 +3,22 @@ import test from "node:test";
 
 import type { ConversationPersistenceEvidence } from "./contracts";
 import {
-  assertExactAcceptanceToken,
+  assertAcceptanceNonce,
   buildConversationCheckpoint,
   LiveCabinetAcpTransport,
+  TRANSPORT_NONCE,
 } from "./transport";
 
-test("exact-token failures never retain assistant content", () => {
-  const privateResponse = "CABINET_ACCEPTANCE_OK plus private model output";
+test("nonce failures never retain assistant content", () => {
+  const privateResponse = `${TRANSPORT_NONCE}-altered plus private model output`;
   assert.throws(
-    () => assertExactAcceptanceToken(privateResponse, "initial"),
+    () => assertAcceptanceNonce(privateResponse, "initial"),
     (error: unknown) => {
       assert.ok(error instanceof Error);
-      assert.equal(error.message, "initial response was not the exact acceptance token");
+      assert.equal(
+        error.message,
+        "initial response did not contain the exact acceptance nonce exactly once",
+      );
       assert.doesNotMatch(error.message, /private model output/);
       return true;
     },
@@ -82,7 +86,7 @@ test("failed cardinality still exports the complete diagnostic ledger", async ()
     session: { resumeId: "session-private", alive: false },
     turns: [
       { id: "u1", turn: 1, role: "user", content: "hidden" },
-      { id: "a1", turn: 1, role: "agent", content: "CABINET_ACCEPTANCE_OK" },
+      { id: "a1", turn: 1, role: "agent", content: TRANSPORT_NONCE },
       { id: "u2", turn: 2, role: "user", content: "hidden" },
     ],
   };

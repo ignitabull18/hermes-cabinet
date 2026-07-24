@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import test from "node:test";
 
 import {
@@ -7,7 +6,6 @@ import {
   clearAcceptanceRuntimeObservation,
   readAcceptanceRuntimeObservation,
   recordAcceptanceRuntimeObservation,
-  recordAcceptanceResponseExactness,
 } from "./acceptance-observability";
 
 function withAcceptanceEnvironment(run: () => void): void {
@@ -15,14 +13,10 @@ function withAcceptanceEnvironment(run: () => void): void {
     enabled: process.env.CABINET_ACCEPTANCE_OBSERVABILITY,
     isolated: process.env.CABINET_ACCEPTANCE_ISOLATED,
     mode: process.env.CABINET_RUNTIME_MODE,
-    expected: process.env.CABINET_ACCEPTANCE_EXPECTED_RESPONSE_SHA256,
   };
   process.env.CABINET_ACCEPTANCE_OBSERVABILITY = "1";
   process.env.CABINET_ACCEPTANCE_ISOLATED = "1";
-    process.env.CABINET_RUNTIME_MODE = "hermes";
-  process.env.CABINET_ACCEPTANCE_EXPECTED_RESPONSE_SHA256 = createHash("sha256")
-    .update("expected")
-    .digest("hex");
+  process.env.CABINET_RUNTIME_MODE = "hermes";
   try {
     run();
   } finally {
@@ -32,8 +26,6 @@ function withAcceptanceEnvironment(run: () => void): void {
     else process.env.CABINET_ACCEPTANCE_ISOLATED = previous.isolated;
     if (previous.mode === undefined) delete process.env.CABINET_RUNTIME_MODE;
     else process.env.CABINET_RUNTIME_MODE = previous.mode;
-    if (previous.expected === undefined) delete process.env.CABINET_ACCEPTANCE_EXPECTED_RESPONSE_SHA256;
-    else process.env.CABINET_ACCEPTANCE_EXPECTED_RESPONSE_SHA256 = previous.expected;
   }
 }
 
@@ -63,28 +55,15 @@ test("acceptance observations retain only bounded identities and nonnegative cou
       modelRequestsAttempted: 2,
       providerRetries: 0,
       fallbackAttempts: 0,
+      toolEventCount: 0,
+      decisionEventCount: 0,
+      duplicateChunkCount: 0,
+      mcpServerCount: 0,
       lastProviderHttpStatus: "2xx",
       lastFailureClass: "none",
       acpChildState: "running",
     });
 
-    recordAcceptanceResponseExactness(id, "initial", {
-      acpNormalized: "expected",
-    });
-    recordAcceptanceResponseExactness(id, "followUp", {
-      rawModelFinal: "not-expected",
-      acpNormalized: "expected",
-    });
-    assert.deepEqual(readAcceptanceRuntimeObservation(id)?.responseExactness, {
-      initial: {
-        rawModelFinalExact: null,
-        acpNormalizedExact: true,
-      },
-      followUp: {
-        rawModelFinalExact: false,
-        acpNormalizedExact: true,
-      },
-    });
     assert.deepEqual(readAcceptanceRuntimeObservation(id), {
       readinessState: "ready",
       provider: "ollama-cloud",
@@ -92,19 +71,13 @@ test("acceptance observations retain only bounded identities and nonnegative cou
       modelRequestsAttempted: 2,
       providerRetries: 0,
       fallbackAttempts: 0,
+      toolEventCount: 0,
+      decisionEventCount: 0,
+      duplicateChunkCount: 0,
+      mcpServerCount: 0,
       lastProviderHttpStatus: "2xx",
       lastFailureClass: "none",
       acpChildState: "running",
-      responseExactness: {
-        initial: {
-          rawModelFinalExact: null,
-          acpNormalizedExact: true,
-        },
-        followUp: {
-          rawModelFinalExact: false,
-          acpNormalizedExact: true,
-        },
-      },
     });
 
     recordAcceptanceRuntimeObservation(id, {

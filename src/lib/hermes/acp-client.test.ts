@@ -186,6 +186,9 @@ test("ACP starts one durable session and suppresses duplicate stream frames", as
     assert.equal(result.output, "CABINET_ACCEPTANCE_OK");
     assert.deepEqual(deltas, ["CABINET_ACCEPTANCE_OK"]);
     assert.equal(result.toolEventCount, 0);
+    assert.equal(result.decisionEventCount, 0);
+    assert.equal(result.duplicateChunkCount, 1);
+    assert.equal(result.mcpServerCount, 0);
     assert.deepEqual(result.providerAttempts, {
       contract: "hermes.provider.attempts",
       schemaVersion: 1,

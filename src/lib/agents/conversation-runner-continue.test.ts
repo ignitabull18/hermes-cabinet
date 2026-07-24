@@ -568,19 +568,13 @@ test("Hermes continuation publishes cumulative content-free readiness and provid
       modelRequestsAttempted: 1,
       providerRetries: 0,
       fallbackAttempts: 0,
+      toolEventCount: 0,
+      decisionEventCount: 0,
+      duplicateChunkCount: 0,
+      mcpServerCount: 0,
       lastProviderHttpStatus: "2xx",
       lastFailureClass: "none",
       acpChildState: "running",
-      responseExactness: {
-        initial: {
-          rawModelFinalExact: null,
-          acpNormalizedExact: null,
-        },
-        followUp: {
-          rawModelFinalExact: null,
-          acpNormalizedExact: null,
-        },
-      },
     });
   } finally {
     clearAcceptanceRuntimeObservation(meta.id);

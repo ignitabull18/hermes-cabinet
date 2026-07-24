@@ -99,6 +99,10 @@ export interface AcceptanceConversationObservation {
   modelRequestsAttempted: number;
   providerRetries: number;
   fallbackAttempts: number;
+  toolEventCount: number;
+  decisionEventCount: number;
+  duplicateChunkCount: number;
+  mcpServerCount: number;
   lastProviderHttpStatus: "none" | "2xx" | "4xx" | "5xx" | "network";
   lastFailureClass:
     | "none"
@@ -110,16 +114,6 @@ export interface AcceptanceConversationObservation {
     | "transport"
     | "timeout"
     | "unknown";
-  responseExactness: {
-    initial: {
-      rawModelFinalExact: boolean | null;
-      acpNormalizedExact: boolean | null;
-    };
-    followUp: {
-      rawModelFinalExact: boolean | null;
-      acpNormalizedExact: boolean | null;
-    };
-  };
 }
 
 export interface ConversationCheckpointEvidence {
@@ -157,20 +151,20 @@ export interface ConversationPersistenceEvidence {
   unavailableMeasurements: string[];
 }
 
-export interface AcceptanceMessageExactnessEvidence {
+export interface AcceptanceMessageFidelityEvidence {
   turn: "initial" | "follow-up";
-  rawModelFinalExact: boolean | null;
-  acpNormalizedExact: boolean | null;
-  persistedExact: boolean;
-  renderedMessageBodyExact: boolean;
-  harnessExtractionExact: boolean;
-  largerContainerExact: boolean;
+  exactNoncePresent: boolean;
+  nonceOccurrenceCount: number;
+  surroundingFormattingPresent: boolean;
+  alteredOrPartialNoncePresent: boolean;
+  persistedContentMatchesRenderedContent: boolean;
+  sessionContextPreserved: boolean;
   selector: string;
   elementCount: number;
 }
 
 export interface AcceptanceResult {
-  schemaVersion: 2;
+  schemaVersion: 3;
   generatedAt: string;
   verdict: "ACCEPTED" | "NOT_ACCEPTED";
   stream: "acceptance-harness";
@@ -198,7 +192,7 @@ export interface AcceptanceResult {
   network: NetworkSummary;
   browserIssues: BrowserIssue[];
   conversationPersistence: ConversationPersistenceEvidence | null;
-  messageExactness: AcceptanceMessageExactnessEvidence[];
+  messageFidelity: AcceptanceMessageFidelityEvidence[];
   screenshots: ScreenshotEntry[];
   scans: {
     secretIndicators: string[];

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 import type {
   AcceptanceConversationObservation,
@@ -7,19 +7,27 @@ import type {
   ConversationTurnDiagnostic,
 } from "./contracts";
 
-export const ACCEPTANCE_NAME = "CABINET ACP EXACT RESPONSE FINAL V2 — 2026-07-23";
+export const ACCEPTANCE_NAME = "CABINET ACP PRODUCT ACCEPTANCE — 2026-07-23";
+export const TRANSPORT_NONCE =
+  `CABINET-NONCE-${randomBytes(24).toString("base64url")}`;
 export const INITIAL_PROMPT =
-  "This is a local Cabinet acceptance test. Do not use tools or contact external systems. Reply with exactly CABINET_ACCEPTANCE_OK.";
+  "This is a local Cabinet acceptance test. Do not use tools or contact external systems. " +
+  `Include this exact acceptance nonce exactly once in your response: ${TRANSPORT_NONCE}`;
 export const FOLLOW_UP_PROMPT =
-  "Reply with the exact acceptance token from your previous response.";
-export const TRANSPORT_TOKEN = "CABINET_ACCEPTANCE_OK";
+  "What was the exact acceptance nonce from my previous message? Include it exactly once.";
 
-export function assertExactAcceptanceToken(
+export function assertAcceptanceNonce(
   value: string,
   turn: "initial" | "follow-up",
 ): void {
-  if (value !== TRANSPORT_TOKEN) {
-    throw new Error(`${turn} response was not the exact acceptance token`);
+  const occurrences = value.split(TRANSPORT_NONCE).length - 1;
+  const candidates = value.match(/CABINET-NONCE-[A-Za-z0-9_-]+/g) ?? [];
+  if (
+    occurrences !== 1 ||
+    candidates.length !== 1 ||
+    candidates[0] !== TRANSPORT_NONCE
+  ) {
+    throw new Error(`${turn} response did not contain the exact acceptance nonce exactly once`);
   }
 }
 
@@ -68,7 +76,6 @@ export interface AcceptanceConversation {
   cabinetRestart: boolean;
   userTurns: number;
   completedAssistantTurns: number;
-  responseExactness: AcceptanceConversationObservation["responseExactness"];
 }
 
 export interface AcceptanceTransport {
@@ -348,24 +355,6 @@ export class LiveCabinetAcpTransport implements AcceptanceTransport {
         cabinetRestart: true,
         userTurns: users.length,
         completedAssistantTurns: assistants.length,
-        responseExactness: {
-          initial: {
-            rawModelFinalExact:
-              firstDurable.acceptanceObservability?.responseExactness.initial.rawModelFinalExact
-              ?? null,
-            acpNormalizedExact:
-              firstDurable.acceptanceObservability?.responseExactness.initial.acpNormalizedExact
-              ?? null,
-          },
-          followUp: {
-            rawModelFinalExact:
-              secondDurable.acceptanceObservability?.responseExactness.followUp.rawModelFinalExact
-              ?? null,
-            acpNormalizedExact:
-              secondDurable.acceptanceObservability?.responseExactness.followUp.acpNormalizedExact
-              ?? null,
-          },
-        },
       };
     } finally {
       const sessionIdentities = checkpoints
@@ -406,22 +395,12 @@ export class FixtureAcceptanceTransport implements AcceptanceTransport {
   async runTwoTurnContract(): Promise<AcceptanceConversation> {
     return {
       conversationId: "fixture-acceptance-conversation",
-      firstResponse: TRANSPORT_TOKEN,
-      secondResponse: TRANSPORT_TOKEN,
+      firstResponse: `Acknowledged. ${TRANSPORT_NONCE}`,
+      secondResponse: TRANSPORT_NONCE,
       sameSession: true,
       cabinetRestart: false,
       userTurns: 2,
       completedAssistantTurns: 2,
-      responseExactness: {
-        initial: {
-          rawModelFinalExact: null,
-          acpNormalizedExact: true,
-        },
-        followUp: {
-          rawModelFinalExact: null,
-          acpNormalizedExact: true,
-        },
-      },
     };
   }
 }

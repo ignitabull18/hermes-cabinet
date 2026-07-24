@@ -54,7 +54,6 @@ import { looksLikeAwaitingInput } from "./task-heuristics";
 import { emit as emitTelemetry } from "@/lib/telemetry";
 import {
   readAcceptanceRuntimeObservation,
-  recordAcceptanceResponseExactness,
   recordAcceptanceRuntimeObservation,
   type AcceptanceFailureClass,
   type AcceptanceProviderHttpStatus,
@@ -328,6 +327,8 @@ function recordHermesExecutionObservation(
       ? Number(raw.lastProviderHttpStatus)
       : null;
   const current = readAcceptanceRuntimeObservation(conversationId);
+  const sessionCount = (key: string): number =>
+    count(result.sessionParams?.[key]);
   recordAcceptanceRuntimeObservation(conversationId, {
     modelRequestsAttempted:
       (current?.modelRequestsAttempted ?? 0) + count(raw.modelRequestsAttempted),
@@ -335,6 +336,14 @@ function recordHermesExecutionObservation(
       (current?.providerRetries ?? 0) + count(raw.providerRetries),
     fallbackAttempts:
       (current?.fallbackAttempts ?? 0) + count(raw.fallbackAttempts),
+    toolEventCount:
+      (current?.toolEventCount ?? 0) + sessionCount("toolEventCount"),
+    decisionEventCount:
+      (current?.decisionEventCount ?? 0) + sessionCount("decisionEventCount"),
+    duplicateChunkCount:
+      (current?.duplicateChunkCount ?? 0) + sessionCount("duplicateChunkCount"),
+    mcpServerCount:
+      (current?.mcpServerCount ?? 0) + sessionCount("mcpServerCount"),
     lastProviderHttpStatus: providerHttpClass(status),
     lastFailureClass: failureClass(errorKind, status),
   });
@@ -842,10 +851,6 @@ export async function startConversationRun(
           ? adapter.classifyError(result.errorMessage || "", result.exitCode ?? null)
           : null;
         recordHermesExecutionObservation(meta.id, result, classified?.kind);
-        recordAcceptanceResponseExactness(meta.id, "initial", {
-          acpNormalized: result.output,
-        });
-
         if (!failed && (result.sessionId || result.sessionParams)) {
           const codecBlob = adapter.sessionCodec && result.sessionParams
             ? adapter.sessionCodec.serialize(result.sessionParams)
@@ -1572,9 +1577,6 @@ async function runContinueInProcess(input: {
     }
     if (adapter.type === "hermes_runtime") {
       recordHermesExecutionObservation(conversationId, result, classified?.kind);
-      recordAcceptanceResponseExactness(conversationId, "followUp", {
-        acpNormalized: result.output,
-      });
     }
 
     const tokens = result.usage
