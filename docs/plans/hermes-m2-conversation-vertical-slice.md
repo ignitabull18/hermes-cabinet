@@ -57,4 +57,4 @@ The vertical slice was exercised against Hermes Agent 0.18.2 using the clean `op
 
 ## M2 decision
 
-M2 passes. The persistent conversation path, structured events, session continuity, interruption, failure normalization, telemetry, and Hermes source-of-truth rules are implemented and proven. This does not authorize daily cutover.
+At capture, M2 passed: the persistent conversation path, structured events, session continuity, interruption, failure normalization, telemetry, and Hermes source-of-truth rules were implemented and proven. That milestone did not authorize daily cutover.

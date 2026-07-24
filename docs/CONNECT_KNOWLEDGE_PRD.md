@@ -152,7 +152,13 @@ Connected folders are normal tree content → agents in that room see them as kn
 ## 10. Provider registry
 ```ts
 interface KnowledgeProvider {
-  id: "local" | "google-drive" | "icloud" | "sharepoint" | "dropbox";
+  id:
+    | "local"
+    | "google-drive"
+    | "icloud"
+    | "onedrive"
+    | "sharepoint"
+    | "dropbox";
   label: string;
   icon: string;
   enabled: boolean;                 // false → shown disabled ("Coming soon")
@@ -162,7 +168,8 @@ interface KnowledgeProvider {
 }
 ```
 Current enabled providers: `local`, `google-drive`, `icloud`, `onedrive`,
-`sharepoint`, and `dropbox`. Box is present as a disabled placeholder.
+`sharepoint`, and `dropbox`. Box is a disabled presentation-only tile, so it
+is intentionally not a `KnowledgeProvider.id` until it can persist a source.
 
 ---
 

@@ -57,4 +57,4 @@ All flows were exercised against Hermes Agent 0.18.2 using the clean `operator-o
 
 ## M3 decision
 
-M3 passes. Real tools, clarifications, approvals, secret requests, sudo requests, duplicate prevention, expiry handling, cancellation, redaction, and the browser interaction layer are implemented and exercised. This does not authorize daily cutover.
+At capture, M3 passed: real tools, clarifications, approvals, secret requests, sudo requests, duplicate prevention, expiry handling, cancellation, redaction, and the browser interaction layer were implemented and exercised. That milestone did not authorize daily cutover.

@@ -62,4 +62,4 @@ All live rows used Hermes Agent 0.18.2, the clean `operator-os` profile, and the
 
 ## M4 decision
 
-M4 passes. Session management, branching, reconnect, event reconciliation, restart recovery, retry safety, duplicate prevention, and terminal-state agreement are implemented and exercised. This does not authorize daily cutover.
+At capture, M4 passed: session management, branching, reconnect, event reconciliation, restart recovery, retry safety, duplicate prevention, and terminal-state agreement were implemented and exercised. That milestone did not authorize daily cutover.

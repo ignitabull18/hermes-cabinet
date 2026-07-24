@@ -94,7 +94,7 @@ making any network call.
 
 ### 2. Settings toggle (desktop / web UI)
 
-Open Cabinet → **Settings** → **About** → **Privacy** and toggle **Anonymous
+Open Cabinet → **Settings** → **About** → **Privacy** and toggle **Pseudonymous
 usage telemetry** off. The choice is persisted in `telemetry.json`.
 
 ### 3. Delete telemetry state

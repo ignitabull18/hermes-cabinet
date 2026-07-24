@@ -58,4 +58,4 @@ superseded that boundary.
 
 ## M5 decision
 
-M5 passes. The normal product is now a Hermes-only Operator experience, and the server enforces the same boundary independently of the UI. This milestone does not authorize daily use or cutover. M6 management, M7 full conversion acceptance, and Jeremy's explicit approval are still required.
+At capture, M5 passed: the normal product was a Hermes-only Operator experience, and the server enforced the same boundary independently of the UI. That milestone did not authorize daily use or cutover; M6 management, M7 full conversion acceptance, and Jeremy's explicit approval were still required.

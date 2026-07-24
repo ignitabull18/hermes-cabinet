@@ -6,8 +6,8 @@
 
 **To opt out:** set `CABINET_TELEMETRY_DISABLED=1` in your environment before
 launching Cabinet, **or** open *Settings → About → Privacy* and turn off
-*Anonymous usage telemetry*. Either path disables telemetry completely — no
-events are queued, no network requests are made. See [How to turn it
+*Pseudonymous usage telemetry*. Either path disables telemetry completely. No
+events are queued and no network requests are made. See [How to turn it
 off](#how-to-turn-it-off) below for a third option (editing the config file)
 and the exact paths involved.
 
@@ -40,10 +40,9 @@ Every event includes:
 
 The server also records, from HTTP metadata:
 
-- The IP address Cloudflare sees for your request. Used only to detect abusive
-  traffic. Not linked to any identity we collect (there is no user id or email
-  in the schema). See "Where the data goes" below.
-- IP address, plus country, region, and city derived at the edge.
+- The IP address Cloudflare sees for your request, plus country, region, and
+  city derived at the edge. This metadata is stored without a Cabinet account,
+  user ID, or email in the telemetry schema. See "Where the data goes" below.
 - A coarse browser/device hint derived from the User-Agent header when one is
   present.
 
@@ -95,7 +94,7 @@ Three ways, any one is enough:
 1. **Environment variable:** `CABINET_TELEMETRY_DISABLED=1` before starting
    Cabinet. Also sets the Settings toggle to a disabled / read-only state.
 2. **Settings toggle:** open Settings → About → Privacy, uncheck
-   *Anonymous usage telemetry*.
+   *Pseudonymous usage telemetry*.
 3. **Edit the config file directly:** set `"enabled": false` in
    `telemetry.json` at the path below.
 

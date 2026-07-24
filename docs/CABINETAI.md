@@ -261,6 +261,17 @@ The wrapper resolves `cabinetai` from local `node_modules` first, then falls bac
 
 ## Releasing
 
+Before invoking the helper, determine the target version and update
+`cli/package.json` so its `cabinetai` dependency equals that target. For
+example, before a `0.5.3` patch release:
+
+```bash
+npm pkg set --prefix cli dependencies.cabinetai=0.5.4
+```
+
+Review that change before continuing. The helper does not update this
+dependency and performs the commit, tag, and push itself.
+
 The repository release helper bumps all three package versions, regenerates the
 manifest, commits, tags, and pushes:
 
@@ -281,9 +292,6 @@ manifest, commits, tags, and pushes:
 6. Commits: `Release vX.Y.Z`
 7. Creates git tag: `vX.Y.Z`
 8. Pushes commit + tag to `origin/main`
-
-The helper does **not** update `create-cabinet`'s `cabinetai` dependency. Verify
-and update that dependency before creating a tag.
 
 ### What the tag-triggered release workflow does
 

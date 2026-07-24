@@ -335,7 +335,7 @@ To turn it off, pick one:
 export CABINET_TELEMETRY_DISABLED=1   # env var (any shell session)
 ```
 
-…or open **Settings → About → Privacy** and toggle **Anonymous usage
+…or open **Settings → About → Privacy** and toggle **Pseudonymous usage
 telemetry** off. To also wipe the local install ID and queue, run
 `npx cabinetai uninstall --all`.
 

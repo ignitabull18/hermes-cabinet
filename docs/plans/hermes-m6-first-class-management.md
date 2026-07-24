@@ -79,4 +79,4 @@ A second live background run, `run_88b9db486a79426091427844a69f2c2f`, executed t
 
 ## Definition of done
 
-The implementation and acceptance gates are complete. M6 is closed after the code and evidence are committed and IG-428 through IG-435 plus IG-452 are synchronized in Linear. M7 remains the full conversion gate. M8 remains blocked by M7.
+At capture, the implementation and acceptance gates were complete. M6 closed after the code and evidence were committed and IG-428 through IG-435 plus IG-452 were synchronized in Linear. M7 remained the full conversion gate, and M8 remained blocked by M7.
