@@ -352,6 +352,8 @@ export function AppShell() {
   const loadRooms = useRoomsStore((s) => s.load);
   const defaultRoom = useRoomsStore((s) => s.defaultRoom);
   const reopen = useRoomsStore((s) => s.reopen);
+  const hasActiveLocationBaselineRef = useRef(false);
+  const lastHandledActiveLocationRef = useRef<string | null>(null);
   useEffect(() => {
     void loadRooms();
   }, [loadRooms]);
@@ -377,9 +379,11 @@ export function AppShell() {
     }
   }, [reopen, defaultRoom, section.type, section.cabinetPath, setSection]);
 
-  // Persist the current location so the app reopens here next launch
-  // (PRD §10.5). Debounced; best-effort. setLastActive ignores the home
-  // container and unknown rooms server-side.
+  // Persist client-side location changes so the app reopens there next launch
+  // (PRD §10.5). The first mounted location is only a baseline: writing it
+  // again on every document load created a consequential request during an
+  // otherwise read-only app restart. Explicit navigation after mount remains
+  // debounced and best-effort.
   useEffect(() => {
     const current =
       selectedPath ||
@@ -387,12 +391,22 @@ export function AppShell() {
         ? section.cabinetPath
         : "");
     if (!current) return;
+    if (!hasActiveLocationBaselineRef.current) {
+      hasActiveLocationBaselineRef.current = true;
+      lastHandledActiveLocationRef.current = current;
+      return;
+    }
+    if (lastHandledActiveLocationRef.current === current) return;
     const id = window.setTimeout(() => {
       void fetch("/api/rooms/active", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ path: current }),
-      }).catch(() => {});
+      })
+        .then((response) => {
+          if (response.ok) lastHandledActiveLocationRef.current = current;
+        })
+        .catch(() => {});
     }, 1000);
     return () => window.clearTimeout(id);
   }, [selectedPath, section.cabinetPath]);

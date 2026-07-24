@@ -52,6 +52,7 @@ kind: room
 entry: index.md
 `,
       "acceptance-cabinet/index.md": "# Acceptance Cabinet\n",
+      "acceptance-cabinet/notes/index.md": "# Notes\n",
       "acceptance-cabinet/.agents/editor/persona.md": `---
 name: Operator
 slug: editor
@@ -97,24 +98,32 @@ test("direct Tasks, reload, and deep link use the production provider contract",
   await expect(page.locator("body")).not.toContainText("useTaskRail must be used within");
 });
 
-test("mount and reload never pull Git without an explicit Sync action", async ({ page }) => {
+test("mount and reload stay read-only while explicit page navigation persists", async ({ page }) => {
   const pullRequests: string[] = [];
+  const activeRoomRequests: string[] = [];
   page.on("request", (request) => {
-    if (
-      request.method() === "POST" &&
-      new URL(request.url()).pathname === "/api/git/pull"
-    ) {
+    if (request.method() !== "POST") return;
+    const pathname = new URL(request.url()).pathname;
+    if (pathname === "/api/git/pull") {
       pullRequests.push(request.url());
+    }
+    if (pathname === "/api/rooms/active") {
+      activeRoomRequests.push(request.url());
     }
   });
 
   await openCabinet(page);
-  await page.waitForTimeout(250);
+  await page.waitForTimeout(1_250);
   await page.reload();
   await expect(page.getByRole("heading", { name: "Acceptance Cabinet" })).toBeVisible();
-  await page.waitForTimeout(250);
+  await page.waitForTimeout(1_250);
 
   expect(pullRequests).toEqual([]);
+  expect(activeRoomRequests).toEqual([]);
+
+  await page.getByRole("button", { name: "notes", exact: true }).click();
+  await expect(page).toHaveURL(/\/room\/acceptance-cabinet\/notes$/);
+  await expect.poll(() => activeRoomRequests.length).toBe(1);
 });
 
 test("Search is precisely unavailable and New opens one keyboard-usable composer", async ({ page }) => {
