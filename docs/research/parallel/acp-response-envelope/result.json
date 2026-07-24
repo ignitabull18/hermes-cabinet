@@ -1,0 +1,11 @@
+{
+  "first_divergence_layer": "raw_acp_assistant_content_blocks",
+  "raw_model_exact": null,
+  "acp_exact": false,
+  "persisted_exact": false,
+  "rendered_message_exact": false,
+  "harness_extraction_exact": false,
+  "envelope_owner": "operator-os response-generation instruction precedence before ACP emission",
+  "minimum_fix": "Make default operator report formatting subordinate to explicit user output constraints before Hermes produces final_response; do not rewrite completed output downstream."
+}
+
