@@ -58,9 +58,9 @@ if (allowIntegrationDiff) {
     cwd: repoRoot,
     encoding: "utf8",
   });
-  if (branch.status !== 0 || branch.stdout.trim() !== "fix/acp-final-product-acceptance") {
+  if (branch.status !== 0 || branch.stdout.trim() !== "fix/final-route-acceptance") {
     process.stderr.write(
-      "Refusing integration acceptance outside fix/acp-final-product-acceptance.\n",
+      "Refusing integration acceptance outside fix/final-route-acceptance.\n",
     );
     process.exit(2);
   }
