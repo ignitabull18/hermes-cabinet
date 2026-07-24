@@ -1,8 +1,15 @@
 # M2 Persistent Conversation Vertical Slice
 
+> Historical milestone evidence from 2026-07-18. The Gateway conversation
+> design and pre-cutover language below describe M2 at that time. Native
+> conversations now use ACP over stdio. See
+> [`../CURRENT_IMPLEMENTATION.md`](../CURRENT_IMPLEMENTATION.md).
+
 Status: accepted on 2026-07-18
 
-This is the implementation and acceptance record for the M2 Hermes conversation vertical slice. It is not cutover approval. Cabinet remains a secondary Hermes interface until M7 passes and Jeremy explicitly approves cutover.
+This is the implementation and acceptance record for the M2 Hermes conversation
+vertical slice. At capture it did not approve cutover; M7 later passed and
+superseded that boundary.
 
 ## Delivered architecture
 
@@ -50,4 +57,4 @@ The vertical slice was exercised against Hermes Agent 0.18.2 using the clean `op
 
 ## M2 decision
 
-M2 passes. The persistent conversation path, structured events, session continuity, interruption, failure normalization, telemetry, and Hermes source-of-truth rules are implemented and proven. This does not authorize daily cutover.
+At capture, M2 passed: the persistent conversation path, structured events, session continuity, interruption, failure normalization, telemetry, and Hermes source-of-truth rules were implemented and proven. That milestone did not authorize daily cutover.

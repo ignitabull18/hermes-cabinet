@@ -1,8 +1,14 @@
 # M6 First-Class Hermes Management Acceptance
 
+> Historical milestone evidence from 2026-07-18. The pre-cutover and Hermes
+> 0.18.2 limitations below are a dated management-contract record. See
+> [`../CURRENT_IMPLEMENTATION.md`](../CURRENT_IMPLEMENTATION.md).
+
 Status: implementation and acceptance evidence complete on 2026-07-18
 
-This milestone makes Cabinet a governed management surface over Hermes. It does not approve daily cutover. Cabinet remains secondary until M7 passes and Jeremy explicitly approves the cutover.
+This milestone made Cabinet a governed management surface over Hermes. At
+capture it did not approve daily cutover; M7 later passed and superseded that
+boundary.
 
 ## Source-of-truth architecture
 
@@ -73,4 +79,4 @@ A second live background run, `run_88b9db486a79426091427844a69f2c2f`, executed t
 
 ## Definition of done
 
-The implementation and acceptance gates are complete. M6 is closed after the code and evidence are committed and IG-428 through IG-435 plus IG-452 are synchronized in Linear. M7 remains the full conversion gate. M8 remains blocked by M7.
+At capture, the implementation and acceptance gates were complete. M6 closed after the code and evidence were committed and IG-428 through IG-435 plus IG-452 were synchronized in Linear. M7 remained the full conversion gate, and M8 remained blocked by M7.

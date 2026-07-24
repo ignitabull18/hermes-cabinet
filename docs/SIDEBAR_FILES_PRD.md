@@ -1,6 +1,10 @@
 # PRD — Sidebar Context Menu, File Creation & Knowledge Links
 
-**Status:** In progress · **Author:** hilash · **Date:** 2026-05-22
+**Status at capture:** In progress · **Author:** hilash · **Date:** 2026-05-22
+· **Current note:** Core file creation, imports, knowledge connections, and
+editor handoff are present in `src/components/sidebar/` and
+`src/app/api/system/create-file/route.ts`. Unchecked items below remain the
+original PRD checklist, not verified current gaps.
 **Driver:** Direct user feedback on the sidebar right-click menu (see screenshot in the originating thread).
 
 ---

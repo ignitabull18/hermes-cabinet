@@ -1,5 +1,10 @@
 # Hermes Developer repository visibility audit
 
+> Dated Phase 2B contract audit. It preserves the installed Hermes interfaces
+> and Cabinet projection decisions observed during that audit; it is not live
+> repository or worktree state. See
+> [`../CURRENT_IMPLEMENTATION.md`](../CURRENT_IMPLEMENTATION.md).
+
 Phase 2B is a read-only projection of the installed Hermes Agent contracts. Hermes remains canonical for session, profile, working-directory, repository, worktree, and review state. Cabinet stores no independent repository state and exposes no mutation in this slice.
 
 ## Installed contract identity

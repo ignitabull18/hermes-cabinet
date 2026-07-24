@@ -1,8 +1,17 @@
 # M5 Hermes-Only Product Experience
 
+> Historical milestone evidence from 2026-07-18. The pre-cutover boundary below
+> was superseded when M7 was approved. See
+> [`../CURRENT_IMPLEMENTATION.md`](../CURRENT_IMPLEMENTATION.md) for current
+> runtime behavior.
+
 Status: accepted on 2026-07-18
 
-This is the implementation and acceptance record for M5. It converts the normal Cabinet product surface to one Hermes Operator experience while retaining the upstream Cabinet implementation behind the runtime-mode boundary. It does not authorize daily cutover. Cabinet remains secondary until M7 passes and Jeremy explicitly approves cutover.
+This is the implementation and acceptance record for M5. It converted the
+normal Cabinet product surface to one Hermes Operator experience while
+retaining the upstream Cabinet implementation behind the runtime-mode
+boundary. At capture it did not authorize daily cutover; M7 later passed and
+superseded that boundary.
 
 ## Delivered product boundary
 
@@ -49,4 +58,4 @@ This is the implementation and acceptance record for M5. It converts the normal 
 
 ## M5 decision
 
-M5 passes. The normal product is now a Hermes-only Operator experience, and the server enforces the same boundary independently of the UI. This milestone does not authorize daily use or cutover. M6 management, M7 full conversion acceptance, and Jeremy's explicit approval are still required.
+At capture, M5 passed: the normal product was a Hermes-only Operator experience, and the server enforced the same boundary independently of the UI. That milestone did not authorize daily use or cutover; M6 management, M7 full conversion acceptance, and Jeremy's explicit approval were still required.

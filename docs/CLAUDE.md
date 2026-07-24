@@ -124,7 +124,7 @@ This makes it possible to attach over CDP and inspect real DOM, network, and scr
 Both npm packages ship from this monorepo, not separate repos:
 
 - **`cabinetai/`** — published as [`cabinetai`](https://www.npmjs.com/package/cabinetai). The full CLI: `create`, `run`, `update`, `doctor`, `import`, `list`, `uninstall`, `reset-config`. Built with esbuild from `cabinetai/src/`.
-- **`cli/index.cjs`** — published as [`create-cabinet`](https://www.npmjs.com/package/create-cabinet). A thin wrapper that calls `cabinetai create <dir>` and then `cabinetai run` in the new subdir. Pinned to a matching `cabinetai` version via its `dependencies`.
+- **`cli/index.cjs`** — published as [`create-cabinet`](https://www.npmjs.com/package/create-cabinet). A thin wrapper that calls `cabinetai create <dir>` and then `cabinetai run` in the new subdir. The intended release contract keeps its `cabinetai` dependency on the same version. The current `0.5.3` source still points to `cabinetai@0.4.4`; treat that as a release blocker, not a matching pair.
 
 ### Safety rules (read before "fixing" anything in the bootstrap path)
 

@@ -1,5 +1,9 @@
 # Hermes M1 Health Bridge Evidence
 
+> Historical milestone evidence from 2026-07-18. This file records M1 scope and
+> observations, not current live Hermes health. See
+> [`../CURRENT_IMPLEMENTATION.md`](../CURRENT_IMPLEMENTATION.md).
+
 Status: passed on 2026-07-18
 
 This record supports Milestone 1 of the Hermes-first Cabinet project. It proves the server-only Hermes health bridge and connection indicator. It does not approve chat integration or primary-interface cutover.

@@ -1,16 +1,21 @@
 # Cabinet Telemetry
 
+> The public, maintained privacy contract is
+> [`../TELEMETRY.md`](../TELEMETRY.md). This file provides implementation
+> detail and must stay aligned with that contract.
+
 **To opt out:** set `CABINET_TELEMETRY_DISABLED=1` in your environment before
 launching Cabinet, **or** open *Settings → About → Privacy* and turn off
-*Anonymous usage telemetry*. Either path disables telemetry completely — no
-events are queued, no network requests are made. See [How to turn it
+*Pseudonymous usage telemetry*. Either path disables telemetry completely. No
+events are queued and no network requests are made. See [How to turn it
 off](#how-to-turn-it-off) below for a third option (editing the config file)
 and the exact paths involved.
 
-Cabinet sends anonymous usage telemetry by default to help us understand which
-features are used and where the product breaks. This document is the complete,
-authoritative description of what leaves your machine. If it is not listed
-here, it is not collected.
+Cabinet sends pseudonymous usage telemetry by default to help us understand
+which features are used and where the product breaks. This implementation
+reference mirrors the public contract. If the two files disagree, the
+top-level `TELEMETRY.md` contract must be corrected or this implementation must
+be brought back into alignment before release.
 
 ## What is collected
 
@@ -35,10 +40,11 @@ Every event includes:
 
 The server also records, from HTTP metadata:
 
-- The IP address Cloudflare sees for your request. Used only to detect abusive
-  traffic. Not linked to any identity we collect (there is no user id or email
-  in the schema). See "Where the data goes" below.
-- `country` and Cloudflare `colo` (edge region) — coarse location only.
+- The IP address Cloudflare sees for your request, plus country, region, and
+  city derived at the edge. This metadata is stored without a Cabinet account,
+  user ID, or email in the telemetry schema. See "Where the data goes" below.
+- A coarse browser/device hint derived from the User-Agent header when one is
+  present.
 
 ## What is never collected
 
@@ -57,6 +63,7 @@ The server also records, from HTTP metadata:
 | `app.launched` | Cabinet process starts | *(none)* |
 | `app.exited` | Cabinet process shuts down | *(none)* |
 | `onboarding.step` | User advances to a named step in onboarding | `step` |
+| `onboarding.locale_autodetected` | Onboarding detects a supported system locale | `locale` |
 | `onboarding.completed` | Onboarding finishes | `roomType`, `provider` |
 | `page.opened` | Reserved — not emitted in this release | `ext` |
 | `agent.run.started` | An agent run begins | `provider`, `adapterType` |
@@ -70,6 +77,10 @@ The server also records, from HTTP metadata:
 | `cabinet.switched` | The user switches between workspaces | *(none)* |
 | `template.installed` | A registry template is installed | `templateKind`, `templateSlug` |
 | `theme.changed` | The user changes themes | `themeName` |
+| `crash.detected` | A supervised process crash is detected | `proc` |
+| `diagnostics.exported` | A diagnostics bundle is exported | *(none)* |
+| `history.restored` | A history restore completes | `source` |
+| `history.tier` | A history tier is selected or observed | `tier` |
 
 The emitter strips any payload key outside the fields listed above for each
 event. If a new field is needed, this table is updated in the same commit.
@@ -83,7 +94,7 @@ Three ways, any one is enough:
 1. **Environment variable:** `CABINET_TELEMETRY_DISABLED=1` before starting
    Cabinet. Also sets the Settings toggle to a disabled / read-only state.
 2. **Settings toggle:** open Settings → About → Privacy, uncheck
-   *Anonymous usage telemetry*.
+   *Pseudonymous usage telemetry*.
 3. **Edit the config file directly:** set `"enabled": false` in
    `telemetry.json` at the path below.
 

@@ -1,6 +1,12 @@
 # M8 Daily Business Intake acceptance
 
-Status: technical implementation complete; Jeremy-only shadow trust and usefulness reviews remain open.
+> Historical milestone evidence. Technical implementation and the recorded
+> acceptance observations are preserved below. The 2026-07-24 documentation
+> audit did not re-prove the owner-only review state, so this file must not be
+> used as a current owner-approval tracker. See
+> [`../CURRENT_IMPLEMENTATION.md`](../CURRENT_IMPLEMENTATION.md).
+
+Status at capture: technical implementation complete; Jeremy-only shadow trust and usefulness reviews remained open.
 
 ## Product boundary
 

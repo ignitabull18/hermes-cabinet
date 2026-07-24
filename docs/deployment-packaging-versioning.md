@@ -14,13 +14,32 @@ This page explains the supported Cabinet install paths today, how releases are p
 
 Cabinet is still experimental and moving fast. Before any upgrade, keep a separate copy of your `data/` folder or let Cabinet create a backup first.
 
+## Verified distribution status
+
+Checked 2026-07-24:
+
+- The repository and manifest are versioned `0.5.3`.
+- The `v0.5.3` Git tag exists.
+- Neither `cabinetai/cabinet` nor `ignitabull18/hermes-cabinet` has a published
+  or draft GitHub Release named `v0.5.3`.
+- npm reports `cabinetai@0.5.0` and `create-cabinet@0.5.0` as the latest public
+  package versions.
+- The checked `create-cabinet` package is `0.5.3` but depends on
+  `cabinetai@0.4.4`.
+
+Therefore `0.5.3` is a source/runtime version in this checkout, not a verified
+public release. Do not publish the prepared v0.5.3 announcement or describe
+`npx ...@latest` as installing v0.5.3 until the release and lockstep dependency
+gates pass.
+
 ## Install Kinds
 
-Cabinet currently distinguishes between three install kinds:
+Cabinet currently distinguishes between four install kinds:
 
 - `source-managed` - created by `create-cabinet`
 - `source-custom` - cloned or modified manually
 - `electron-macos` - packaged macOS desktop app
+- `electron-windows` - packaged Windows desktop app
 
 Those install kinds matter because update behavior is different for each one.
 
@@ -48,9 +67,23 @@ npm run build
 npm run start
 ```
 
-By default, Cabinet runs the web app on port `3000` and the daemon on port `3001`. Those can be overridden with `CABINET_APP_PORT` and `CABINET_DAEMON_PORT`.
+The development wrappers prefer app port `4000` and daemon port `4100`, then
+auto-bump when either is occupied. A direct production `next start` listens on
+port `3000` unless `PORT` is set. The production daemon defaults to `4100`
+unless `CABINET_DAEMON_PORT` is set. `CABINET_APP_PORT` is consumed by
+Cabinet's runtime configuration and development wrapper; it does not replace
+the `PORT` variable used by the direct `next start` CLI.
 
-`create-cabinet` installs the app version that matches its npm version. On macOS/Linux this is a **prebuilt standalone bundle** (`cabinet-app-<platform>-vX.Y.Z.tgz`) downloaded from the GitHub Release — no `npm install`. On platforms with no bundle (currently Windows, pending PR #192) it falls back to the source release tarball + `npm install`. Either way it writes install metadata so Cabinet can recognize the install as managed later.
+`create-cabinet` is intended to install the app version that matches its npm
+version. On macOS/Linux this is a **prebuilt standalone bundle**
+(`cabinet-app-<platform>-vX.Y.Z.tgz`) downloaded from the GitHub Release, with
+no `npm install`. On platforms with no bundle (currently Windows) it falls back
+to the source release tarball plus `npm install`. Either way it writes install
+metadata so Cabinet can recognize the install as managed later.
+
+The checked `0.5.3` source does not currently satisfy the intended lockstep
+contract: `cli/package.json` is `0.5.3` but depends on `cabinetai@0.4.4`.
+Correct that dependency before publishing `create-cabinet@0.5.3`.
 
 ## 2. Source-custom install
 
@@ -116,7 +149,7 @@ before release artifacts are uploaded. For a future production signing project,
 prefer Microsoft Artifact Signing or another hardware-backed cloud-signing
 provider with short-lived GitHub OIDC authentication.
 
-A separate `publish-app-bundles` job (in `release.yml`) builds the zero-install standalone bundles per platform (`darwin-arm64`, `darwin-x64`, `linux-arm64`, `linux-x64`; Windows `win32-x64` pending PR #192) with `npm run build && npm run electron:prep`, then uploads each `cabinet-app-<key>-vX.Y.Z.tgz` + `.sha256` to the Release. The release manifest records these under `appBundles`, and `cabinetai run` consumes them (see docs/CABINETAI.md → `ensureApp`).
+A separate `publish-app-bundles` job (in `release.yml`) builds the zero-install standalone bundles for `darwin-arm64`, `darwin-x64`, `linux-arm64`, and `linux-x64` with `npm run build && npm run electron:prep`, then uploads each `cabinet-app-<key>-vX.Y.Z.tgz` plus `.sha256` to the Release. The current matrix and manifest do not include `win32-x64`; Windows uses the source fallback. The release manifest records available bundles under `appBundles`, and `cabinetai run` consumes them (see [`CABINETAI.md`](CABINETAI.md), `ensureApp`).
 
 ### Desktop data location
 
@@ -238,9 +271,10 @@ macOS notarization/signing still needs GitHub Actions secrets (consumed by the s
 
 ### Step-by-step
 
-1. Pick the release version, for example `0.2.1`.
+1. Pick the release version, for example `0.5.4`.
 2. Update `package.json` to that version.
-3. Update `cli/package.json` to that same version.
+3. Update `cabinetai/package.json` and `cli/package.json` to that same version,
+   and update `cli/package.json` so its `cabinetai` dependency matches.
 4. Refresh `package-lock.json` so the root package version stays aligned.
 
 ```bash
@@ -250,7 +284,7 @@ npm install --package-lock-only
 5. Regenerate the release manifest for the same tag.
 
 ```bash
-npm run release:manifest -- --tag v0.2.1
+npm run release:manifest -- --tag v0.5.4
 ```
 
 6. Run the release sanity checks you want before tagging.
@@ -266,16 +300,17 @@ npm run electron:make
 9. Create and push the release tag from the verified merged `main` commit.
 
 ```bash
-git tag v0.2.1
-git push origin v0.2.1
+git tag v0.5.4
+git push origin v0.5.4
 ```
 
 10. Let GitHub Actions publish the release artifacts.
 
-The tag-triggered `Release` workflow (`.github/workflows/release.yml`) runs these chained jobs (three verified 2026-07-04 shipping v0.5.0; `publish-app-bundles` added with PR #65):
+The tag-triggered `Release` workflow (`.github/workflows/release.yml`) runs
+these chained jobs:
 
 1. `release-assets` - verify the tag matches `package.json`, regenerate `cabinet-release.json`, build the web app, and create a **draft** GitHub Release with the manifest attached.
-1b. `publish-app-bundles` - matrix build (darwin/linux; Windows pending PR #192) that packages the standalone bundle and uploads `cabinet-app-<key>-vX.Y.Z.tgz` + `.sha256` to the Release. `publish-cabinetai` now `needs:` this job.
+1b. `publish-app-bundles` - macOS/Linux matrix build that packages the standalone bundle and uploads `cabinet-app-<key>-vX.Y.Z.tgz` plus `.sha256` to the Release. `publish-cabinetai` depends on this job. Windows is not in this standalone-bundle matrix.
 2. `publish-cabinetai` - `npm publish` from `cabinetai/`, publishing `cabinetai@X.Y.Z`.
 3. `publish-cli` - `npm publish` from `cli/`, publishing `create-cabinet@X.Y.Z`.
 
@@ -301,25 +336,29 @@ After GitHub Actions finishes, verify:
 For a normal release, this is the shortest safe sequence:
 
 ```bash
-# 1. bump versions in package.json and cli/package.json
+# 1. bump package.json, cabinetai/package.json, cli/package.json,
+#    and cli's cabinetai dependency to the same version
 npm install --package-lock-only
-npm run release:manifest -- --tag v0.2.1
+npm run release:manifest -- --tag v0.5.4
 npm run test:unit
 npm run build
 npm run electron:make
-git add package.json cli/package.json package-lock.json cabinet-release.json
-git commit -m "Release v0.2.1"
-git push -u origin release/v0.2.1
+git add package.json cabinetai/package.json cli/package.json package-lock.json cabinet-release.json
+git commit -m "Release v0.5.4"
+git push -u origin release/v0.5.4
 # open and merge the release PR, then update local main
 git switch main
 git pull --ff-only origin main
-git tag v0.2.1
-git push origin v0.2.1
+git tag v0.5.4
+git push origin v0.5.4
 ```
 
 If the Apple signing secrets are not configured yet, Electron packaging may still work locally, but the fully signed and notarized desktop release will not be production-ready.
 
-## Known Gaps: Update vs. Release Mechanism (2026-05-19)
+## Known gaps: update vs. release mechanism
+
+Verified against source on 2026-07-24. These gaps still exist in the checked
+implementation; this is not an obsolete v0.5.0 incident note.
 
 The intended model above does not match what currently ships. Users report the update popup **reappears every launch and cannot be dismissed**. Root causes, reconciling the release side with the update side:
 
@@ -377,7 +416,7 @@ The Squirrel maker outputs `Cabinet-<version> Setup.exe`, but GitHub replaces th
 
 Release tags are immutable. If a source or workflow change is required after tagging, prepare the next patch version from current `main`, run the full release gates again, and leave the failed release draft unpublished. Do not force-move a tag or overwrite an npm version.
 
-## Recommended Operating Model Today
+## Recommended operating model today
 
 - Use `create-cabinet` for the best end-user install and update experience.
 - Use Electron as the desktop packaging path for macOS, with user data stored outside the app bundle.
@@ -386,4 +425,4 @@ Release tags are immutable. If a source or workflow change is required after tag
 
 ---
 
-Last Updated: 2026-07-04
+Last updated: 2026-07-24

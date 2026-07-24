@@ -1,7 +1,9 @@
 # CI Testing Pipeline — e2e Integration Tests + Coding-Agent Audits
 
 Date: 2026-07-12
-Status: Approved (design), tracer bullet in progress
+Status: Implemented. The blocking build/install smoke, lint/unit, and
+deterministic Playwright jobs now live in `.github/workflows/ci.yml`; the
+problem statement below is historical pre-change context.
 Branch: `feat/e2e-testing-pipeline`
 
 ## Problem

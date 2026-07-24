@@ -1,7 +1,10 @@
 # PRD: Hebrew + RTL Localization for Cabinet
 
 **Branch:** `feat/i18n-rtl-hebrew`
-**Status:** Approved (planning) — implementation phased
+**Status at capture:** Approved Hebrew/English planning baseline. The
+implementation later expanded to 40 shipped locales, including five RTL
+language prefixes. Use [`CONTRIBUTING_I18N.md`](CONTRIBUTING_I18N.md) and
+`src/i18n/index.ts` for the current contract.
 **Issue:** [#79](https://github.com/cabinetai/cabinet/issues/79) (scope narrowed: Hebrew + English only; Chinese deferred)
 **Author:** hilash, 2026-05-12
 
@@ -9,7 +12,10 @@
 
 ## 1. Context
 
-Cabinet today is **English-only with hardcoded JSX strings** across ~172 component files. Issue #79 asks for i18n (with Chinese as the original ask). We will ship **Hebrew + English first**, with full RTL when locale=he, and defer Chinese to a later release.
+At the time of this plan Cabinet was English-only with hardcoded JSX strings
+across roughly 172 component files. Issue #79 asked for i18n, with Chinese as
+the original request. The first planned slice was Hebrew plus English. That
+scope is historical: Chinese and 37 additional locale bundles now ship.
 
 Why this scope:
 - **Hilash is the primary Hebrew speaker** — translation quality can be owned in-house.

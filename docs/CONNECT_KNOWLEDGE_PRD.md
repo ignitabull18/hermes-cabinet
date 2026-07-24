@@ -1,6 +1,10 @@
 # PRD — Connect Knowledge: external & cloud knowledge sources
 
-**Status:** Implemented (2026-06-20) — P0–P2, the F2 inline surface, multi-provider, and follow-ups all shipped on `feat/connect-knowledge-p0`. See §13 for the as-built summary.
+**Status:** Implemented (2026-06-20) — P0–P2, the F2 inline surface,
+multi-provider, and follow-ups all shipped on `feat/connect-knowledge-p0`.
+Source rechecked 2026-07-24: Local, Google Drive, iCloud, OneDrive,
+SharePoint, and Dropbox desktop-sync sources are enabled; Box remains a
+disabled placeholder. See §13 for the as-built summary.
 **Driver:** Live design review of the #109 Google Drive sidebar. Goal: a per-room knowledge-source model that keeps a dedicated Drive browser **and** lets you mount specific cloud folders inline in the tree via "Connect Knowledge".
 **Related:** `docs/SIDEBAR_FILES_PRD.md` (Connect Knowledge / symlinks), PR #109 (Google Drive for Desktop), `project_integrations_hub.md`.
 
@@ -26,7 +30,9 @@ Both surfaces share the same provider registry, mount detection, folder picker, 
 - Keep a **dedicated, collapsible Drive browser** in the sidebar, but **per-room** and visually cleaned up.
 - **Connect Knowledge → Google Drive** mounts a chosen Drive sub-folder **inline in the tree** with the Drive icon (a symlink).
 - Everything **per-room** by construction.
-- A **provider abstraction** (Local, Google Drive now; iCloud, OneDrive/SharePoint as disabled "coming soon" entries) so new providers are config, not a subsystem.
+- A **provider abstraction** for Local, Google Drive, iCloud, OneDrive,
+  SharePoint, and Dropbox desktop-sync folders. Box remains a disabled
+  placeholder.
 - **Per-connection read/write toggle** (default read-only).
 - Agents read connected folders as knowledge/context.
 
@@ -104,10 +110,13 @@ Right-click a folder / room root → **Connect Knowledge…** →
 Connect Knowledge…
   ├─ Local folder…            (symlink — today's behavior)
   ├─ Google Drive…            (detected: you@x · pick a folder)
-  ├─ iCloud Drive…            (disabled — "Coming soon")
-  └─ SharePoint / OneDrive…   (disabled — "Coming soon")
+  ├─ iCloud Drive…            (detected desktop-sync folder)
+  ├─ OneDrive / SharePoint…   (detected desktop-sync folder)
+  └─ Dropbox…                 (detected desktop-sync folder)
 ```
-Active providers open a **folder picker rooted at the provider's mount**; pick any sub-folder. iCloud / OneDrive are shown **disabled** with a "Coming soon" hint (consistent with the Integrations Hub gate).
+Active providers open a **folder picker rooted at the provider's detected
+desktop-sync mount**; pick any sub-folder. This is separate from an MCP or
+OAuth connector.
 
 ### F2 — Inline mount
 The chosen folder appears as a normal expandable node **at the clicked location**, with the provider icon (Drive cloud mark) and a muted policy badge ("view" when read-only). It uses the **regular tree-node context menu** (the "mirror regular files" decision), with edit/delete/move gated by policy (§6.1). "Edit Symlink" / "Disconnect" reuse the existing symlink editor.
@@ -143,7 +152,13 @@ Connected folders are normal tree content → agents in that room see them as kn
 ## 10. Provider registry
 ```ts
 interface KnowledgeProvider {
-  id: "local" | "google-drive" | "icloud" | "sharepoint" | "dropbox";
+  id:
+    | "local"
+    | "google-drive"
+    | "icloud"
+    | "onedrive"
+    | "sharepoint"
+    | "dropbox";
   label: string;
   icon: string;
   enabled: boolean;                 // false → shown disabled ("Coming soon")
@@ -152,7 +167,9 @@ interface KnowledgeProvider {
   nativeDocs?: boolean;
 }
 ```
-v1 enabled: `local`, `google-drive`. Present-but-disabled: `icloud`, `sharepoint`.
+Current enabled providers: `local`, `google-drive`, `icloud`, `onedrive`,
+`sharepoint`, and `dropbox`. Box is a disabled presentation-only tile, so it
+is intentionally not a `KnowledgeProvider.id` until it can persist a source.
 
 ---
 
@@ -163,13 +180,17 @@ These are two different things and should not both "connect" the same provider:
 - **Integrations Hub** = **MCP / API connectors** — the agent gains a *capability/tool* (Slack post, GitHub issues, Notion API, Telegram). Connection writes CLI/MCP config + credentials.
 - **Connect Knowledge** (sidebar) = **file/folder knowledge sources** mounted into the tree (Local, Google Drive, iCloud, SharePoint, Dropbox, Box). Connection creates a per-room symlink; no API, no credentials.
 
-Today the Hub's Google Drive tile is *connectable* (its detail page embeds `GoogleDriveSection`, the live folder-picker/mount UI at `integration-detail-page.tsx:139`), so you can mount Drive folders from the Hub. The other storage tiles (OneDrive, SharePoint, Dropbox, Box) are gated "Soon" and not connectable.
+The Integrations Hub and Connect Knowledge are separate systems. The Hub can
+open suite/API connectors such as Microsoft 365. Connect Knowledge mounts
+locally synchronized folders from Google Drive, iCloud, OneDrive, SharePoint,
+or Dropbox. Box is still gated.
 
 **Resolution (decided):** **keep Drive connectable in BOTH surfaces.** The overlap is intentional — discoverability differs (some users start in the Hub, some in the sidebar) and both paths land on the same per-room provider model. So:
 
 - **Sidebar / Connect Knowledge** is the primary, in-tree mount path (picker → inline symlink, per-connection policy).
 - **Integrations Hub Drive tile** stays connectable: its detail page keeps a connect affordance, but it is **re-pointed at the same per-room registry and folder-picker** as Connect Knowledge (no separate global-table code path). When done from the Hub, a connection lands in the **currently active room** and shows up in that room's sidebar browser.
-- The other storage tiles (OneDrive/SharePoint/Dropbox/Box) remain gated "Soon" until their providers ship (§12 P1/P2).
+- OneDrive, SharePoint, and Dropbox desktop-sync mounts shipped in P1/P2. Box
+  remains gated.
 
 This re-pointing happens **as part of P0** (alongside the per-room registry), so there is never a moment where the Hub connects to the old global table while the sidebar uses the new one — both move together.
 

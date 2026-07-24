@@ -1,7 +1,8 @@
 # Telemetry & Privacy
 
-Cabinet sends anonymous product-usage events so we can see what's used, what
-breaks, and what to fix next — without guessing. This document is the full
+Cabinet sends pseudonymous product-usage events so we can see what's used, what
+breaks, and what to fix next. The ingest service also receives the request IP
+and derives approximate location, as documented below. This document is the full
 list of what's collected and how to turn it off.
 
 If you'd rather not send anything, see [Turning it off](#turning-it-off) — a
@@ -93,8 +94,8 @@ making any network call.
 
 ### 2. Settings toggle (desktop / web UI)
 
-Open Cabinet → **Settings** → **Privacy** → toggle **Send anonymous usage
-telemetry** off. The choice is persisted in `telemetry.json`.
+Open Cabinet → **Settings** → **About** → **Privacy** and toggle **Pseudonymous
+usage telemetry** off. The choice is persisted in `telemetry.json`.
 
 ### 3. Delete telemetry state
 

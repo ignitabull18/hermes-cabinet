@@ -1,5 +1,10 @@
 # Hermes Governed Runtime Interventions Contract Audit
 
+> Dated Phase 3B contract audit for Hermes Agent 0.18.2. It preserves the
+> interfaces and safety decisions observed at that revision; it is not current
+> live health. See
+> [`../CURRENT_IMPLEMENTATION.md`](../CURRENT_IMPLEMENTATION.md).
+
 Phase 3B audits mutation contracts in the installed Hermes Agent `0.18.2` runtime at source commit `594308d4bbe95548c9fe418bb10c449099426f93` (`v2026.7.7.2-1150-g594308d4b`). Cabinet remains a bounded control surface over Hermes. It does not create a second executor, task store, or runtime state machine.
 
 ## Audit evidence

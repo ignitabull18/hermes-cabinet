@@ -1,8 +1,15 @@
 # M4 Session Reliability and Recovery
 
+> Historical milestone evidence from 2026-07-18. Gateway restart and
+> pre-cutover statements below are dated acceptance observations. See
+> [`../CURRENT_IMPLEMENTATION.md`](../CURRENT_IMPLEMENTATION.md) for the current
+> ACP conversation and supervision contract.
+
 Status: accepted on 2026-07-18
 
-This is the implementation and acceptance record for M4. It proves session reliability only. Cabinet remains a secondary Hermes interface until M7 passes and Jeremy explicitly approves cutover.
+This is the implementation and acceptance record for M4. At capture it proved
+session reliability only and did not approve cutover; M7 later passed and
+superseded that boundary.
 
 ## Delivered architecture
 
@@ -55,4 +62,4 @@ All live rows used Hermes Agent 0.18.2, the clean `operator-os` profile, and the
 
 ## M4 decision
 
-M4 passes. Session management, branching, reconnect, event reconciliation, restart recovery, retry safety, duplicate prevention, and terminal-state agreement are implemented and exercised. This does not authorize daily cutover.
+At capture, M4 passed: session management, branching, reconnect, event reconciliation, restart recovery, retry safety, duplicate prevention, and terminal-state agreement were implemented and exercised. That milestone did not authorize daily cutover.

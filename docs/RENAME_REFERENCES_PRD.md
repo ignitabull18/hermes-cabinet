@@ -1,8 +1,14 @@
 # PRD — Rename That Keeps Links Alive
 
-Status: in development
+Status: implemented; current source and focused tests re-verified 2026-07-24
 Owner: hilash
-Last updated: 2026-05-18
+Last updated: 2026-07-24
+
+The implementation lives in `src/lib/storage/page-io.ts`,
+`src/lib/storage/references.ts`, `src/lib/storage/rename-undo.ts`,
+`src/app/api/references/undo/route.ts`, and the client/tree-store integration.
+`test/rename-references.test.ts` covers targeted rewrites, ambiguity, undo, and
+no-op behavior. The problem statement below is retained as pre-change context.
 
 ## 1. Problem
 
@@ -12,11 +18,12 @@ non-alphanumeric → `-`). Resolution is by the **last path segment** of a page
 (`findPageBySlug` in `editor.tsx`), with a sibling-of-current-page preference
 when several pages share a slug.
 
-Renaming a page or folder today (`renamePage` in `page-io.ts`) does exactly two
+Before this feature shipped, renaming a page or folder (`renamePage` in
+`page-io.ts`) did exactly two
 things: it renames the directory on disk and rewrites the page's own
-frontmatter `title`. **Every `[[Old Name]]` elsewhere silently breaks** — the
-old slug no longer resolves to anything. There is no backlink index, so the
-user gets no warning and no way to find the now-dead links.
+frontmatter `title`. **Every `[[Old Name]]` elsewhere silently broke** — the
+old slug no longer resolved to anything. There was no backlink index, so the
+user received no warning and had no way to find the dead links.
 
 For a linked-notes product this is a correctness bug, not a missing nicety.
 Obsidian / Notion / Roam all repair links on rename; users expect the same.

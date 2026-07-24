@@ -49,6 +49,19 @@
 
 ---
 
+## Documentation
+
+- [Current implementation](docs/CURRENT_IMPLEMENTATION.md) records the verified
+  source, runtime, packaging, and distribution state of this fork.
+- [Documentation index](docs/INDEX.md) separates maintained contracts from
+  dated PRDs, plans, release notes, and acceptance evidence.
+- [Contributor rules](docs/CLAUDE.md) describe the implementation invariants.
+
+Historical milestone and acceptance files preserve what was observed at their
+recorded revision. They do not override the current implementation contract.
+
+---
+
 ## From zero to AI team in 2 minutes
 
 ```bash
@@ -311,8 +324,10 @@ See [CHANGELOG.md](CHANGELOG.md) for breaking changes, or follow the full releas
 
 ## Privacy
 
-Cabinet sends anonymous usage telemetry by default (event counts, versions,
-platform — never file contents, paths, prompts, or secrets).
+Cabinet sends pseudonymous usage telemetry by default (event counts, versions,
+and platform information). The ingest service also receives the request IP and
+derives approximate location. Cabinet never sends file contents, paths,
+prompts, or secrets.
 
 To turn it off, pick one:
 
@@ -320,8 +335,8 @@ To turn it off, pick one:
 export CABINET_TELEMETRY_DISABLED=1   # env var (any shell session)
 ```
 
-…or open **Settings → Privacy** and toggle **Send anonymous usage telemetry**
-off. To also wipe the local install ID and queue, run
+…or open **Settings → About → Privacy** and toggle **Pseudonymous usage
+telemetry** off. To also wipe the local install ID and queue, run
 `npx cabinetai uninstall --all`.
 
 See [TELEMETRY.md](TELEMETRY.md) for the full event list, payload schema,

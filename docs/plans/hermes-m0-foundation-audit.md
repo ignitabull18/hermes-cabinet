@@ -1,8 +1,15 @@
 # Hermes M0 Foundation Audit
 
+> Historical milestone evidence from 2026-07-18. Pre-cutover language below
+> describes the M0 decision boundary at that time. M7 was later approved, and
+> native conversations now use ACP over stdio. See
+> [`../CURRENT_IMPLEMENTATION.md`](../CURRENT_IMPLEMENTATION.md).
+
 Status: passed on 2026-07-18
 
-This record is the evidence for Milestone 0 of the Hermes-first Cabinet project. It establishes a clean, isolated Hermes operator profile. It does not approve a Cabinet cutover. Cabinet remains a secondary Hermes interface until M7 passes and Jeremy explicitly approves the cutover.
+This record is the evidence for Milestone 0 of the Hermes-first Cabinet project.
+At capture it established a clean, isolated Hermes operator profile but did not
+approve cutover. M7 later passed and superseded that pre-cutover boundary.
 
 No secret values, sudo values, API keys, session tokens, or archived conversation contents are included in this repository.
 

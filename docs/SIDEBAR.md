@@ -1,6 +1,9 @@
 # Sidebar — design notes & plan
 
-Living document for the left sidebar (`src/components/sidebar/`). Captures the UX decisions, data model, and architecture so the next person (or model) doesn't have to reverse-engineer it.
+Historical design notes for the left sidebar. The current implementation lives
+under `src/components/sidebar/`; old component names and event wiring below are
+not a current source map. Use [`CLAUDE.md`](CLAUDE.md) and the live source tree
+for implementation decisions.
 
 ---
 
